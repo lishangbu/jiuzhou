@@ -1,6 +1,6 @@
-import { App, Badge, Button, Drawer, Modal, Progress, Tag, Tabs, Tooltip } from 'antd';
+import { App, Badge, Button, Drawer, Modal, Tag, Tabs, Tooltip } from 'antd';
 import { MailOutlined, SettingOutlined, LogoutOutlined, CalendarOutlined } from '@ant-design/icons';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type FC } from 'react';
 import PlayerInfo from './modules/PlayerInfo';
 import GameMap from './modules/GameMap';
 import ChatPanel, { type ChatPanelHandle } from './modules/ChatPanel';
@@ -280,7 +280,7 @@ const coerceAffixes = (value: unknown): EquipmentAffix[] => {
     .filter((v): v is EquipmentAffix => !!v);
 };
 
-const renderEquipTooltip = (uiSlot: string, it: InventoryItemDto): React.ReactNode => {
+const renderEquipTooltip = (uiSlot: string, it: InventoryItemDto) => {
   const def = it.def;
   if (!def) return null;
 
@@ -409,6 +409,92 @@ type GatherActionUi =
       remaining: number;
     }
   | { running: false };
+
+type GatherProgressHeaderProps = {
+  gatherAction: Extract<GatherActionUi, { running: true }>;
+  onStop: () => void;
+};
+
+const GatherProgressHeader: FC<GatherProgressHeaderProps> = memo(({ gatherAction, onStop }) => {
+  const hasUntil = Number.isFinite(gatherAction.gatherUntilMs) && gatherAction.gatherUntilMs > 0;
+  const actionMs = Math.max(1, Math.floor(gatherAction.actionSec * 1000));
+
+  // 进度条使用 CSS 线性过渡，避免逐帧 React 重渲染导致观感抖动
+  const [fillScale, setFillScale] = useState(0);
+  const [fillTransitionMs, setFillTransitionMs] = useState(0);
+  const [remainingSec, setRemainingSec] = useState(0);
+
+  useEffect(() => {
+    if (!hasUntil) {
+      setFillTransitionMs(0);
+      setFillScale(0);
+      return;
+    }
+
+    const now = Date.now();
+    const remainingMs = Math.max(0, gatherAction.gatherUntilMs - now);
+    const elapsedMs = clampNum(actionMs - remainingMs, 0, actionMs);
+    const startScale = clampNum(elapsedMs / actionMs, 0, 1);
+
+    setFillTransitionMs(0);
+    setFillScale(startScale);
+
+    const rafId = window.requestAnimationFrame(() => {
+      setFillTransitionMs(remainingMs);
+      setFillScale(1);
+    });
+
+    return () => window.cancelAnimationFrame(rafId);
+  }, [actionMs, gatherAction.gatherUntilMs, hasUntil]);
+
+  useEffect(() => {
+    if (!hasUntil) {
+      setRemainingSec(0);
+      return;
+    }
+
+    const updateRemainingSec = () => {
+      const leftMs = Math.max(0, gatherAction.gatherUntilMs - Date.now());
+      setRemainingSec(Math.max(0, Math.ceil(leftMs / 1000)));
+    };
+
+    updateRemainingSec();
+    const timer = window.setInterval(updateRemainingSec, 200);
+    return () => window.clearInterval(timer);
+  }, [gatherAction.gatherUntilMs, hasUntil]);
+
+  const ariaValueNow = Math.round(clampNum(fillScale * 100, 0, 100));
+
+  return (
+    <div className="game-header-gather" title={`采集中：${gatherAction.resourceName}（剩余${gatherAction.remaining}）`}>
+      <div className="game-header-gather-label">采集中</div>
+      <div className="game-header-gather-progress">
+        <div
+          className="game-header-gather-progress-rail"
+          role="progressbar"
+          aria-label="采集进度"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={ariaValueNow}
+        >
+          <div
+            className="game-header-gather-progress-fill"
+            style={{
+              transform: `scaleX(${fillScale})`,
+              transitionDuration: `${fillTransitionMs}ms`,
+            }}
+          />
+        </div>
+      </div>
+      <div className="game-header-gather-time">{hasUntil ? `${remainingSec}s` : '同步'}</div>
+      <Button size="small" type="text" className="game-header-gather-stop" onClick={onStop}>
+        停止
+      </Button>
+    </div>
+  );
+});
+
+GatherProgressHeader.displayName = 'GatherProgressHeader';
 
 const rollMonsterBaseAttrs = (
   baseAttrs: Record<string, number>,
@@ -564,7 +650,7 @@ const buildTeamInfoTarget = (m: TeamMember): InfoTarget => {
   };
 };
 
-const Game: React.FC<GameProps> = ({ onLogout }) => {
+const Game: FC<GameProps> = ({ onLogout }) => {
   const version = '1.0.0';
   const { message } = App.useApp();
   const messageRef = useRef(message);
@@ -628,7 +714,6 @@ const Game: React.FC<GameProps> = ({ onLogout }) => {
   const chatPanelRef = useRef<ChatPanelHandle | null>(null);
   const battleSkillCasterRef = useRef<(skillId: string, targetType?: string) => Promise<boolean>>(async () => false);
   const [gatherAction, setGatherAction] = useState<GatherActionUi>({ running: false });
-  const [gatherNowMs, setGatherNowMs] = useState(0);
   const gatherActionKeyRef = useRef<string>('');
   const gatherTickTimerRef = useRef<number | null>(null);
   const appendBattleLinesToChat = useCallback((lines: string[]) => {
@@ -686,16 +771,6 @@ const Game: React.FC<GameProps> = ({ onLogout }) => {
     if (gatherAction.mapId !== currentMapId || gatherAction.roomId !== currentRoomId) stopGatherLoop();
   }, [currentMapId, currentRoomId, gatherAction, stopGatherLoop]);
 
-  useEffect(() => {
-    if (!gatherAction.running) {
-      setGatherNowMs(0);
-      return;
-    }
-    setGatherNowMs(Date.now());
-    const timer = window.setInterval(() => setGatherNowMs(Date.now()), 200);
-    return () => window.clearInterval(timer);
-  }, [gatherAction.running]);
-
   const appendSystemChat = useCallback((content: string) => {
     const text = String(content || '').trim();
     if (!text) return;
@@ -725,6 +800,7 @@ const Game: React.FC<GameProps> = ({ onLogout }) => {
         resourceId: target.id,
         resourceName,
         actionSec: 5,
+        // 先不做本地预估，等待服务端时间，避免进度条回跳导致“进度不准”
         gatherUntilMs: 0,
         remaining: Math.max(0, target.resource?.remaining ?? 0),
       });
@@ -738,8 +814,13 @@ const Game: React.FC<GameProps> = ({ onLogout }) => {
           if (!res?.success) throw new Error(res?.message || '采集失败');
           const d = res.data;
           const actionSec = typeof d?.actionSec === 'number' && d.actionSec > 0 ? d.actionSec : 5;
+          const cooldownSec = typeof d?.cooldownSec === 'number' && d.cooldownSec > 0 ? d.cooldownSec : actionSec;
           const remaining = typeof d?.remaining === 'number' ? Math.max(0, Math.floor(d.remaining)) : 0;
-          const gatherUntilMs = d?.gatherUntil ? Date.parse(d.gatherUntil) : 0;
+          const parsedGatherUntilMs = d?.gatherUntil ? Date.parse(d.gatherUntil) : NaN;
+          const gatherUntilMs =
+            Number.isFinite(parsedGatherUntilMs) && parsedGatherUntilMs > 0
+              ? parsedGatherUntilMs
+              : Date.now() + cooldownSec * 1000;
 
           if (typeof d?.qty === 'number' && d.qty > 0) {
             const qty = Math.max(1, Math.floor(d.qty));
@@ -758,14 +839,16 @@ const Game: React.FC<GameProps> = ({ onLogout }) => {
           setGatherAction((prev) => {
             if (!prev.running) return prev;
             if (prev.resourceId !== target.id || prev.mapId !== currentMapId || prev.roomId !== currentRoomId) return prev;
-            return { ...prev, actionSec, gatherUntilMs: Number.isFinite(gatherUntilMs) ? gatherUntilMs : 0, remaining };
+            return { ...prev, actionSec, gatherUntilMs, remaining };
           });
 
           const now = Date.now();
-          const delayMs =
-            Number.isFinite(gatherUntilMs) && gatherUntilMs > now
-              ? Math.max(250, Math.min(1000, gatherUntilMs - now + 120))
-              : 650;
+          const delayMs = (() => {
+            if (!(Number.isFinite(gatherUntilMs) && gatherUntilMs > now)) return 80;
+            const leftMs = gatherUntilMs - now;
+            if (leftMs > 260) return Math.max(80, leftMs - 180);
+            return 80;
+          })();
           gatherTickTimerRef.current = window.setTimeout(() => void tick(), delayMs);
         } catch (error: unknown) {
           if (gatherActionKeyRef.current !== key) return;
@@ -1447,28 +1530,7 @@ const Game: React.FC<GameProps> = ({ onLogout }) => {
         </div>
 
         <div className="game-header-right">
-          {gatherAction.running
-            ? (() => {
-                const now = gatherNowMs || Date.now();
-                const actionMs = Math.max(1, Math.floor(gatherAction.actionSec * 1000));
-                const hasUntil = Number.isFinite(gatherAction.gatherUntilMs) && gatherAction.gatherUntilMs > 0;
-                const remainingMs = hasUntil ? Math.max(0, gatherAction.gatherUntilMs - now) : actionMs;
-                const remainingSec = Math.max(0, Math.ceil(remainingMs / 1000));
-                const percent = hasUntil ? clampNum(((actionMs - remainingMs) / actionMs) * 100, 0, 100) : 0;
-                return (
-                  <div className="game-header-gather" title={`采集中：${gatherAction.resourceName}（剩余${gatherAction.remaining}）`}>
-                    <div className="game-header-gather-label">采集中</div>
-                    <div className="game-header-gather-progress">
-                      <Progress percent={percent} showInfo={false} status="active" size={{ height: 10 }} />
-                    </div>
-                    <div className="game-header-gather-time">{remainingSec}s</div>
-                    <Button size="small" type="text" className="game-header-gather-stop" onClick={stopGatherLoop}>
-                      停止
-                    </Button>
-                  </div>
-                );
-              })()
-            : null}
+          {gatherAction.running ? <GatherProgressHeader gatherAction={gatherAction} onStop={stopGatherLoop} /> : null}
 
           <div className="game-header-currency">
             <img className="game-header-currency-icon" src={lingshi} alt="灵石" />

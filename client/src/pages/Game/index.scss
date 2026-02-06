@@ -75,6 +75,28 @@
   min-width: 110px;
 }
 
+.game-header-gather-progress-rail {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+  position: relative;
+}
+
+.game-header-gather-progress-fill {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary-color);
+  transform-origin: left center;
+  transform: scaleX(0);
+  transition-property: transform;
+  transition-timing-function: linear;
+  transition-duration: 0ms;
+  will-change: transform;
+}
+
 .game-header-gather-label {
   font-size: 12px;
   font-weight: 700;
