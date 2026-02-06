@@ -17,6 +17,11 @@
         reverse_proxy {$API_HOST:server:6011}
     }
 
+    # Uploaded files proxy
+    handle /uploads/* {
+        reverse_proxy {$API_HOST:server:6011}
+    }
+
     # Static files and SPA routing for everything else
     handle {
         root * /srv
