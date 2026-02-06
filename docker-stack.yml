@@ -14,6 +14,12 @@ services:
       - caddy_config:/config
     networks:
       - jiuzhou_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:80 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     deploy:
       replicas: 1
       update_config:
@@ -50,6 +56,13 @@ services:
       - uploads:/app/server/uploads
     networks:
       - jiuzhou_net
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:6011/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     deploy:
       replicas: 1
       update_config:
@@ -57,6 +70,9 @@ services:
         delay: 10s
         order: start-first
         failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        delay: 10s
       restart_policy:
         condition: on-failure
         delay: 10s
