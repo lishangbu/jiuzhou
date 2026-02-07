@@ -88,7 +88,7 @@
       "target_value": 2,
       "rewards": [
         { "type": "silver", "amount": 800 },
-        { "type": "item", "item_def_id": "mat-lingcao", "qty": 2 }
+        { "type": "item", "item_def_id": "mat-001", "qty": 2 }
       ],
       "sort_weight": 920,
       "enabled": true,
@@ -261,7 +261,7 @@
       "target_value": 5,
       "rewards": [
         { "type": "spirit_stones", "amount": 100 },
-        { "type": "item", "item_def_id": "mat-lingcao", "qty": 6 }
+        { "type": "item", "item_def_id": "mat-001", "qty": 6 }
       ],
       "title_id": "title-mystic-pathfinder",
       "sort_weight": 720,

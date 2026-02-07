@@ -14,6 +14,9 @@ import {
   type TitleInfoDto,
 } from '../../../../services/api';
 import coin01 from '../../../../assets/images/ui/sh_icon_0006_jinbi_02.png';
+import lingshiIcon from '../../../../assets/images/ui/lingshi.png';
+import tongqianIcon from '../../../../assets/images/ui/tongqian.png';
+import expIcon from '../../../../assets/images/ui/icon_exp.png';
 import './index.scss';
 
 interface AchievementModalProps {
@@ -31,26 +34,69 @@ type RewardViewModel = {
   amountText: string;
 };
 
+const ITEM_ICON_GLOB = import.meta.glob('../../../../assets/images/**/*.{png,jpg,jpeg,webp,gif}', {
+  eager: true,
+  import: 'default',
+}) as Record<string, string>;
+
+const ITEM_ICON_BY_FILENAME: Record<string, string> = Object.fromEntries(
+  Object.entries(ITEM_ICON_GLOB).map(([p, url]) => {
+    const parts = p.split(/[/\\]/);
+    return [parts[parts.length - 1] ?? p, url];
+  }),
+);
+
+const rarityLabelMap: Record<string, string> = {
+  common: '普通',
+  uncommon: '精良',
+  rare: '稀有',
+  epic: '史诗',
+  legendary: '传说',
+};
+
+const getRarityLabel = (rarity: string): string => {
+  const key = String(rarity || '').trim().toLowerCase();
+  return rarityLabelMap[key] ?? (String(rarity || '').trim() || '普通');
+};
+
+const resolveRewardIcon = (icon: string | null | undefined): string => {
+  const raw = String(icon || '').trim();
+  if (!raw) return coin01;
+  if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+
+  const filename = raw.split('/').filter(Boolean).pop() ?? '';
+  if (filename && ITEM_ICON_BY_FILENAME[filename]) return ITEM_ICON_BY_FILENAME[filename];
+
+  if (raw.startsWith('/')) {
+    const resolved = resolveAssetUrl(raw);
+    return resolved || coin01;
+  }
+
+  return filename ? (ITEM_ICON_BY_FILENAME[filename] ?? coin01) : coin01;
+};
+
 const resolveRewardView = (reward: AchievementRewardView, index: number): RewardViewModel | null => {
   if (!reward) return null;
   if (reward.type === 'item') {
-    const itemName = reward.itemName || reward.itemDefId || '物品';
-    const icon = reward.itemIcon ? resolveAssetUrl(reward.itemIcon) : coin01;
+    const rawItemName = String(reward.itemName || '').trim();
+    const itemName = rawItemName && rawItemName !== reward.itemDefId ? rawItemName : '未知材料';
+    const icon = resolveRewardIcon(reward.itemIcon);
     const qty = typeof reward.qty === 'number' ? Math.max(1, Math.floor(reward.qty)) : 1;
     return {
       id: `${reward.type}:${reward.itemDefId || index}`,
       name: itemName,
-      icon: icon || coin01,
+      icon,
       amountText: `×${qty.toLocaleString()}`,
     };
   }
 
   const amount = typeof reward.amount === 'number' ? Math.max(0, Math.floor(reward.amount)) : 0;
   const name = reward.type === 'silver' ? '银两' : reward.type === 'spirit_stones' ? '灵石' : '经验';
+  const icon = reward.type === 'silver' ? tongqianIcon : reward.type === 'spirit_stones' ? lingshiIcon : expIcon;
   return {
     id: `${reward.type}:${index}`,
     name,
-    icon: coin01,
+    icon,
     amountText: `×${amount.toLocaleString()}`,
   };
 };
@@ -292,7 +338,7 @@ const AchievementModal: React.FC<AchievementModalProps> = ({ open, onClose, onCh
                             ) : (
                               <Tag>进行中</Tag>
                             )}
-                            <Tag>{row.rarity}</Tag>
+                            <Tag>{getRarityLabel(row.rarity)}</Tag>
                             <Tag color="cyan">+{row.points}点</Tag>
                           </div>
                         </div>
@@ -388,7 +434,7 @@ const AchievementModal: React.FC<AchievementModalProps> = ({ open, onClose, onCh
                       <div className="achievement-title-main">
                         <div className="achievement-title-top">
                           <div className="achievement-title-name">{title.name}</div>
-                          <Tag color={title.color || 'blue'}>{title.rarity}</Tag>
+                          <Tag color={title.color || 'blue'}>{getRarityLabel(title.rarity)}</Tag>
                         </div>
                         <div className="achievement-item-desc">{title.description}</div>
                         <div className="achievement-item-desc">{effectsText || '无属性加成'}</div>

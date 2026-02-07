@@ -166,6 +166,12 @@
   white-space: nowrap;
 }
 
+.achievement-item-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .achievement-item-tags .ant-tag {
   margin: 0;
 }

@@ -20,7 +20,7 @@
       "description": "累计成就点达到 300",
       "rewards": [
         { "type": "spirit_stones", "amount": 120 },
-        { "type": "item", "item_def_id": "mat-lingcao", "qty": 8 }
+        { "type": "item", "item_def_id": "mat-001", "qty": 8 }
       ],
       "enabled": true,
       "sort_weight": 300,
