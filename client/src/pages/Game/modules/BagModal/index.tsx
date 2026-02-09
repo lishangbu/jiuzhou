@@ -953,9 +953,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
     }
     if (a === 'enhance') {
       if (activeItem.category !== 'equipment') return true;
-      if (activeItem.locked) return true;
       if (!activeItem.equip) return true;
-      if ((Number(activeItem.equip.strengthenLevel) || 0) >= 15) return true;
     }
     return false;
   };
