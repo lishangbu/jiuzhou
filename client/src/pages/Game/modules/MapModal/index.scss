@@ -284,21 +284,139 @@
   margin: 0;
 }
 
+.map-modal-mobile-back {
+  display: none;
+}
+
 @media screen and (max-width: 768px) {
   .map-modal-shell {
     height: 80vh;
+    position: relative;
+    overflow: hidden;
   }
 
   .map-modal-left {
-    flex: 0 0 40%;
+    width: 100%;
+    flex: 0 0 100%;
+    border-right: none;
+
+    &.mobile-hidden {
+      display: none;
+    }
+  }
+
+  .map-modal-right {
+    width: 100%;
+    flex: 0 0 100%;
+    display: none;
+
+    &.mobile-visible {
+      display: flex;
+    }
   }
 
   .map-modal-hero {
-    flex: 0 0 200px;
-    height: 200px;
+    flex: 0 0 140px;
+    height: 140px;
+    border-bottom: 1px solid var(--border-color-soft);
+  }
+
+  .map-modal-hero-img {
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .map-modal-table {
+    .ant-table-thead > tr > th,
+    .ant-table-tbody > tr > td {
+      white-space: normal;
+      padding: 6px 4px;
+      word-break: break-all;
+    }
   }
 
   .map-modal-kv-grid {
     grid-template-columns: 1fr;
+  }
+
+  .map-modal-mobile-back {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 12px;
+    background: var(--panel-bg);
+    border-bottom: 1px solid var(--border-color-soft);
+    color: var(--text-color);
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    flex: 0 0 auto;
+
+    &:hover {
+      background: var(--hover-bg);
+    }
+  }
+
+  .map-modal-mobile-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .map-modal-mobile-group {
+    border: 1px solid var(--border-color-soft);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .map-modal-mobile-group-title {
+    background: var(--panel-bg-soft);
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--text-color);
+    border-bottom: 1px solid var(--border-color-soft);
+  }
+
+  .map-modal-mobile-group-content {
+    background: var(--panel-bg);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .map-modal-mobile-row {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border-color-soft);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+
+    &:last-child {
+      border-bottom: none;
+    }
+  }
+
+  .map-modal-mobile-row-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .map-modal-mobile-name {
+    font-size: 12px;
+    color: var(--text-color);
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .map-modal-mobile-row-sub {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    white-space: nowrap;
   }
 }

@@ -1,5 +1,5 @@
 import { Button, Input, Modal, Table, Tabs, Tag } from 'antd';
-import { SearchOutlined } from '@ant-design/icons';
+import { LeftOutlined, SearchOutlined } from '@ant-design/icons';
 import { useEffect, useMemo, useState } from 'react';
 import map01 from '../../../../assets/images/map/cp_icon_map01.png';
 import map02 from '../../../../assets/images/map/cp_icon_map02.png';
@@ -110,6 +110,19 @@ const MapModal: React.FC<MapModalProps> = ({ open, onClose, initialCategory, onE
   >({});
   const [listLoading, setListLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [showMobileDetail, setShowMobileDetail] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth <= 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  useEffect(() => {
+    if (open) setShowMobileDetail(false);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -559,7 +572,7 @@ const MapModal: React.FC<MapModalProps> = ({ open, onClose, initialCategory, onE
       }}
     >
       <div className="map-modal-shell">
-        <div className="map-modal-left">
+        <div className={`map-modal-left ${showMobileDetail ? 'mobile-hidden' : ''}`}>
           <div className="map-modal-left-top">
             <Tabs
               size="small"
@@ -589,9 +602,15 @@ const MapModal: React.FC<MapModalProps> = ({ open, onClose, initialCategory, onE
                     className={`map-modal-item ${m.id === safeActiveId ? 'is-active' : ''}`}
                     role="button"
                     tabIndex={0}
-                    onClick={() => setActiveId(m.id)}
+                    onClick={() => {
+                      setActiveId(m.id);
+                      setShowMobileDetail(true);
+                    }}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') setActiveId(m.id);
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        setActiveId(m.id);
+                        setShowMobileDetail(true);
+                      }
                     }}
                   >
                     <div className="map-modal-item-name">{m.name}</div>
@@ -608,9 +627,12 @@ const MapModal: React.FC<MapModalProps> = ({ open, onClose, initialCategory, onE
           </div>
         </div>
 
-        <div className="map-modal-right">
+        <div className={`map-modal-right ${showMobileDetail ? 'mobile-visible' : ''}`}>
           {mergedActiveMap ? (
             <>
+              <div className="map-modal-mobile-back" onClick={() => setShowMobileDetail(false)}>
+                <LeftOutlined /> 返回列表
+              </div>
               <div className="map-modal-hero">
                 <img className="map-modal-hero-img" src={mergedActiveMap.image} alt={mergedActiveMap.name} />
                 <div className="map-modal-hero-overlay">
@@ -658,21 +680,61 @@ const MapModal: React.FC<MapModalProps> = ({ open, onClose, initialCategory, onE
                   <div className="map-modal-section">
                     <div className="map-modal-section-title">怪物掉落详情</div>
                     <div className="map-modal-table">
-                      <Table
-                        size="small"
-                        rowKey={(row) => row.key}
-                        columns={monsterDropColumns}
-                        dataSource={monsterDropRows}
-                        pagination={false}
-                        locale={{
-                          emptyText:
-                            detailLoading && !detailById[mergedActiveMap.id]
-                              ? '加载中...'
-                              : monsterRows.length > 0
-                                ? '暂无怪物掉落'
-                                : '暂无怪物',
-                        }}
-                      />
+                      {isMobile ? (
+                        <div className="map-modal-mobile-list">
+                          {(() => {
+                            const groups: Record<string, typeof monsterDropRows> = {};
+                            for (const row of monsterDropRows) {
+                              if (!groups[row.monster]) groups[row.monster] = [];
+                              groups[row.monster].push(row);
+                            }
+                            const monsterNames = Object.keys(groups);
+                            if (monsterNames.length === 0) {
+                              return (
+                                <div className="map-modal-empty">
+                                  {detailLoading && !detailById[mergedActiveMap.id]
+                                    ? '加载中...'
+                                    : monsterRows.length > 0
+                                      ? '暂无怪物掉落'
+                                      : '暂无怪物'}
+                                </div>
+                              );
+                            }
+                            return monsterNames.map((monsterName) => (
+                              <div key={monsterName} className="map-modal-mobile-group">
+                                <div className="map-modal-mobile-group-title">{monsterName}</div>
+                                <div className="map-modal-mobile-group-content">
+                                  {groups[monsterName].map((row) => (
+                                    <div key={row.key} className="map-modal-mobile-row">
+                                      <div className="map-modal-mobile-row-main">
+                                        <span className="map-modal-mobile-name">{row.name}</span>
+                                        <Tag className="map-modal-quality-tag">{row.quality}</Tag>
+                                      </div>
+                                      <div className="map-modal-mobile-row-sub">概率: {row.chance}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                      ) : (
+                        <Table
+                          size="small"
+                          rowKey={(row) => row.key}
+                          columns={monsterDropColumns}
+                          dataSource={monsterDropRows}
+                          pagination={false}
+                          locale={{
+                            emptyText:
+                              detailLoading && !detailById[mergedActiveMap.id]
+                                ? '加载中...'
+                                : monsterRows.length > 0
+                                  ? '暂无怪物掉落'
+                                  : '暂无怪物',
+                          }}
+                        />
+                      )}
                     </div>
                   </div>
                 ) : null}
