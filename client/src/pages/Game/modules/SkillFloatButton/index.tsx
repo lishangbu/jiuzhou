@@ -26,7 +26,11 @@ type SkillItem = {
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 
-const FAB_SIZE = 72;
+const MOBILE_BREAKPOINT = 768;
+const FAB_SIZE_DESKTOP = 72;
+const FAB_SIZE_MOBILE = 48;
+const getFabSize = () =>
+  typeof window !== 'undefined' && window.innerWidth <= MOBILE_BREAKPOINT ? FAB_SIZE_MOBILE : FAB_SIZE_DESKTOP;
 
 type SkillCooldownMapDto = Record<string, unknown>;
 
@@ -284,7 +288,7 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
   }));
   const [pos, setPos] = useState(() => {
     if (typeof window === 'undefined') return { x: 16, y: 160 };
-    return { x: Math.max(16, window.innerWidth - FAB_SIZE - 16), y: Math.round(window.innerHeight * 0.55) };
+    return { x: Math.max(16, window.innerWidth - getFabSize() - 16), y: Math.round(window.innerHeight * 0.55) };
   });
 
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -327,8 +331,8 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
       const h = window.innerHeight;
       setViewport({ w, h });
       setPos((p) => ({
-        x: clamp(p.x, 0, Math.max(0, w - FAB_SIZE)),
-        y: clamp(p.y, 0, Math.max(0, h - FAB_SIZE)),
+        x: clamp(p.x, 0, Math.max(0, w - getFabSize())),
+        y: clamp(p.y, 0, Math.max(0, h - getFabSize())),
       }));
     };
     window.addEventListener('resize', onResize);
@@ -336,7 +340,7 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
   }, []);
 
   const expandDirection: ExpandDirection = useMemo(() => {
-    return pos.x + FAB_SIZE / 2 >= viewport.w / 2 ? 'left' : 'right';
+    return pos.x + getFabSize() / 2 >= viewport.w / 2 ? 'left' : 'right';
   }, [pos.x, viewport.w]);
 
   const refreshSkillConfig = useCallback(async () => {
@@ -620,8 +624,8 @@ const SkillFloatButton: React.FC<SkillFloatButtonProps> = ({
     const dy = e.clientY - dragRef.current.startY;
     if (!dragRef.current.moved && Math.hypot(dx, dy) >= 4) dragRef.current.moved = true;
 
-    const nextX = clamp(dragRef.current.startPosX + dx, 0, Math.max(0, viewport.w - FAB_SIZE));
-    const nextY = clamp(dragRef.current.startPosY + dy, 0, Math.max(0, viewport.h - FAB_SIZE));
+    const nextX = clamp(dragRef.current.startPosX + dx, 0, Math.max(0, viewport.w - getFabSize()));
+    const nextY = clamp(dragRef.current.startPosY + dy, 0, Math.max(0, viewport.h - getFabSize()));
     setPos({ x: nextX, y: nextY });
     e.preventDefault();
   };
