@@ -59,15 +59,15 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const applyBodyClass = () => {
-      document.body.classList.toggle('theme-dark', themeMode === 'dark');
-    };
-    applyBodyClass();
+    document.body.classList.toggle('theme-dark', themeMode === 'dark');
 
     const onThemeEvent = (e: Event) => {
       const ce = e as CustomEvent<{ mode?: 'light' | 'dark' }>;
       const mode = ce.detail?.mode;
-      if (mode === 'dark' || mode === 'light') setThemeMode(mode);
+      if (mode === 'dark' || mode === 'light') {
+        localStorage.setItem(THEME_STORAGE_KEY, mode);
+        setThemeMode(mode);
+      }
     };
 
     window.addEventListener('app:theme', onThemeEvent as EventListener);
