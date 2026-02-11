@@ -1483,7 +1483,7 @@ export const moveItem = async (
     // 确定目标格子
     let finalSlot = targetSlot;
     if (finalSlot === undefined) {
-      const emptySlots = await findEmptySlots(characterId, targetLocation, 1);
+      const emptySlots = await findEmptySlotsWithClient(characterId, targetLocation, 1, client);
       if (emptySlots.length === 0) {
         await client.query('ROLLBACK');
         return { success: false, message: '目标位置已满' };
@@ -1494,25 +1494,36 @@ export const moveItem = async (
       const slotCheck = await client.query(`
         SELECT id FROM item_instance
         WHERE owner_character_id = $1 AND location = $2 AND location_slot = $3 AND id != $4
+        FOR UPDATE
       `, [characterId, targetLocation, finalSlot, itemInstanceId]);
       
       if (slotCheck.rows.length > 0) {
         // 交换位置
         const otherItemId = slotCheck.rows[0].id;
         const currentItem = itemResult.rows[0];
+
+        // 先临时释放当前物品格子，再执行换位，避免唯一索引瞬时冲突
+        await client.query(
+          `
+            UPDATE item_instance
+            SET location_slot = NULL, updated_at = NOW()
+            WHERE id = $1 AND owner_character_id = $2
+          `,
+          [itemInstanceId, characterId]
+        );
         
         await client.query(`
           UPDATE item_instance SET location = $1, location_slot = $2, updated_at = NOW()
-          WHERE id = $3
-        `, [currentItem.location, currentItem.location_slot, otherItemId]);
+          WHERE id = $3 AND owner_character_id = $4
+        `, [currentItem.location, currentItem.location_slot, otherItemId, characterId]);
       }
     }
     
     // 移动物品
     await client.query(`
       UPDATE item_instance SET location = $1, location_slot = $2, updated_at = NOW()
-      WHERE id = $3
-    `, [targetLocation, finalSlot, itemInstanceId]);
+      WHERE id = $3 AND owner_character_id = $4
+    `, [targetLocation, finalSlot, itemInstanceId, characterId]);
     
     await client.query('COMMIT');
     return { success: true, message: '移动成功' };
