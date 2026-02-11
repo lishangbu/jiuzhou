@@ -958,6 +958,7 @@ const applyTaskEvent = async (
           FROM character_task_progress p
           WHERE p.character_id = $1 AND p.task_id = d.id
         )
+      ON CONFLICT (character_id, task_id) DO NOTHING
     `,
     [cid],
   );

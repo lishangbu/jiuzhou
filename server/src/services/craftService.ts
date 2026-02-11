@@ -527,7 +527,7 @@ export const executeCraftRecipe = async (
         LEFT JOIN item_def i ON i.id = r.product_item_def_id
         WHERE r.id = $1
           AND r.enabled = true
-        FOR UPDATE
+        FOR UPDATE OF r
         LIMIT 1
       `,
       [recipeId],

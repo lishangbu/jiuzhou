@@ -286,8 +286,8 @@ export const getDungeonWeeklyTargets = async (
         JOIN dungeon_def dd ON dd.id = dr.dungeon_id
         WHERE dr.character_id = $1
           AND dr.result = 'cleared'
-          AND dr.created_at >= date_trunc('week', NOW())
-          AND dr.created_at < date_trunc('week', NOW()) + interval '7 day'
+          AND dr.completed_at >= date_trunc('week', NOW())
+          AND dr.completed_at < date_trunc('week', NOW()) + interval '7 day'
       `,
       [characterId]
     );
