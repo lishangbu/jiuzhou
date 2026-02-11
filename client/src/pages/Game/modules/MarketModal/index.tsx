@@ -548,7 +548,11 @@ const buildBagItem = (it: InventoryItemDto): BagItem | null => {
   if (!name) return null;
 
   const icon = resolveIcon(def.icon);
-  const quality = normalizeQuality(def.quality);
+  const rawQuality =
+    typeof it.quality === 'string' && it.quality.trim().length > 0
+      ? it.quality.trim()
+      : def.quality;
+  const quality = normalizeQuality(rawQuality);
   const category = mapCategory(def.category);
   const desc = String(def.description ?? def.long_desc ?? '').trim();
   const qty = Number(it.qty) || 0;
