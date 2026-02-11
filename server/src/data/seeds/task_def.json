@@ -17,12 +17,21 @@
           "type": "talk_npc",
           "text": "与引路童子交谈",
           "target": 1,
-          "params": { "npc_id": "npc-guide" }
+          "params": {
+            "npc_id": "npc-guide"
+          }
         }
       ],
       "rewards": [
-        { "type": "silver", "amount": 100 },
-        { "type": "item", "item_def_id": "mat-gongfa-canye", "qty": 1 }
+        {
+          "type": "silver",
+          "amount": 100
+        },
+        {
+          "type": "item",
+          "item_def_id": "mat-gongfa-canye",
+          "qty": 1
+        }
       ],
       "prereq_task_ids": [],
       "enabled": true,
@@ -43,13 +52,20 @@
           "type": "talk_npc",
           "text": "与村长交谈",
           "target": 1,
-          "params": { "npc_id": "npc-village-elder" }
+          "params": {
+            "npc_id": "npc-village-elder"
+          }
         }
       ],
       "rewards": [
-        { "type": "silver", "amount": 150 }
+        {
+          "type": "silver",
+          "amount": 150
+        }
       ],
-      "prereq_task_ids": ["task-main-001"],
+      "prereq_task_ids": [
+        "task-main-001"
+      ],
       "enabled": true,
       "sort_weight": 990
     },
@@ -68,14 +84,24 @@
           "type": "kill_monster",
           "text": "击杀野兔",
           "target": 3,
-          "params": { "monster_id": "monster-wild-rabbit" }
+          "params": {
+            "monster_id": "monster-wild-rabbit"
+          }
         }
       ],
       "rewards": [
-        { "type": "silver", "amount": 200 },
-        { "type": "spirit_stones", "amount": 5 }
+        {
+          "type": "silver",
+          "amount": 200
+        },
+        {
+          "type": "spirit_stones",
+          "amount": 5
+        }
       ],
-      "prereq_task_ids": ["task-main-002"],
+      "prereq_task_ids": [
+        "task-main-002"
+      ],
       "enabled": true,
       "sort_weight": 980
     },
@@ -94,11 +120,16 @@
           "type": "gather_resource",
           "text": "采集野外药草",
           "target": 5,
-          "params": { "resource_id": "res-wild-herb" }
+          "params": {
+            "resource_id": "res-wild-herb"
+          }
         }
       ],
       "rewards": [
-        { "type": "silver", "amount": 120 }
+        {
+          "type": "silver",
+          "amount": 120
+        }
       ],
       "prereq_task_ids": [],
       "enabled": true,
@@ -119,11 +150,16 @@
           "type": "gather_resource",
           "text": "采集灵草",
           "target": 1,
-          "params": { "resource_id": "res-spirit-grass" }
+          "params": {
+            "resource_id": "res-spirit-grass"
+          }
         }
       ],
       "rewards": [
-        { "type": "spirit_stones", "amount": 10 }
+        {
+          "type": "spirit_stones",
+          "amount": 10
+        }
       ],
       "prereq_task_ids": [],
       "enabled": true,
@@ -144,15 +180,254 @@
           "type": "kill_monster",
           "text": "击杀野兔",
           "target": 5,
-          "params": { "monster_id": "monster-wild-rabbit" }
+          "params": {
+            "monster_id": "monster-wild-rabbit"
+          }
         }
       ],
       "rewards": [
-        { "type": "silver", "amount": 80 }
+        {
+          "type": "silver",
+          "amount": 80
+        }
       ],
       "prereq_task_ids": [],
       "enabled": true,
       "sort_weight": 500
+    },
+    {
+      "id": "task-daily-002",
+      "category": "daily",
+      "title": "日常：秘境试炼",
+      "realm": "炼精化炁·养气期",
+      "description": "前往任意秘境完成一次历练，巩固战斗经验。",
+      "giver_npc_id": "npc-bounty-board",
+      "map_id": "map-qingyun-village",
+      "room_id": "room-village-center",
+      "objectives": [
+        {
+          "id": "obj-001",
+          "type": "dungeon_clear",
+          "text": "通关任意秘境 1 次",
+          "target": 1,
+          "params": {}
+        }
+      ],
+      "rewards": [
+        {
+          "type": "silver",
+          "amount": 150
+        },
+        {
+          "type": "spirit_stones",
+          "amount": 10
+        }
+      ],
+      "prereq_task_ids": [],
+      "enabled": true,
+      "sort_weight": 490
+    },
+    {
+      "id": "task-daily-003",
+      "category": "daily",
+      "title": "日常：风裂峡谷巡狩",
+      "realm": "炼精化炁·通脉期",
+      "description": "进入风裂峡谷并完成一次通关，回报巡狩结果。",
+      "giver_npc_id": "npc-bounty-board",
+      "map_id": "map-qingyun-village",
+      "room_id": "room-village-center",
+      "objectives": [
+        {
+          "id": "obj-001",
+          "type": "dungeon_clear",
+          "text": "通关风裂峡谷 1 次",
+          "target": 1,
+          "params": {
+            "dungeon_id": "dungeon-qiqi-storm-rift"
+          }
+        }
+      ],
+      "rewards": [
+        {
+          "type": "silver",
+          "amount": 220
+        },
+        {
+          "type": "spirit_stones",
+          "amount": 15
+        },
+        {
+          "type": "item",
+          "item_def_id": "mat-012",
+          "qty": 2
+        }
+      ],
+      "prereq_task_ids": [],
+      "enabled": true,
+      "sort_weight": 485
+    },
+    {
+      "id": "task-daily-004",
+      "category": "daily",
+      "title": "日常：寒渊裂隙试锋",
+      "realm": "炼精化炁·凝炁期",
+      "description": "前往寒渊裂隙完成一次通关，校验新境界的稳定度。",
+      "giver_npc_id": "npc-bounty-board",
+      "map_id": "map-qingyun-village",
+      "room_id": "room-village-center",
+      "objectives": [
+        {
+          "id": "obj-001",
+          "type": "dungeon_clear",
+          "text": "通关寒渊裂隙 1 次",
+          "target": 1,
+          "params": {
+            "dungeon_id": "dungeon-qiqi-frost-abyss"
+          }
+        }
+      ],
+      "rewards": [
+        {
+          "type": "silver",
+          "amount": 320
+        },
+        {
+          "type": "spirit_stones",
+          "amount": 20
+        },
+        {
+          "type": "item",
+          "item_def_id": "mat-012",
+          "qty": 3
+        }
+      ],
+      "prereq_task_ids": [],
+      "enabled": true,
+      "sort_weight": 480
+    },
+    {
+      "id": "task-event-001",
+      "category": "event",
+      "title": "周常：秘境连战",
+      "realm": "炼精化炁·通脉期",
+      "description": "本周累计完成 3 次任意秘境通关。",
+      "giver_npc_id": "npc-bounty-board",
+      "map_id": "map-qingyun-village",
+      "room_id": "room-village-center",
+      "objectives": [
+        {
+          "id": "obj-001",
+          "type": "dungeon_clear",
+          "text": "通关任意秘境 3 次",
+          "target": 3,
+          "params": {}
+        }
+      ],
+      "rewards": [
+        {
+          "type": "silver",
+          "amount": 420
+        },
+        {
+          "type": "spirit_stones",
+          "amount": 30
+        },
+        {
+          "type": "item",
+          "item_def_id": "mat-012",
+          "qty": 3
+        }
+      ],
+      "prereq_task_ids": [],
+      "enabled": true,
+      "sort_weight": 470
+    },
+    {
+      "id": "task-event-002",
+      "category": "event",
+      "title": "周常：丹炉试火",
+      "realm": "炼精化炁·养气期",
+      "description": "炼制回气丹 3 次，验证丹炉流程稳定性。",
+      "giver_npc_id": "npc-bounty-board",
+      "map_id": "map-qingyun-village",
+      "room_id": "room-village-center",
+      "objectives": [
+        {
+          "id": "obj-001",
+          "type": "craft_item",
+          "text": "炼制回气丹 3 次",
+          "target": 3,
+          "params": {
+            "recipe_id": "recipe-hui-qi-dan"
+          }
+        }
+      ],
+      "rewards": [
+        {
+          "type": "silver",
+          "amount": 300
+        },
+        {
+          "type": "spirit_stones",
+          "amount": 35
+        },
+        {
+          "type": "item",
+          "item_def_id": "cons-003",
+          "qty": 1
+        }
+      ],
+      "prereq_task_ids": [],
+      "enabled": true,
+      "sort_weight": 465
+    },
+    {
+      "id": "task-event-003",
+      "category": "event",
+      "title": "周常：寒渊后勤",
+      "realm": "炼精化炁·凝炁期",
+      "description": "完成寒渊裂隙补给流程：通关并补炼回气丹。",
+      "giver_npc_id": "npc-bounty-board",
+      "map_id": "map-qingyun-village",
+      "room_id": "room-village-center",
+      "objectives": [
+        {
+          "id": "obj-001",
+          "type": "dungeon_clear",
+          "text": "通关寒渊裂隙 2 次",
+          "target": 2,
+          "params": {
+            "dungeon_id": "dungeon-qiqi-frost-abyss"
+          }
+        },
+        {
+          "id": "obj-002",
+          "type": "craft_item",
+          "text": "炼制回气丹 2 次",
+          "target": 2,
+          "params": {
+            "recipe_id": "recipe-hui-qi-dan"
+          }
+        }
+      ],
+      "rewards": [
+        {
+          "type": "silver",
+          "amount": 600
+        },
+        {
+          "type": "spirit_stones",
+          "amount": 60
+        },
+        {
+          "type": "item",
+          "item_def_id": "mat-012",
+          "qty": 6
+        }
+      ],
+      "prereq_task_ids": [],
+      "enabled": true,
+      "sort_weight": 460
     }
   ]
 }

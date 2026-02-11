@@ -606,6 +606,8 @@ export type MainQuestProgressEvent =
   | { type: 'kill_monster'; monsterId: string; count: number }
   | { type: 'gather_resource'; resourceId: string; count: number }
   | { type: 'collect'; itemId: string; count: number }
+  | { type: 'dungeon_clear'; dungeonId: string; difficultyId?: string; count: number }
+  | { type: 'craft_item'; recipeId?: string; recipeType?: string; craftKind?: string; itemId?: string; count: number }
   | { type: 'reach'; roomId: string }
   | { type: 'upgrade_technique'; techniqueId: string; layer: number }
   | { type: 'upgrade_realm'; realm: string };
@@ -694,6 +696,37 @@ export const updateSectionProgress = async (
         if (objType === 'collect' && asString(params.item_id) === event.itemId) {
           matched = true;
           delta = Math.max(1, Math.floor(event.count));
+        }
+      }
+
+      if (event.type === 'dungeon_clear') {
+        if (objType === 'dungeon_clear') {
+          const dungeonId = asString(params.dungeon_id);
+          const difficultyId = asString(params.difficulty_id);
+          const dungeonMatch = !dungeonId || dungeonId === event.dungeonId;
+          const difficultyMatch = !difficultyId || difficultyId === asString(event.difficultyId);
+          if (dungeonMatch && difficultyMatch) {
+            matched = true;
+            delta = Math.max(1, Math.floor(event.count));
+          }
+        }
+      }
+
+      if (event.type === 'craft_item') {
+        if (objType === 'craft_item') {
+          const recipeId = asString(params.recipe_id);
+          const recipeType = asString(params.recipe_type);
+          const craftKind = asString(params.craft_kind);
+          const itemId = asString(params.item_id);
+
+          const recipeMatch = !recipeId || recipeId === asString(event.recipeId);
+          const recipeTypeMatch = !recipeType || recipeType === asString(event.recipeType);
+          const craftKindMatch = !craftKind || craftKind === asString(event.craftKind);
+          const itemMatch = !itemId || itemId === asString(event.itemId);
+          if (recipeMatch && recipeTypeMatch && craftKindMatch && itemMatch) {
+            matched = true;
+            delta = Math.max(1, Math.floor(event.count));
+          }
         }
       }
 

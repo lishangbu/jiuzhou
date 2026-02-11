@@ -132,153 +132,10 @@ const buildRealmRank = (character: CharacterData | null): RealmRank => {
   return { currentIdx, total: realmOrder.length, current, next };
 };
 
-const buildPlan = (target: string | null, character: CharacterData | null): { requirements: RequirementRow[]; costs: CostRow[] } => {
-  if (!target) return { requirements: [], costs: [] };
-  const exp = Number(character?.exp ?? 0) || 0;
-  const spiritStones = Number(character?.spiritStones ?? 0) || 0;
-
-  if (target === '炼精化炁·养气期') {
-    return {
-      requirements: [
-        {
-          id: 'exp-1000',
-          title: '修为经验',
-          detail: `经验 ≥ 1,000（当前 ${exp.toLocaleString()}）`,
-          status: exp >= 1000 ? 'done' : 'todo',
-        },
-        { id: 'tech-yangqi', title: '功法修炼', detail: '养气诀 ≥ 2 层（未接入功法数据）', status: 'unknown' },
-      ],
-      costs: [{ id: 'cost-exp', name: '经验', amountText: '500（示例）', icon: tongqianIcon }],
-    };
-  }
-
-  if (target === '炼精化炁·通脉期') {
-    return {
-      requirements: [
-        {
-          id: 'exp-5000',
-          title: '修为经验',
-          detail: `经验 ≥ 5,000（当前 ${exp.toLocaleString()}）`,
-          status: exp >= 5000 ? 'done' : 'todo',
-        },
-        { id: 'dungeon-1', title: '试炼秘境', detail: '通关一次气血修炼秘境·低难度（未接入秘境记录）', status: 'unknown' },
-        { id: 'tech-1', title: '功法修炼', detail: '至少 1 门基础战斗功法 ≥ 3 层（未接入功法数据）', status: 'unknown' },
-        {
-          id: 'money-100',
-          title: '灵石储备',
-          detail: `灵石 ≥ 100（当前 ${spiritStones.toLocaleString()}）`,
-          status: spiritStones >= 100 ? 'done' : 'todo',
-        },
-        { id: 'item-tongmai', title: '突破丹药', detail: '通脉丹 × 1（未接入背包材料校验）', status: 'unknown' },
-      ],
-      costs: [
-        { id: 'cost-money', name: '灵石', amountText: '100（示例）', icon: lingshiIcon },
-        { id: 'cost-item', name: '通脉丹', amountText: '×1（示例）', icon: coin01 },
-      ],
-    };
-  }
-
-  if (target === '炼精化炁·凝炁期') {
-    return {
-      requirements: [
-        {
-          id: 'exp-15000',
-          title: '修为经验',
-          detail: `经验 ≥ 15,000（当前 ${exp.toLocaleString()}）`,
-          status: exp >= 15000 ? 'done' : 'todo',
-        },
-        { id: 'tech-2', title: '功法修炼', detail: '至少 2 门功法 ≥ 4 层（未接入功法数据）', status: 'unknown' },
-        { id: 'dungeon-2', title: '试炼秘境', detail: '通关更高难度关卡一次（未接入秘境记录）', status: 'unknown' },
-        {
-          id: 'money-300',
-          title: '灵石储备',
-          detail: `灵石 ≥ 300（当前 ${spiritStones.toLocaleString()}）`,
-          status: spiritStones >= 300 ? 'done' : 'todo',
-        },
-        { id: 'item-ningqi', title: '突破丹药', detail: '凝炁丹 × 1（未接入背包材料校验）', status: 'unknown' },
-        { id: 'item-canye', title: '辅助材料', detail: '功法残页 × 若干（未接入背包材料校验）', status: 'unknown' },
-      ],
-      costs: [
-        { id: 'cost-money', name: '灵石', amountText: '300（示例）', icon: lingshiIcon },
-        { id: 'cost-item', name: '凝炁丹', amountText: '×1（示例）', icon: coin01 },
-      ],
-    };
-  }
-
-  return {
-    requirements: [
-      { id: 'exp', title: '修为经验', detail: '达到指定经验阈值（示例）', status: 'unknown' },
-      { id: 'tech', title: '功法修炼', detail: '主修功法达到指定层数（示例）', status: 'unknown' },
-      { id: 'dungeon', title: '试炼秘境', detail: '通关对应试炼秘境（示例）', status: 'unknown' },
-      { id: 'item', title: '突破材料', detail: '消耗指定丹药与材料（示例）', status: 'unknown' },
-    ],
-    costs: [{ id: 'cost', name: '消耗', amountText: '待接入服务端配置', icon: coin01 }],
-  };
-};
-
-const buildRewards = (target: string | null): { rewards: RewardRow[]; unlocks: UnlockRow[] } => {
-  if (!target) return { rewards: [], unlocks: [] };
-
-  if (target === '炼精化炁·养气期') {
-    return {
-      rewards: [
-        { id: 'hp', title: '最大气血', detail: '+10%（示意）' },
-        { id: 'qi', title: '最大灵气', detail: '+10%（示意）' },
-        { id: 'ap', title: '属性点', detail: '+5（示意）' },
-      ],
-      unlocks: [
-        { id: 'tech', title: '功法层数', detail: '满足更多功法 required_realm 前置（示意）' },
-        { id: 'dungeon', title: '秘境内容', detail: '解锁更高难度与更多掉落（示意）' },
-      ],
-    };
-  }
-
-  if (target === '炼精化炁·通脉期') {
-    return {
-      rewards: [
-        { id: 'hp', title: '最大气血', detail: '+15%（示意）' },
-        { id: 'qi', title: '最大灵气', detail: '+15%（示意）' },
-        { id: 'atk', title: '攻防成长', detail: '物攻/法攻 +5%（示意）' },
-        { id: 'ap', title: '属性点', detail: '+5（示意）' },
-      ],
-      unlocks: [
-        { id: 'dungeon', title: '秘境内容', detail: '通脉段位试炼与材料掉落（示意）' },
-        { id: 'task', title: '任务/成就', detail: '突破节点可触发主线/成就进度（示意）' },
-      ],
-    };
-  }
-
-  if (target === '炼精化炁·凝炁期') {
-    return {
-      rewards: [
-        { id: 'hp', title: '最大气血', detail: '+15%（示意）' },
-        { id: 'qi', title: '最大灵气', detail: '+15%（示意）' },
-        { id: 'atkdef', title: '攻防成长', detail: '攻击/防御 +5%～8%（示意）' },
-        { id: 'ap', title: '属性点', detail: '+10（示意）' },
-      ],
-      unlocks: [
-        { id: 'dungeon', title: '秘境内容', detail: '更高难度关卡与稀有材料（示意）' },
-        { id: 'next', title: '后续突破入口', detail: '预留进入 炼炁化神·炼己期 的门槛（示意）' },
-      ],
-    };
-  }
-
-  return {
-    rewards: [
-      { id: 'attrs', title: '属性提升', detail: '提升气血/灵气/攻防等（示意）' },
-      { id: 'ap', title: '属性点', detail: '获得可分配属性点（示意）' },
-    ],
-    unlocks: [
-      { id: 'tech', title: '功法层数', detail: '解锁更高层 required_realm（示意）' },
-      { id: 'content', title: '内容解锁', detail: '秘境/宗门/玩法门槛提升（示意）' },
-    ],
-  };
-};
-
 const getRequirementTag = (status: RequirementRow['status']) => {
   if (status === 'done') return <Tag color="green">已满足</Tag>;
   if (status === 'todo') return <Tag color="red">未满足</Tag>;
-  return <Tag>待接入</Tag>;
+  return <Tag>未知</Tag>;
 };
 
 const RealmModal: React.FC<RealmModalProps> = ({ open, onClose, character }) => {
@@ -361,16 +218,16 @@ const RealmModal: React.FC<RealmModalProps> = ({ open, onClose, character }) => 
       }));
       return { requirements, costs };
     }
-    return buildPlan(rank.next, character);
-  }, [character, overview, rank.next]);
+    return { requirements: [] as RequirementRow[], costs: [] as CostRow[] };
+  }, [overview]);
 
   const outcome = useMemo(() => {
     if (overview) {
       const rewards: RewardRow[] = (overview.rewards ?? []).map((r) => ({ id: r.id, title: r.title, detail: r.detail }));
       return { rewards, unlocks: [] as UnlockRow[] };
     }
-    return buildRewards(rank.next);
-  }, [overview, rank.next]);
+    return { rewards: [] as RewardRow[], unlocks: [] as UnlockRow[] };
+  }, [overview]);
 
   const mobileTabs = useMemo<Array<{ key: MobileSectionKey; label: string }>>(() => {
     const tabs: Array<{ key: MobileSectionKey; label: string }> = [
@@ -411,7 +268,10 @@ const RealmModal: React.FC<RealmModalProps> = ({ open, onClose, character }) => 
     ? '正在加载服务端境界配置与条件判定…'
     : overview
       ? '已接入服务端真实突破条件与消耗。'
-      : '未获取到服务端境界数据。';
+      : '服务端境界数据不可用，当前显示本地兜底信息。';
+
+  const displayExp = overview ? Number(overview.exp ?? 0) : Number(character?.exp ?? 0);
+  const displaySpiritStones = overview ? Number(overview.spiritStones ?? 0) : Number(character?.spiritStones ?? 0);
 
   const handleBreakthrough = useCallback(async () => {
     if (!rank.next) return;
@@ -503,11 +363,11 @@ const RealmModal: React.FC<RealmModalProps> = ({ open, onClose, character }) => 
       <div className="realm-stats">
         <div className="realm-stat">
           <div className="realm-stat-k">经验</div>
-          <div className="realm-stat-v">{(character?.exp ?? 0).toLocaleString()}</div>
+          <div className="realm-stat-v">{displayExp.toLocaleString()}</div>
         </div>
         <div className="realm-stat">
           <div className="realm-stat-k">灵石</div>
-          <div className="realm-stat-v">{(character?.spiritStones ?? 0).toLocaleString()}</div>
+          <div className="realm-stat-v">{displaySpiritStones.toLocaleString()}</div>
         </div>
         <div className="realm-stat">
           <div className="realm-stat-k">可用属性点</div>

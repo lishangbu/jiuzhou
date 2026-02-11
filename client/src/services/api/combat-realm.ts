@@ -189,6 +189,8 @@ export interface RealmRequirementView {
   title: string;
   detail: string;
   status: RealmRequirementStatus;
+  sourceType?: string;
+  sourceRef?: string;
 }
 
 export interface RealmCostView {

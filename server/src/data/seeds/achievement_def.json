@@ -11,8 +11,14 @@
       "track_key": "kill:monster:*",
       "target_value": 10,
       "rewards": [
-        { "type": "silver", "amount": 300 },
-        { "type": "spirit_stones", "amount": 15 }
+        {
+          "type": "silver",
+          "amount": 300
+        },
+        {
+          "type": "spirit_stones",
+          "amount": 15
+        }
       ],
       "sort_weight": 1000,
       "enabled": true,
@@ -30,8 +36,15 @@
       "track_key": "kill:monster:monster-wild-rabbit",
       "target_value": 30,
       "rewards": [
-        { "type": "silver", "amount": 600 },
-        { "type": "item", "item_def_id": "mat-gongfa-canye", "qty": 3 }
+        {
+          "type": "silver",
+          "amount": 600
+        },
+        {
+          "type": "item",
+          "item_def_id": "mat-gongfa-canye",
+          "qty": 3
+        }
       ],
       "title_id": "title-rabbit-hunter",
       "sort_weight": 980,
@@ -49,7 +62,10 @@
       "track_key": "gather:resource:*",
       "target_value": 20,
       "rewards": [
-        { "type": "silver", "amount": 500 }
+        {
+          "type": "silver",
+          "amount": 500
+        }
       ],
       "sort_weight": 960,
       "enabled": true,
@@ -66,7 +82,10 @@
       "track_key": "item:obtain:*",
       "target_value": 20,
       "rewards": [
-        { "type": "spirit_stones", "amount": 20 }
+        {
+          "type": "spirit_stones",
+          "amount": 20
+        }
       ],
       "sort_weight": 940,
       "enabled": true,
@@ -87,8 +106,15 @@
       ],
       "target_value": 2,
       "rewards": [
-        { "type": "silver", "amount": 800 },
-        { "type": "item", "item_def_id": "mat-001", "qty": 2 }
+        {
+          "type": "silver",
+          "amount": 800
+        },
+        {
+          "type": "item",
+          "item_def_id": "mat-001",
+          "qty": 2
+        }
       ],
       "sort_weight": 920,
       "enabled": true,
@@ -105,7 +131,10 @@
       "track_key": "room:reach:room-village-center",
       "target_value": 1,
       "rewards": [
-        { "type": "silver", "amount": 120 }
+        {
+          "type": "silver",
+          "amount": 120
+        }
       ],
       "sort_weight": 900,
       "enabled": true,
@@ -122,7 +151,10 @@
       "track_key": "team:create",
       "target_value": 1,
       "rewards": [
-        { "type": "spirit_stones", "amount": 40 }
+        {
+          "type": "spirit_stones",
+          "amount": 40
+        }
       ],
       "title_id": "title-team-pioneer",
       "sort_weight": 880,
@@ -140,7 +172,10 @@
       "track_key": "team:join",
       "target_value": 3,
       "rewards": [
-        { "type": "silver", "amount": 900 }
+        {
+          "type": "silver",
+          "amount": 900
+        }
       ],
       "sort_weight": 860,
       "enabled": true,
@@ -157,7 +192,10 @@
       "track_key": "sect:join",
       "target_value": 1,
       "rewards": [
-        { "type": "spirit_stones", "amount": 35 }
+        {
+          "type": "spirit_stones",
+          "amount": 35
+        }
       ],
       "sort_weight": 840,
       "enabled": true,
@@ -174,7 +212,10 @@
       "track_key": "monthcard:activate",
       "target_value": 1,
       "rewards": [
-        { "type": "silver", "amount": 1500 }
+        {
+          "type": "silver",
+          "amount": 1500
+        }
       ],
       "sort_weight": 820,
       "enabled": true,
@@ -191,7 +232,10 @@
       "track_key": "realm:reach:炼精化炁·养气期",
       "target_value": 1,
       "rewards": [
-        { "type": "spirit_stones", "amount": 60 }
+        {
+          "type": "spirit_stones",
+          "amount": 60
+        }
       ],
       "sort_weight": 800,
       "enabled": true,
@@ -208,7 +252,10 @@
       "track_key": "skill:level:any",
       "target_value": 5,
       "rewards": [
-        { "type": "silver", "amount": 1000 }
+        {
+          "type": "silver",
+          "amount": 1000
+        }
       ],
       "sort_weight": 780,
       "enabled": true,
@@ -225,7 +272,10 @@
       "track_key": "skill:level:layer:3",
       "target_value": 1,
       "rewards": [
-        { "type": "spirit_stones", "amount": 55 }
+        {
+          "type": "spirit_stones",
+          "amount": 55
+        }
       ],
       "sort_weight": 760,
       "enabled": true,
@@ -242,7 +292,10 @@
       "track_key": "dungeon:clear:*",
       "target_value": 1,
       "rewards": [
-        { "type": "silver", "amount": 1200 }
+        {
+          "type": "silver",
+          "amount": 1200
+        }
       ],
       "sort_weight": 740,
       "enabled": true,
@@ -260,8 +313,15 @@
       "track_key": "dungeon:clear:*",
       "target_value": 5,
       "rewards": [
-        { "type": "spirit_stones", "amount": 100 },
-        { "type": "item", "item_def_id": "mat-001", "qty": 6 }
+        {
+          "type": "spirit_stones",
+          "amount": 100
+        },
+        {
+          "type": "item",
+          "item_def_id": "mat-001",
+          "qty": 6
+        }
       ],
       "title_id": "title-mystic-pathfinder",
       "sort_weight": 720,
@@ -279,9 +339,163 @@
       "track_key": "talk:npc:npc-village-elder",
       "target_value": 5,
       "rewards": [
-        { "type": "silver", "amount": 300 }
+        {
+          "type": "silver",
+          "amount": 300
+        }
       ],
       "sort_weight": 700,
+      "enabled": true,
+      "version": 1
+    },
+    {
+      "id": "ach-dungeon-storm-rift-1",
+      "name": "初踏风裂",
+      "description": "通关风裂峡谷 1 次",
+      "category": "exploration",
+      "rarity": "uncommon",
+      "points": 50,
+      "track_type": "flag",
+      "track_key": "dungeon:clear:dungeon-qiqi-storm-rift",
+      "target_value": 1,
+      "rewards": [
+        {
+          "type": "silver",
+          "amount": 1500
+        },
+        {
+          "type": "spirit_stones",
+          "amount": 40
+        }
+      ],
+      "sort_weight": 710,
+      "enabled": true,
+      "version": 1
+    },
+    {
+      "id": "ach-dungeon-storm-rift-10",
+      "name": "裂风征服者",
+      "description": "通关风裂峡谷 10 次",
+      "category": "exploration",
+      "rarity": "epic",
+      "points": 130,
+      "prerequisite_id": "ach-dungeon-storm-rift-1",
+      "track_type": "counter",
+      "track_key": "dungeon:clear:dungeon-qiqi-storm-rift",
+      "target_value": 10,
+      "rewards": [
+        {
+          "type": "spirit_stones",
+          "amount": 120
+        },
+        {
+          "type": "item",
+          "item_def_id": "mat-012",
+          "qty": 8
+        }
+      ],
+      "sort_weight": 700,
+      "enabled": true,
+      "version": 1
+    },
+    {
+      "id": "ach-dungeon-frost-abyss-1",
+      "name": "寒渊初探",
+      "description": "通关寒渊裂隙 1 次",
+      "category": "exploration",
+      "rarity": "uncommon",
+      "points": 60,
+      "track_type": "flag",
+      "track_key": "dungeon:clear:dungeon-qiqi-frost-abyss",
+      "target_value": 1,
+      "rewards": [
+        {
+          "type": "silver",
+          "amount": 1800
+        },
+        {
+          "type": "spirit_stones",
+          "amount": 50
+        }
+      ],
+      "sort_weight": 695,
+      "enabled": true,
+      "version": 1
+    },
+    {
+      "id": "ach-dungeon-frost-abyss-10",
+      "name": "寒渊镇守者",
+      "description": "通关寒渊裂隙 10 次",
+      "category": "exploration",
+      "rarity": "epic",
+      "points": 150,
+      "prerequisite_id": "ach-dungeon-frost-abyss-1",
+      "track_type": "counter",
+      "track_key": "dungeon:clear:dungeon-qiqi-frost-abyss",
+      "target_value": 10,
+      "rewards": [
+        {
+          "type": "spirit_stones",
+          "amount": 150
+        },
+        {
+          "type": "item",
+          "item_def_id": "mat-012",
+          "qty": 10
+        }
+      ],
+      "sort_weight": 690,
+      "enabled": true,
+      "version": 1
+    },
+    {
+      "id": "ach-craft-huiqi-3",
+      "name": "丹炉初成",
+      "description": "炼制回气丹 3 次",
+      "category": "growth",
+      "rarity": "common",
+      "points": 35,
+      "track_type": "counter",
+      "track_key": "craft:recipe:recipe-hui-qi-dan",
+      "target_value": 3,
+      "rewards": [
+        {
+          "type": "silver",
+          "amount": 600
+        },
+        {
+          "type": "item",
+          "item_def_id": "cons-002",
+          "qty": 2
+        }
+      ],
+      "sort_weight": 685,
+      "enabled": true,
+      "version": 1
+    },
+    {
+      "id": "ach-craft-huiqi-20",
+      "name": "药火不息",
+      "description": "炼制回气丹 20 次",
+      "category": "growth",
+      "rarity": "rare",
+      "points": 90,
+      "prerequisite_id": "ach-craft-huiqi-3",
+      "track_type": "counter",
+      "track_key": "craft:item:cons-002",
+      "target_value": 20,
+      "rewards": [
+        {
+          "type": "spirit_stones",
+          "amount": 90
+        },
+        {
+          "type": "item",
+          "item_def_id": "cons-003",
+          "qty": 3
+        }
+      ],
+      "sort_weight": 680,
       "enabled": true,
       "version": 1
     }

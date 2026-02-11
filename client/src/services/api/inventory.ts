@@ -298,3 +298,99 @@ export const removeInventoryItemsBatch = (itemIds: number[]): Promise<InventoryR
 export const sortInventory = (location: 'bag' | 'warehouse' = 'bag'): Promise<{ success: boolean; message: string }> => {
   return api.post('/inventory/sort', { location });
 };
+
+export type InventoryCraftKind = 'alchemy' | 'smithing' | 'craft';
+
+export interface InventoryCraftRecipeCostItemDto {
+  itemDefId: string;
+  itemName: string;
+  required: number;
+  owned: number;
+  missing: number;
+}
+
+export interface InventoryCraftRecipeDto {
+  id: string;
+  name: string;
+  recipeType: string;
+  product: {
+    itemDefId: string;
+    name: string;
+    icon: string | null;
+    qty: number;
+  };
+  costs: {
+    silver: number;
+    spiritStones: number;
+    exp: number;
+    items: InventoryCraftRecipeCostItemDto[];
+  };
+  requirements: {
+    realm: string | null;
+    level: number;
+    building: string | null;
+    realmMet: boolean;
+  };
+  successRate: number;
+  failReturnRate: number;
+  maxCraftTimes: number;
+  craftable: boolean;
+  craftKind: InventoryCraftKind;
+}
+
+export interface InventoryCraftRecipesResponse {
+  success: boolean;
+  message?: string;
+  data?: {
+    character: {
+      realm: string;
+      exp: number;
+      silver: number;
+      spiritStones: number;
+    };
+    recipes: InventoryCraftRecipeDto[];
+  };
+}
+
+export const getInventoryCraftRecipes = (recipeType?: string): Promise<InventoryCraftRecipesResponse> => {
+  return api.get('/inventory/craft/recipes', { params: recipeType ? { recipeType } : undefined });
+};
+
+export interface InventoryCraftExecuteResponse {
+  success: boolean;
+  message?: string;
+  data?: {
+    recipeId: string;
+    recipeType: string;
+    craftKind: InventoryCraftKind;
+    times: number;
+    successCount: number;
+    failCount: number;
+    spent: {
+      silver: number;
+      spiritStones: number;
+      exp: number;
+      items: Array<{ itemDefId: string; qty: number }>;
+    };
+    returnedItems: Array<{ itemDefId: string; qty: number }>;
+    produced: {
+      itemDefId: string;
+      itemName: string;
+      itemIcon: string | null;
+      qty: number;
+      itemIds: number[];
+    } | null;
+    character: {
+      exp: number;
+      silver: number;
+      spiritStones: number;
+    };
+  };
+}
+
+export const executeInventoryCraftRecipe = (body: {
+  recipeId: string;
+  times?: number;
+}): Promise<InventoryCraftExecuteResponse> => {
+  return api.post('/inventory/craft/execute', body);
+};

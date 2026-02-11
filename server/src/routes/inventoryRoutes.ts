@@ -4,6 +4,7 @@
 import { Router, Request, Response } from 'express';
 import inventoryService, { InventoryLocation } from '../services/inventoryService.js';
 import itemService from '../services/itemService.js';
+import craftService from '../services/craftService.js';
 import { query } from '../config/database.js';
 import { verifyToken } from '../services/authService.js';
 import { getGameServer } from '../game/GameServer.js';
@@ -240,6 +241,56 @@ router.get('/items', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('获取背包物品失败:', error);
     res.status(500).json({ success: false, message: '服务器错误' });
+  }
+});
+
+// ============================================
+// 获取炼制配方列表
+// GET /api/inventory/craft/recipes?recipeType=craft
+// ============================================
+router.get('/craft/recipes', async (req: Request, res: Response) => {
+  try {
+    const userId = (req as AuthedRequest).userId;
+    const recipeType = typeof req.query.recipeType === 'string' ? req.query.recipeType : undefined;
+    const result = await craftService.getCraftRecipeList(userId, { recipeType });
+    return res.status(result.success ? 200 : 400).json(result);
+  } catch (error) {
+    console.error('获取炼制配方失败:', error);
+    return res.status(500).json({ success: false, message: '服务器错误' });
+  }
+});
+
+// ============================================
+// 执行炼制
+// POST /api/inventory/craft/execute
+// Body: { recipeId: string, times?: number }
+// ============================================
+router.post('/craft/execute', async (req: Request, res: Response) => {
+  try {
+    const userId = (req as AuthedRequest).userId;
+    const recipeId = typeof req.body?.recipeId === 'string' ? req.body.recipeId : '';
+    const timesRaw = req.body?.times;
+    const times = timesRaw === undefined || timesRaw === null ? undefined : Number(timesRaw);
+
+    if (!recipeId.trim()) {
+      return res.status(400).json({ success: false, message: 'recipeId参数错误' });
+    }
+    if (times !== undefined && (!Number.isInteger(times) || times <= 0)) {
+      return res.status(400).json({ success: false, message: 'times参数错误' });
+    }
+
+    const result = await craftService.executeCraftRecipe(userId, { recipeId, ...(times !== undefined ? { times } : {}) });
+    if (result.success) {
+      try {
+        const gameServer = getGameServer();
+        await gameServer.pushCharacterUpdate(userId);
+      } catch {
+      }
+    }
+    return res.status(result.success ? 200 : 400).json(result);
+  } catch (error) {
+    console.error('执行炼制失败:', error);
+    return res.status(500).json({ success: false, message: '服务器错误' });
   }
 });
 

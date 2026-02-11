@@ -21,6 +21,7 @@ import {
 } from '../../../../services/api';
 import type { InventoryInfoData, InventoryItemDto, InventoryLocation, ItemDefLite } from '../../../../services/api';
 import DisassembleModal from './DisassembleModal';
+import CraftModal from './CraftModal';
 import './index.scss';
 
 type BagCategory = 'all' | 'consumable' | 'material' | 'equipment' | 'skill' | 'quest';
@@ -923,6 +924,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
   const [selectedGemItemId, setSelectedGemItemId] = useState<number | undefined>(undefined);
   const [removeSlot, setRemoveSlot] = useState<number | undefined>(undefined);
   const [batchOpen, setBatchOpen] = useState(false);
+  const [craftOpen, setCraftOpen] = useState(false);
   const [batchMode, setBatchMode] = useState<BatchMode>('disassemble');
   const [batchQualities, setBatchQualities] = useState<BagQuality[]>(qualityLabels);
   const [batchCategory, setBatchCategory] = useState<BagCategory>('all');
@@ -1552,6 +1554,15 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
                 disabled={loading}
                 onClick={() => {
                   if (loading) return;
+                  setCraftOpen(true);
+                }}
+              >
+                炼丹炼器
+              </Button>
+              <Button
+                disabled={loading}
+                onClick={() => {
+                  if (loading) return;
                   openBatch('disassemble');
                 }}
               >
@@ -1691,7 +1702,11 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
                         </Button>
                       ) : null}
                       {hasAction('compose') ? (
-                        <Button size="small" disabled={actionDisabled('compose')}>
+                        <Button
+                          size="small"
+                          disabled={loading || actionDisabled('compose')}
+                          onClick={() => setCraftOpen(true)}
+                        >
                           合成
                         </Button>
                       ) : null}
@@ -1831,6 +1846,16 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
         }
         onClose={() => setDisassembleOpen(false)}
         onSuccess={refresh}
+      />
+
+      <CraftModal
+        open={craftOpen}
+        onClose={() => setCraftOpen(false)}
+        focusItemDefId={activeItem?.itemDefId}
+        onSuccess={async () => {
+          await refresh();
+          window.dispatchEvent(new Event('inventory:changed'));
+        }}
       />
 
       <Modal

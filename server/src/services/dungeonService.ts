@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { getBattleState, startDungeonPVEBattle } from './battleService.js';
 import { createItem, type CreateItemOptions } from './itemService.js';
 import { sendSystemMail, type MailAttachItem } from './mailService.js';
-import { updateAchievementProgress } from './achievementService.js';
+import { recordDungeonClearEvent } from './taskService.js';
 import type { PoolClient } from 'pg';
 
 export type DungeonType = 'material' | 'equipment' | 'trial' | 'challenge' | 'event';
@@ -12,6 +12,16 @@ export type DungeonCategoryDto = {
   type: DungeonType;
   label: string;
   count: number;
+};
+
+export type DungeonWeeklyTargetDto = {
+  id: string;
+  title: string;
+  description: string;
+  target: number;
+  current: number;
+  done: boolean;
+  progress: number;
 };
 
 export type DungeonDefDto = {
@@ -245,6 +255,132 @@ export const getDungeonCategories = async (): Promise<DungeonCategoryDto[]> => {
   }
 
   return categories;
+};
+
+export const getDungeonWeeklyTargets = async (
+  userId: number
+): Promise<
+  | {
+      success: true;
+      data: {
+        period: { weekStart: string; weekEnd: string };
+        summary: { totalClears: number; targetClears: number };
+        targets: DungeonWeeklyTargetDto[];
+      };
+    }
+  | { success: false; message: string }
+> => {
+  try {
+    const characterId = await getCharacterIdByUserId(userId);
+    if (!characterId) return { success: false, message: '角色不存在' };
+
+    const countRes = await query(
+      `
+        SELECT
+          COUNT(1)::int AS total,
+          COUNT(1) FILTER (WHERE dd.type = 'trial')::int AS trial,
+          COUNT(1) FILTER (WHERE dd.type = 'material')::int AS material,
+          COUNT(1) FILTER (WHERE dd.type = 'equipment')::int AS equipment,
+          COUNT(1) FILTER (WHERE COALESCE(dr.is_first_clear, false) = true)::int AS first_clear
+        FROM dungeon_record dr
+        JOIN dungeon_def dd ON dd.id = dr.dungeon_id
+        WHERE dr.character_id = $1
+          AND dr.result = 'cleared'
+          AND dr.created_at >= date_trunc('week', NOW())
+          AND dr.created_at < date_trunc('week', NOW()) + interval '7 day'
+      `,
+      [characterId]
+    );
+
+    const row = (countRes.rows?.[0] ?? {}) as Record<string, unknown>;
+    const total = asNumber(row.total, 0);
+    const trial = asNumber(row.trial, 0);
+    const material = asNumber(row.material, 0);
+    const equipment = asNumber(row.equipment, 0);
+    const firstClear = asNumber(row.first_clear, 0);
+
+    const toProgress = (current: number, target: number): number => {
+      if (target <= 0) return 100;
+      return Math.max(0, Math.min(100, Math.floor((current / target) * 100)));
+    };
+
+    const targets: DungeonWeeklyTargetDto[] = [
+      {
+        id: 'weekly-clear-total',
+        title: '本周秘境历练',
+        description: '通关任意秘境',
+        target: 7,
+        current: total,
+        done: total >= 7,
+        progress: toProgress(total, 7),
+      },
+      {
+        id: 'weekly-clear-trial',
+        title: '试炼专项',
+        description: '通关试炼秘境',
+        target: 3,
+        current: trial,
+        done: trial >= 3,
+        progress: toProgress(trial, 3),
+      },
+      {
+        id: 'weekly-clear-material',
+        title: '材料储备',
+        description: '通关材料秘境',
+        target: 3,
+        current: material,
+        done: material >= 3,
+        progress: toProgress(material, 3),
+      },
+      {
+        id: 'weekly-clear-equipment',
+        title: '装备搜集',
+        description: '通关装备秘境',
+        target: 2,
+        current: equipment,
+        done: equipment >= 2,
+        progress: toProgress(equipment, 2),
+      },
+      {
+        id: 'weekly-first-clear',
+        title: '首通挑战',
+        description: '完成本周首通记录',
+        target: 1,
+        current: firstClear,
+        done: firstClear >= 1,
+        progress: toProgress(firstClear, 1),
+      },
+    ];
+
+    const weekRes = await query(
+      `
+        SELECT
+          date_trunc('week', NOW())::date AS week_start,
+          (date_trunc('week', NOW())::date + 6)::date AS week_end
+      `
+    );
+    const weekRow = (weekRes.rows?.[0] ?? {}) as Record<string, unknown>;
+    const weekStart =
+      weekRow.week_start instanceof Date
+        ? weekRow.week_start.toISOString().slice(0, 10)
+        : String(weekRow.week_start ?? '');
+    const weekEnd =
+      weekRow.week_end instanceof Date
+        ? weekRow.week_end.toISOString().slice(0, 10)
+        : String(weekRow.week_end ?? '');
+
+    return {
+      success: true,
+      data: {
+        period: { weekStart, weekEnd },
+        summary: { totalClears: total, targetClears: 7 },
+        targets,
+      },
+    };
+  } catch (error) {
+    console.error('获取秘境周目标失败:', error);
+    return { success: false, message: '获取秘境周目标失败' };
+  }
 };
 
 export const getDungeonList = async (params: {
@@ -1589,7 +1725,7 @@ export const nextDungeonInstance = async (
           for (const p of participants) {
             const characterId = Number(p.characterId);
             if (!Number.isFinite(characterId) || characterId <= 0) continue;
-            await updateAchievementProgress(characterId, `dungeon:clear:${inst.dungeon_id}`, 1);
+            await recordDungeonClearEvent(characterId, inst.dungeon_id, 1, inst.difficulty_id);
           }
         } catch {}
 

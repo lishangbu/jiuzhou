@@ -672,6 +672,149 @@
   color: var(--text-secondary);
 }
 
+.bag-craft-modal {
+  .ant-modal-content {
+    background: var(--panel-bg);
+    color: var(--text-color);
+  }
+
+  .ant-modal-header {
+    background: var(--panel-bg);
+  }
+
+  .ant-modal-title {
+    color: var(--text-color);
+  }
+}
+
+.bag-craft-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bag-craft-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.bag-craft-wallet {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bag-craft-loading {
+  height: 360px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bag-craft-body {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 12px;
+  min-height: 400px;
+}
+
+.bag-craft-list {
+  border: 1px solid var(--border-color-soft);
+  border-radius: 12px;
+  background: var(--panel-bg-soft);
+  padding: 10px;
+  overflow: auto;
+}
+
+.bag-craft-item {
+  width: 100%;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--panel-bg);
+  color: var(--text-color);
+  text-align: left;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  cursor: pointer;
+
+  &.is-active {
+    border-color: var(--primary-color);
+    background: var(--primary-bg-soft);
+  }
+}
+
+.bag-craft-item-title {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.bag-craft-item-meta {
+  margin-top: 4px;
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.bag-craft-detail {
+  border: 1px solid var(--border-color-soft);
+  border-radius: 12px;
+  background: var(--panel-bg-soft);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bag-craft-detail-title {
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.bag-craft-detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.bag-craft-costs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bag-craft-cost-line {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--panel-bg);
+  font-size: 12px;
+
+  &.is-missing {
+    border-color: rgba(255, 77, 79, 0.45);
+    color: #ff7875;
+  }
+}
+
+.bag-craft-submit {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bag-craft-submit-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
 @media screen and (max-width: 768px) {
   .bag-modal-shell {
     height: 82vh;
@@ -687,5 +830,9 @@
 
   .bag-modal-grid {
     grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .bag-craft-body {
+    grid-template-columns: 1fr;
   }
 }

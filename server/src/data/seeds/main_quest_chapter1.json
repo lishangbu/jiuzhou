@@ -269,8 +269,99 @@
       "rewards": { "exp": 500, "silver": 500, "spirit_stones": 50, "items": [{ "item_def_id": "box-003", "quantity": 1 }, { "item_def_id": "mat-006", "quantity": 3 }] },
       "auto_accept": true,
       "auto_complete": false,
-      "is_chapter_final": true,
+      "is_chapter_final": false,
       "sort_weight": 940,
+      "enabled": true
+    },
+    {
+      "id": "main-1-008",
+      "chapter_id": "mq-chapter-1",
+      "section_num": 8,
+      "name": "峡谷风劫",
+      "description": "风裂峡谷风暴暴走，前往完成一次巡狩并回报异动。",
+      "brief": "通关风裂峡谷 1 次。",
+      "npc_id": "npc-village-elder",
+      "map_id": "map-qingyun-village",
+      "room_id": "room-village-center",
+      "min_realm": "炼精化炁·通脉期",
+      "dialogue_id": "dlg-main-1-008",
+      "objectives": [
+        {
+          "id": "obj-1",
+          "type": "dungeon_clear",
+          "text": "通关风裂峡谷 1 次",
+          "target": 1,
+          "params": { "dungeon_id": "dungeon-qiqi-storm-rift" }
+        }
+      ],
+      "rewards": { "exp": 620, "silver": 680, "spirit_stones": 60, "items": [{ "item_def_id": "mat-012", "quantity": 4 }] },
+      "auto_accept": true,
+      "auto_complete": false,
+      "is_chapter_final": false,
+      "sort_weight": 930,
+      "enabled": true
+    },
+    {
+      "id": "main-1-009",
+      "chapter_id": "mq-chapter-1",
+      "section_num": 9,
+      "name": "凝炁之门",
+      "description": "将峡谷历练所得化为底蕴，冲击炼精化炁·凝炁期。",
+      "brief": "突破到炼精化炁·凝炁期。",
+      "npc_id": "npc-village-elder",
+      "map_id": "map-qingyun-village",
+      "room_id": "room-village-center",
+      "min_realm": "炼精化炁·通脉期",
+      "dialogue_id": "dlg-main-1-009",
+      "objectives": [
+        {
+          "id": "obj-1",
+          "type": "upgrade_realm",
+          "text": "突破到炼精化炁·凝炁期",
+          "target": 1,
+          "params": { "realm": "炼精化炁·凝炁期" }
+        }
+      ],
+      "rewards": { "exp": 800, "silver": 900, "spirit_stones": 80, "items": [{ "item_def_id": "cons-010", "quantity": 3 }] },
+      "auto_accept": true,
+      "auto_complete": false,
+      "is_chapter_final": false,
+      "sort_weight": 920,
+      "enabled": true
+    },
+    {
+      "id": "main-1-010",
+      "chapter_id": "mq-chapter-1",
+      "section_num": 10,
+      "name": "寒渊试锋",
+      "description": "突破后踏入寒渊裂隙完成试锋，并炼制丹药稳固气机。",
+      "brief": "通关寒渊裂隙 1 次，炼制回气丹 1 次。",
+      "npc_id": "npc-village-elder",
+      "map_id": "map-qingyun-village",
+      "room_id": "room-village-center",
+      "min_realm": "炼精化炁·凝炁期",
+      "dialogue_id": "dlg-main-1-010",
+      "objectives": [
+        {
+          "id": "obj-1",
+          "type": "dungeon_clear",
+          "text": "通关寒渊裂隙 1 次",
+          "target": 1,
+          "params": { "dungeon_id": "dungeon-qiqi-frost-abyss" }
+        },
+        {
+          "id": "obj-2",
+          "type": "craft_item",
+          "text": "炼制回气丹 1 次",
+          "target": 1,
+          "params": { "recipe_id": "recipe-hui-qi-dan" }
+        }
+      ],
+      "rewards": { "exp": 1000, "silver": 1100, "spirit_stones": 120, "items": [{ "item_def_id": "box-003", "quantity": 1 }, { "item_def_id": "mat-012", "quantity": 6 }] },
+      "auto_accept": true,
+      "auto_complete": false,
+      "is_chapter_final": true,
+      "sort_weight": 910,
       "enabled": true
     }
   ]

@@ -6,6 +6,7 @@ import {
   getDungeonInstance,
   getDungeonList,
   getDungeonPreview,
+  getDungeonWeeklyTargets,
   joinDungeonInstance,
   nextDungeonInstance,
   startDungeonInstance,
@@ -87,6 +88,17 @@ router.get('/preview/:id', async (req: Request, res: Response) => {
     res.json({ success: true, data: preview });
   } catch (error) {
     console.error('获取秘境详情失败:', error);
+    res.status(500).json({ success: false, message: '服务器错误' });
+  }
+});
+
+router.get('/weekly-targets', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as AuthedRequest).userId;
+    const result = await getDungeonWeeklyTargets(userId);
+    res.status(result.success ? 200 : 400).json(result);
+  } catch (error) {
+    console.error('获取秘境周目标失败:', error);
     res.status(500).json({ success: false, message: '服务器错误' });
   }
 });

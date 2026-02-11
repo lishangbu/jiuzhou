@@ -4,7 +4,16 @@
     "凡人",
     "炼精化炁·养气期",
     "炼精化炁·通脉期",
-    "炼精化炁·凝炁期"
+    "炼精化炁·凝炁期",
+    "炼炁化神·炼己期",
+    "炼炁化神·采药期",
+    "炼炁化神·结胎期",
+    "炼神返虚·养神期",
+    "炼神返虚·还虚期",
+    "炼神返虚·合道期",
+    "炼虚合道·证道期",
+    "炼虚合道·历劫期",
+    "炼虚合道·成圣期"
   ],
   "breakthroughs": [
     {
@@ -32,7 +41,13 @@
       "to": "炼精化炁·通脉期",
       "requirements": [
         { "id": "exp", "type": "exp_min", "min": 200000, "title": "修为经验" },
-        { "id": "tech-main", "type": "main_technique_layer_min", "minLayer": 4, "title": "功法修炼" }
+        { "id": "tech-main", "type": "main_technique_layer_min", "minLayer": 4, "title": "功法修炼" },
+        {
+          "id": "dungeon-clear-any-1",
+          "type": "dungeon_clear_min",
+          "minCount": 1,
+          "title": "秘境历练"
+        }
       ],
       "costs": [
         { "type": "spirit_stones", "amount": 200 },
@@ -48,7 +63,14 @@
       "to": "炼精化炁·凝炁期",
       "requirements": [
         { "id": "exp", "type": "exp_min", "min": 400000, "title": "修为经验" },
-        { "id": "tech-main-sub", "type": "main_and_sub_technique_layer_min", "minLayer": 4, "title": "功法装配" }
+        { "id": "tech-main-sub", "type": "main_and_sub_technique_layer_min", "minLayer": 4, "title": "功法装配" },
+        {
+          "id": "dungeon-clear-withered-altar-1",
+          "type": "dungeon_clear_min",
+          "dungeonId": "dungeon-qiqi-withered-altar",
+          "minCount": 1,
+          "title": "高阶秘境历练"
+        }
       ],
       "costs": [
         { "type": "spirit_stones", "amount": 800 },
@@ -57,6 +79,326 @@
       "rewards": {
         "attributePoints": 10,
         "pct": { "max_qixue": 15, "max_lingqi": 15, "wugong": 6, "fagong": 6, "wufang": 6, "fafang": 6 }
+      }
+    },
+    {
+      "from": "炼精化炁·凝炁期",
+      "to": "炼炁化神·炼己期",
+      "requirements": [
+        { "id": "exp", "type": "exp_min", "min": 700000, "title": "修为经验" },
+        { "id": "tech-main-sub", "type": "main_and_sub_technique_layer_min", "minLayer": 6, "title": "功法装配" },
+        {
+          "id": "dungeon-clear-storm-rift-1",
+          "type": "dungeon_clear_min",
+          "dungeonId": "dungeon-qiqi-storm-rift",
+          "minCount": 1,
+          "title": "风裂峡谷历练"
+        },
+        {
+          "id": "dungeon-clear-frost-abyss-1",
+          "type": "dungeon_clear_min",
+          "dungeonId": "dungeon-qiqi-frost-abyss",
+          "minCount": 1,
+          "title": "寒渊裂隙历练"
+        }
+      ],
+      "costs": [
+        { "type": "spirit_stones", "amount": 1800 },
+        { "type": "exp", "amount": 700000 }
+      ],
+      "rewards": {
+        "attributePoints": 12,
+        "pct": { "max_qixue": 18, "max_lingqi": 18, "wugong": 8, "fagong": 8, "wufang": 8, "fafang": 8 },
+        "addPermyriad": { "kongzhi_kangxing": 300 }
+      }
+    },
+    {
+      "from": "炼炁化神·炼己期",
+      "to": "炼炁化神·采药期",
+      "requirements": [
+        {
+          "id": "version-lock-caiyao",
+          "type": "version_locked",
+          "title": "境界开放进度",
+          "reason": "炼炁化神·采药期及以上境界暂未开放"
+        },
+        { "id": "exp", "type": "exp_min", "min": 1100000, "title": "修为经验" },
+        { "id": "tech-count-3-layer-6", "type": "techniques_count_min_layer", "minCount": 3, "minLayer": 6, "title": "多功法共修" },
+        {
+          "id": "dungeon-clear-any-6",
+          "type": "dungeon_clear_min",
+          "minCount": 6,
+          "title": "秘境周转历练"
+        },
+        {
+          "id": "dungeon-clear-frost-abyss-2",
+          "type": "dungeon_clear_min",
+          "dungeonId": "dungeon-qiqi-frost-abyss",
+          "minCount": 2,
+          "title": "寒渊深层试炼"
+        }
+      ],
+      "costs": [
+        { "type": "spirit_stones", "amount": 3200 },
+        { "type": "exp", "amount": 1100000 }
+      ],
+      "rewards": {
+        "attributePoints": 14,
+        "pct": { "max_qixue": 20, "max_lingqi": 20, "wugong": 10, "fagong": 10, "wufang": 10, "fafang": 10 },
+        "addPermyriad": { "kongzhi_kangxing": 400 }
+      }
+    },
+    {
+      "from": "炼炁化神·采药期",
+      "to": "炼炁化神·结胎期",
+      "requirements": [
+        {
+          "id": "version-lock-jietai",
+          "type": "version_locked",
+          "title": "境界开放进度",
+          "reason": "炼炁化神·采药期及以上境界暂未开放"
+        },
+        { "id": "exp", "type": "exp_min", "min": 1600000, "title": "修为经验" },
+        { "id": "tech-count-4-layer-7", "type": "techniques_count_min_layer", "minCount": 4, "minLayer": 7, "title": "功法融会贯通" },
+        {
+          "id": "dungeon-clear-any-10",
+          "type": "dungeon_clear_min",
+          "minCount": 10,
+          "title": "秘境通关积累"
+        },
+        {
+          "id": "dungeon-clear-frost-abyss-4",
+          "type": "dungeon_clear_min",
+          "dungeonId": "dungeon-qiqi-frost-abyss",
+          "minCount": 4,
+          "title": "寒渊极境突破"
+        }
+      ],
+      "costs": [
+        { "type": "spirit_stones", "amount": 5200 },
+        { "type": "exp", "amount": 1600000 }
+      ],
+      "rewards": {
+        "attributePoints": 18,
+        "pct": { "max_qixue": 22, "max_lingqi": 22, "wugong": 12, "fagong": 12, "wufang": 12, "fafang": 12 },
+        "addPermyriad": { "kongzhi_kangxing": 500 }
+      }
+    },
+    {
+      "from": "炼炁化神·结胎期",
+      "to": "炼神返虚·养神期",
+      "requirements": [
+        {
+          "id": "version-lock-yangshen",
+          "type": "version_locked",
+          "title": "境界开放进度",
+          "reason": "炼炁化神·采药期及以上境界暂未开放"
+        },
+        { "id": "exp", "type": "exp_min", "min": 2300000, "title": "修为经验" },
+        { "id": "tech-count-4-layer-7", "type": "techniques_count_min_layer", "minCount": 4, "minLayer": 7, "title": "功法底蕴" },
+        {
+          "id": "dungeon-clear-any-15",
+          "type": "dungeon_clear_min",
+          "minCount": 15,
+          "title": "秘境轮转历练"
+        },
+        {
+          "id": "dungeon-clear-frost-abyss-6",
+          "type": "dungeon_clear_min",
+          "dungeonId": "dungeon-qiqi-frost-abyss",
+          "minCount": 6,
+          "title": "寒渊道心淬炼"
+        }
+      ],
+      "costs": [
+        { "type": "spirit_stones", "amount": 8200 },
+        { "type": "exp", "amount": 2300000 }
+      ],
+      "rewards": {
+        "attributePoints": 22,
+        "pct": { "max_qixue": 24, "max_lingqi": 24, "wugong": 14, "fagong": 14, "wufang": 14, "fafang": 14 },
+        "addPermyriad": { "kongzhi_kangxing": 650 }
+      }
+    },
+    {
+      "from": "炼神返虚·养神期",
+      "to": "炼神返虚·还虚期",
+      "requirements": [
+        {
+          "id": "version-lock-huanxu",
+          "type": "version_locked",
+          "title": "境界开放进度",
+          "reason": "炼炁化神·采药期及以上境界暂未开放"
+        },
+        { "id": "exp", "type": "exp_min", "min": 3200000, "title": "修为经验" },
+        { "id": "tech-count-2-layer-9", "type": "techniques_count_min_layer", "minCount": 2, "minLayer": 9, "title": "九重功法圆满" },
+        {
+          "id": "dungeon-clear-any-22",
+          "type": "dungeon_clear_min",
+          "minCount": 22,
+          "title": "秘境通关沉淀"
+        },
+        {
+          "id": "dungeon-clear-frost-abyss-10",
+          "type": "dungeon_clear_min",
+          "dungeonId": "dungeon-qiqi-frost-abyss",
+          "minCount": 10,
+          "title": "寒渊反复证道"
+        }
+      ],
+      "costs": [
+        { "type": "spirit_stones", "amount": 12800 },
+        { "type": "exp", "amount": 3200000 }
+      ],
+      "rewards": {
+        "attributePoints": 26,
+        "pct": { "max_qixue": 26, "max_lingqi": 26, "wugong": 16, "fagong": 16, "wufang": 16, "fafang": 16 },
+        "addPermyriad": { "kongzhi_kangxing": 800 }
+      }
+    },
+    {
+      "from": "炼神返虚·还虚期",
+      "to": "炼神返虚·合道期",
+      "requirements": [
+        {
+          "id": "version-lock-hedao",
+          "type": "version_locked",
+          "title": "境界开放进度",
+          "reason": "炼炁化神·采药期及以上境界暂未开放"
+        },
+        { "id": "exp", "type": "exp_min", "min": 4300000, "title": "修为经验" },
+        { "id": "tech-main-sub-7", "type": "main_and_sub_technique_layer_min", "minLayer": 7, "title": "主副功法圆融" },
+        { "id": "tech-count-2-layer-9", "type": "techniques_count_min_layer", "minCount": 2, "minLayer": 9, "title": "九重功法圆满" },
+        {
+          "id": "dungeon-clear-any-30",
+          "type": "dungeon_clear_min",
+          "minCount": 30,
+          "title": "秘境百战积累"
+        },
+        {
+          "id": "dungeon-clear-frost-abyss-14",
+          "type": "dungeon_clear_min",
+          "dungeonId": "dungeon-qiqi-frost-abyss",
+          "minCount": 14,
+          "title": "寒渊心境巩固"
+        }
+      ],
+      "costs": [
+        { "type": "spirit_stones", "amount": 19000 },
+        { "type": "exp", "amount": 4300000 }
+      ],
+      "rewards": {
+        "attributePoints": 30,
+        "pct": { "max_qixue": 28, "max_lingqi": 28, "wugong": 18, "fagong": 18, "wufang": 18, "fafang": 18 },
+        "addPermyriad": { "kongzhi_kangxing": 950 }
+      }
+    },
+    {
+      "from": "炼神返虚·合道期",
+      "to": "炼虚合道·证道期",
+      "requirements": [
+        {
+          "id": "version-lock-zhengdao",
+          "type": "version_locked",
+          "title": "境界开放进度",
+          "reason": "炼炁化神·采药期及以上境界暂未开放"
+        },
+        { "id": "exp", "type": "exp_min", "min": 5600000, "title": "修为经验" },
+        { "id": "tech-count-2-layer-9", "type": "techniques_count_min_layer", "minCount": 2, "minLayer": 9, "title": "九重功法圆满" },
+        {
+          "id": "dungeon-clear-any-40",
+          "type": "dungeon_clear_min",
+          "minCount": 40,
+          "title": "秘境大道试炼"
+        },
+        {
+          "id": "dungeon-clear-frost-abyss-18",
+          "type": "dungeon_clear_min",
+          "dungeonId": "dungeon-qiqi-frost-abyss",
+          "minCount": 18,
+          "title": "寒渊极限试炼"
+        }
+      ],
+      "costs": [
+        { "type": "spirit_stones", "amount": 27000 },
+        { "type": "exp", "amount": 5600000 }
+      ],
+      "rewards": {
+        "attributePoints": 34,
+        "pct": { "max_qixue": 30, "max_lingqi": 30, "wugong": 20, "fagong": 20, "wufang": 20, "fafang": 20 },
+        "addPermyriad": { "kongzhi_kangxing": 1100 }
+      }
+    },
+    {
+      "from": "炼虚合道·证道期",
+      "to": "炼虚合道·历劫期",
+      "requirements": [
+        {
+          "id": "version-lock-lijie",
+          "type": "version_locked",
+          "title": "境界开放进度",
+          "reason": "炼炁化神·采药期及以上境界暂未开放"
+        },
+        { "id": "exp", "type": "exp_min", "min": 7000000, "title": "修为经验" },
+        { "id": "tech-count-2-layer-9", "type": "techniques_count_min_layer", "minCount": 2, "minLayer": 9, "title": "九重功法圆满" },
+        {
+          "id": "dungeon-clear-any-55",
+          "type": "dungeon_clear_min",
+          "minCount": 55,
+          "title": "秘境极限轮转"
+        },
+        {
+          "id": "dungeon-clear-frost-abyss-24",
+          "type": "dungeon_clear_min",
+          "dungeonId": "dungeon-qiqi-frost-abyss",
+          "minCount": 24,
+          "title": "寒渊劫前淬炼"
+        }
+      ],
+      "costs": [
+        { "type": "spirit_stones", "amount": 36000 },
+        { "type": "exp", "amount": 7000000 }
+      ],
+      "rewards": {
+        "attributePoints": 38,
+        "pct": { "max_qixue": 32, "max_lingqi": 32, "wugong": 22, "fagong": 22, "wufang": 22, "fafang": 22 },
+        "addPermyriad": { "kongzhi_kangxing": 1300 }
+      }
+    },
+    {
+      "from": "炼虚合道·历劫期",
+      "to": "炼虚合道·成圣期",
+      "requirements": [
+        {
+          "id": "version-lock-chengsheng",
+          "type": "version_locked",
+          "title": "境界开放进度",
+          "reason": "炼炁化神·采药期及以上境界暂未开放"
+        },
+        { "id": "exp", "type": "exp_min", "min": 8500000, "title": "修为经验" },
+        { "id": "tech-count-2-layer-9", "type": "techniques_count_min_layer", "minCount": 2, "minLayer": 9, "title": "九重功法圆满" },
+        {
+          "id": "dungeon-clear-any-72",
+          "type": "dungeon_clear_min",
+          "minCount": 72,
+          "title": "秘境终极轮转"
+        },
+        {
+          "id": "dungeon-clear-frost-abyss-32",
+          "type": "dungeon_clear_min",
+          "dungeonId": "dungeon-qiqi-frost-abyss",
+          "minCount": 32,
+          "title": "寒渊圣劫试炼"
+        }
+      ],
+      "costs": [
+        { "type": "spirit_stones", "amount": 48000 },
+        { "type": "exp", "amount": 8500000 }
+      ],
+      "rewards": {
+        "attributePoints": 45,
+        "pct": { "max_qixue": 35, "max_lingqi": 35, "wugong": 25, "fagong": 25, "wufang": 25, "fafang": 25 },
+        "addPermyriad": { "kongzhi_kangxing": 1600 }
       }
     }
   ]

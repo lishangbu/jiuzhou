@@ -37,6 +37,42 @@
       "weight": 2,
       "enabled": true,
       "version": 1
+    },
+    {
+      "id": "bounty-daily-004",
+      "pool": "daily",
+      "task_id": "task-daily-002",
+      "title": "悬赏：秘境试炼",
+      "description": "秘境入口出现异动，完成一次秘境历练后回报。",
+      "claim_policy": "limited",
+      "max_claims": 10,
+      "weight": 4,
+      "enabled": true,
+      "version": 1
+    },
+    {
+      "id": "bounty-daily-005",
+      "pool": "daily",
+      "task_id": "task-daily-003",
+      "title": "悬赏：风裂峡谷巡狩",
+      "description": "风裂峡谷风暴暴走，协助完成一次巡狩并提交记录。",
+      "claim_policy": "limited",
+      "max_claims": 8,
+      "weight": 3,
+      "enabled": true,
+      "version": 1
+    },
+    {
+      "id": "bounty-daily-006",
+      "pool": "daily",
+      "task_id": "task-daily-004",
+      "title": "悬赏：寒渊裂隙试锋",
+      "description": "寒渊裂隙灵压不稳，前往完成一次试锋并回传结果。",
+      "claim_policy": "limited",
+      "max_claims": 6,
+      "weight": 2,
+      "enabled": true,
+      "version": 1
     }
   ]
 }

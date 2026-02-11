@@ -82,6 +82,72 @@ const getItemMetaMap = async (itemIds: string[]): Promise<Map<string, { name: st
   return new Map(result.rows.map((r) => [r.id, { name: r.name, icon: r.icon ?? null }]));
 };
 
+const REALM_ORDER = [
+  '凡人',
+  '炼精化炁·养气期',
+  '炼精化炁·通脉期',
+  '炼精化炁·凝炁期',
+  '炼炁化神·炼己期',
+  '炼炁化神·采药期',
+  '炼炁化神·结胎期',
+  '炼神返虚·养神期',
+  '炼神返虚·还虚期',
+  '炼神返虚·合道期',
+  '炼虚合道·证道期',
+  '炼虚合道·历劫期',
+  '炼虚合道·成圣期',
+] as const;
+
+const REALM_MAJOR_TO_FIRST: Record<string, string> = {
+  凡人: '凡人',
+  炼精化炁: '炼精化炁·养气期',
+  炼炁化神: '炼炁化神·炼己期',
+  炼神返虚: '炼神返虚·养神期',
+  炼虚合道: '炼虚合道·证道期',
+};
+
+const REALM_SUB_TO_FULL: Record<string, string> = {
+  养气期: '炼精化炁·养气期',
+  通脉期: '炼精化炁·通脉期',
+  凝炁期: '炼精化炁·凝炁期',
+  炼己期: '炼炁化神·炼己期',
+  采药期: '炼炁化神·采药期',
+  结胎期: '炼炁化神·结胎期',
+  养神期: '炼神返虚·养神期',
+  还虚期: '炼神返虚·还虚期',
+  合道期: '炼神返虚·合道期',
+  证道期: '炼虚合道·证道期',
+  历劫期: '炼虚合道·历劫期',
+  成圣期: '炼虚合道·成圣期',
+};
+
+const normalizeRealm = (realmRaw: unknown, subRealmRaw?: unknown): string => {
+  const realm = typeof realmRaw === 'string' ? realmRaw.trim() : '';
+  const subRealm = typeof subRealmRaw === 'string' ? subRealmRaw.trim() : '';
+  if (!realm && !subRealm) return '凡人';
+  if (realm && REALM_ORDER.includes(realm as (typeof REALM_ORDER)[number])) return realm;
+  if (realm && subRealm) {
+    const full = `${realm}·${subRealm}`;
+    if (REALM_ORDER.includes(full as (typeof REALM_ORDER)[number])) return full;
+  }
+  if (realm && REALM_MAJOR_TO_FIRST[realm]) return REALM_MAJOR_TO_FIRST[realm];
+  if (realm && REALM_SUB_TO_FULL[realm]) return REALM_SUB_TO_FULL[realm];
+  if (!realm && subRealm && REALM_SUB_TO_FULL[subRealm]) return REALM_SUB_TO_FULL[subRealm];
+  return realm || '凡人';
+};
+
+const getRealmRank = (realmRaw: unknown, subRealmRaw?: unknown): number => {
+  const normalized = normalizeRealm(realmRaw, subRealmRaw);
+  const idx = REALM_ORDER.indexOf(normalized as (typeof REALM_ORDER)[number]);
+  return idx >= 0 ? idx : 0;
+};
+
+const isRealmSufficient = (currentRealm: unknown, requiredRealm: unknown, currentSubRealm?: unknown): boolean => {
+  const required = typeof requiredRealm === 'string' ? requiredRealm.trim() : '';
+  if (!required) return true;
+  return getRealmRank(currentRealm, currentSubRealm) >= getRealmRank(required);
+};
+
 // ============================================
 // 1. 获取角色已学习的功法列表
 // ============================================
@@ -182,13 +248,25 @@ export const learnTechnique = async (
       await client.query('ROLLBACK');
       return { success: false, message: '功法不存在' };
     }
-    
-    // TODO: 检查境界要求
-    // const charResult = await client.query('SELECT realm FROM characters WHERE id = $1', [characterId]);
-    // if (!checkRealmRequirement(charResult.rows[0].realm, techResult.rows[0].required_realm)) {
-    //   await client.query('ROLLBACK');
-    //   return { success: false, message: '境界不足' };
-    // }
+
+    const charResult = await client.query(
+      'SELECT realm, sub_realm FROM characters WHERE id = $1 LIMIT 1',
+      [characterId],
+    );
+    if (charResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return { success: false, message: '角色不存在' };
+    }
+
+    const requiredRealm = typeof techResult.rows[0].required_realm === 'string'
+      ? techResult.rows[0].required_realm.trim()
+      : '';
+    const currentRealm = charResult.rows[0].realm;
+    const currentSubRealm = charResult.rows[0].sub_realm;
+    if (!isRealmSufficient(currentRealm, requiredRealm, currentSubRealm)) {
+      await client.query('ROLLBACK');
+      return { success: false, message: `境界不足，需要达到${requiredRealm}` };
+    }
     
     // 插入角色功法记录（初始层数为1）
     const insertResult = await client.query(`
@@ -338,12 +416,9 @@ export const upgradeTechnique = async (
     const costExp = layer.cost_exp || 0;
     const costMaterials: { itemId: string; qty: number }[] = layer.cost_materials || [];
     
-    // TODO: 检查境界要求
-    // if (layer.required_realm) { ... }
-    
     // 检查并扣除灵石和经验
     const charResult = await client.query(
-      'SELECT spirit_stones, exp, realm FROM characters WHERE id = $1 FOR UPDATE',
+      'SELECT spirit_stones, exp, realm, sub_realm FROM characters WHERE id = $1 FOR UPDATE',
       [characterId]
     );
     if (charResult.rows.length === 0) {
@@ -352,7 +427,14 @@ export const upgradeTechnique = async (
     }
     
     const char = charResult.rows[0];
-    const currentRealm = typeof char.realm === 'string' ? char.realm.trim() : '凡人';
+    const requiredRealm = typeof layer.required_realm === 'string' ? layer.required_realm.trim() : '';
+    const currentRealm = char.realm;
+    const currentSubRealm = char.sub_realm;
+    if (!isRealmSufficient(currentRealm, requiredRealm, currentSubRealm)) {
+      await client.query('ROLLBACK');
+      return { success: false, message: `境界不足，需要达到${requiredRealm}` };
+    }
+
     if (char.spirit_stones < costStones) {
       await client.query('ROLLBACK');
       return { success: false, message: `灵石不足，需要${costStones}，当前${char.spirit_stones}` };

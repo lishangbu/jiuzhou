@@ -114,12 +114,42 @@ const computeRemainingSeconds = (expiresAt: unknown): number | null => {
   return Math.max(0, Math.floor((ms - Date.now()) / 1000));
 };
 
+const resetRecurringTaskProgressIfNeeded = async (
+  characterId: number,
+  dbClient?: PoolClient,
+): Promise<void> => {
+  const cid = Number(characterId);
+  if (!Number.isFinite(cid) || cid <= 0) return;
+  const runner = dbClient ?? { query };
+  await runner.query(
+    `
+      UPDATE character_task_progress p
+      SET status = 'ongoing',
+          progress = '{}'::jsonb,
+          accepted_at = NOW(),
+          completed_at = NULL,
+          claimed_at = NULL,
+          updated_at = NOW()
+      FROM task_def d
+      WHERE d.id = p.task_id
+        AND d.enabled = true
+        AND p.character_id = $1
+        AND (
+          (d.category = 'daily' AND p.accepted_at < date_trunc('day', NOW()))
+          OR (d.category = 'event' AND p.accepted_at < date_trunc('week', NOW()))
+        )
+    `,
+    [cid],
+  );
+};
+
 export const getTaskOverview = async (
   characterId: number,
   category?: TaskCategory
 ): Promise<{ tasks: TaskOverviewDto[] }> => {
   const cid = Number(characterId);
   if (!Number.isFinite(cid) || cid <= 0) return { tasks: [] };
+  await resetRecurringTaskProgressIfNeeded(cid);
 
   const resolvedCategory = normalizeTaskCategory(category);
   const params: unknown[] = [cid];
@@ -248,6 +278,7 @@ export const getTaskOverview = async (
 export const getBountyTaskOverview = async (characterId: number): Promise<{ tasks: BountyTaskOverviewDto[] }> => {
   const cid = Number(characterId);
   if (!Number.isFinite(cid) || cid <= 0) return { tasks: [] };
+  await resetRecurringTaskProgressIfNeeded(cid);
 
   await query(
     `
@@ -573,6 +604,7 @@ export const claimTaskReward = async (
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await resetRecurringTaskProgressIfNeeded(cid, client);
 
     const progressRes = await client.query(
       `SELECT status FROM character_task_progress WHERE character_id = $1 AND task_id = $2 FOR UPDATE`,
@@ -654,9 +686,16 @@ const parseProgressRecord = (progress: unknown): Record<string, number> => {
   return out;
 };
 
+type TaskEvent =
+  | { type: 'talk_npc'; npcId: string }
+  | { type: 'kill_monster'; monsterId: string; count: number }
+  | { type: 'gather_resource'; resourceId: string; count: number }
+  | { type: 'dungeon_clear'; dungeonId: string; difficultyId?: string; count: number }
+  | { type: 'craft_item'; recipeId?: string; recipeType?: string; craftKind?: string; itemId?: string; count: number };
+
 const objectiveMatchesEvent = (
   objective: RawObjective,
-  event: { type: 'talk_npc'; npcId: string } | { type: 'kill_monster'; monsterId: string; count: number } | { type: 'gather_resource'; resourceId: string; count: number },
+  event: TaskEvent,
 ): { matched: boolean; delta: number } => {
   const type = String(objective?.type ?? '').trim();
   const params = objective?.params && typeof objective.params === 'object' ? (objective.params as Record<string, unknown>) : {};
@@ -676,6 +715,30 @@ const objectiveMatchesEvent = (
     if (type !== 'gather_resource') return { matched: false, delta: 0 };
     const resourceId = asNonEmptyString(params?.resource_id);
     if (!resourceId || resourceId !== event.resourceId) return { matched: false, delta: 0 };
+    return { matched: true, delta: Math.max(1, Math.floor(event.count)) };
+  }
+  if (event.type === 'dungeon_clear') {
+    if (type !== 'dungeon_clear') return { matched: false, delta: 0 };
+    const dungeonId = asNonEmptyString(params?.dungeon_id);
+    if (dungeonId && dungeonId !== event.dungeonId) return { matched: false, delta: 0 };
+
+    const difficultyId = asNonEmptyString(params?.difficulty_id);
+    if (difficultyId && (!event.difficultyId || difficultyId !== event.difficultyId)) {
+      return { matched: false, delta: 0 };
+    }
+
+    return { matched: true, delta: Math.max(1, Math.floor(event.count)) };
+  }
+  if (event.type === 'craft_item') {
+    if (type !== 'craft_item') return { matched: false, delta: 0 };
+    const recipeId = asNonEmptyString(params?.recipe_id);
+    if (recipeId && recipeId !== asNonEmptyString(event.recipeId)) return { matched: false, delta: 0 };
+    const recipeType = asNonEmptyString(params?.recipe_type);
+    if (recipeType && recipeType !== asNonEmptyString(event.recipeType)) return { matched: false, delta: 0 };
+    const craftKind = asNonEmptyString(params?.craft_kind);
+    if (craftKind && craftKind !== asNonEmptyString(event.craftKind)) return { matched: false, delta: 0 };
+    const itemId = asNonEmptyString(params?.item_id);
+    if (itemId && itemId !== asNonEmptyString(event.itemId)) return { matched: false, delta: 0 };
     return { matched: true, delta: Math.max(1, Math.floor(event.count)) };
   }
   return { matched: false, delta: 0 };
@@ -726,9 +789,11 @@ export const acceptTask = async (
   if (!Number.isFinite(cid) || cid <= 0) return { success: false, message: '角色不存在' };
   const tid = asNonEmptyString(taskId);
   if (!tid) return { success: false, message: '任务ID不能为空' };
+  await resetRecurringTaskProgressIfNeeded(cid);
 
-  const defRes = await query(`SELECT id, prereq_task_ids FROM task_def WHERE id = $1 AND enabled = true LIMIT 1`, [tid]);
+  const defRes = await query(`SELECT id, category, prereq_task_ids FROM task_def WHERE id = $1 AND enabled = true LIMIT 1`, [tid]);
   if ((defRes.rows ?? []).length === 0) return { success: false, message: '任务不存在' };
+  const taskCategory = normalizeTaskCategory(defRes.rows[0]?.category) ?? 'main';
   const prereqTaskIds = asStringArray(defRes.rows[0]?.prereq_task_ids);
   const prereqOk = await checkPrereqSatisfied(cid, prereqTaskIds);
   if (!prereqOk) return { success: false, message: '前置任务未完成' };
@@ -740,6 +805,9 @@ export const acceptTask = async (
   if ((existsRes.rows ?? []).length > 0) {
     const st = asTaskProgressStatusDb(existsRes.rows[0]?.status);
     if (st !== 'claimed') return { success: false, message: '任务已接取' };
+    if (taskCategory === 'main' || taskCategory === 'side') return { success: false, message: '任务已完成，不可重复接取' };
+    if (taskCategory === 'daily') return { success: false, message: '今日任务已完成' };
+    if (taskCategory === 'event') return { success: false, message: '本周活动任务已完成' };
   }
 
   await query(
@@ -772,12 +840,14 @@ export const acceptTaskFromNpc = async (
   if (!tid) return { success: false, message: '任务ID不能为空' };
   const nid = asNonEmptyString(npcId);
   if (!nid) return { success: false, message: 'NPC不存在' };
+  await resetRecurringTaskProgressIfNeeded(cid);
 
   const defRes = await query(
-    `SELECT id, giver_npc_id, prereq_task_ids FROM task_def WHERE id = $1 AND enabled = true LIMIT 1`,
+    `SELECT id, category, giver_npc_id, prereq_task_ids FROM task_def WHERE id = $1 AND enabled = true LIMIT 1`,
     [tid],
   );
   if ((defRes.rows ?? []).length === 0) return { success: false, message: '任务不存在' };
+  const taskCategory = normalizeTaskCategory(defRes.rows[0]?.category) ?? 'main';
   const giverNpcId = asNonEmptyString(defRes.rows[0]?.giver_npc_id);
   if (!giverNpcId || giverNpcId !== nid) return { success: false, message: '该NPC无法发放此任务' };
   const prereqTaskIds = asStringArray(defRes.rows[0]?.prereq_task_ids);
@@ -791,6 +861,9 @@ export const acceptTaskFromNpc = async (
   if ((existsRes.rows ?? []).length > 0) {
     const st = asTaskProgressStatusDb(existsRes.rows[0]?.status);
     if (st !== 'claimed') return { success: false, message: '任务已接取' };
+    if (taskCategory === 'main' || taskCategory === 'side') return { success: false, message: '任务已完成，不可重复接取' };
+    if (taskCategory === 'daily') return { success: false, message: '今日任务已完成' };
+    if (taskCategory === 'event') return { success: false, message: '本周活动任务已完成' };
   }
 
   await query(
@@ -823,6 +896,7 @@ export const submitTask = async (
   if (!tid) return { success: false, message: '任务ID不能为空' };
   const nid = asNonEmptyString(npcId);
   if (!nid) return { success: false, message: 'NPC不存在' };
+  await resetRecurringTaskProgressIfNeeded(cid);
 
   const res = await query(
     `
@@ -867,10 +941,26 @@ export const submitTask = async (
 
 const applyTaskEvent = async (
   characterId: number,
-  event: { type: 'talk_npc'; npcId: string } | { type: 'kill_monster'; monsterId: string; count: number } | { type: 'gather_resource'; resourceId: string; count: number },
+  event: TaskEvent,
 ): Promise<void> => {
   const cid = Number(characterId);
   if (!Number.isFinite(cid) || cid <= 0) return;
+
+  await query(
+    `
+      INSERT INTO character_task_progress (character_id, task_id, status, progress, tracked, accepted_at, completed_at, claimed_at, updated_at)
+      SELECT $1, d.id, 'ongoing', '{}'::jsonb, true, NOW(), NULL, NULL, NOW()
+      FROM task_def d
+      WHERE d.enabled = true
+        AND d.category = 'event'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM character_task_progress p
+          WHERE p.character_id = $1 AND p.task_id = d.id
+        )
+    `,
+    [cid],
+  );
 
   const res = await query(
     `
@@ -879,7 +969,8 @@ const applyTaskEvent = async (
         p.status,
         p.progress,
         d.objectives,
-        d.giver_npc_id
+        d.giver_npc_id,
+        d.category
       FROM character_task_progress p
       JOIN task_def d ON d.id = p.task_id
       WHERE p.character_id = $1
@@ -897,6 +988,7 @@ const applyTaskEvent = async (
 
     const objectives = parseObjectives(row?.objectives);
     const progressRecord = parseProgressRecord(row?.progress);
+    const category = normalizeTaskCategory(row?.category) ?? 'main';
 
     let changed = false;
     for (const o of objectives) {
@@ -922,8 +1014,12 @@ const applyTaskEvent = async (
       if (status === 'turnin' && allDone) promoteToClaimable = true;
     }
     if (allDone) {
-      if (status === 'ongoing') nextStatus = 'turnin';
-      if (promoteToClaimable) nextStatus = 'claimable';
+      if (category === 'event') {
+        nextStatus = 'claimable';
+      } else {
+        if (status === 'ongoing') nextStatus = 'turnin';
+        if (promoteToClaimable) nextStatus = 'claimable';
+      }
     }
 
     if (!changed && nextStatus === status) continue;
@@ -1040,6 +1136,87 @@ export const recordCollectItemEvent = async (characterId: number, itemId: string
   }
 };
 
+export const recordDungeonClearEvent = async (
+  characterId: number,
+  dungeonId: string,
+  count: number,
+  difficultyId?: string,
+): Promise<void> => {
+  const did = asNonEmptyString(dungeonId);
+  if (!did) return;
+  const diffId = asNonEmptyString(difficultyId) ?? undefined;
+  const c = normalizePositiveInt(count, 1);
+
+  try {
+    await resetRecurringTaskProgressIfNeeded(characterId);
+    await applyTaskEvent(characterId, { type: 'dungeon_clear', dungeonId: did, difficultyId: diffId, count: c });
+  } catch (error) {
+    console.error('记录任务事件（秘境通关）失败:', error);
+  }
+
+  try {
+    await updateSectionProgress(characterId, { type: 'dungeon_clear', dungeonId: did, difficultyId: diffId, count: c });
+  } catch (error) {
+    console.error('记录主线事件（秘境通关）失败:', error);
+  }
+
+  try {
+    await updateAchievementProgress(characterId, `dungeon:clear:${did}`, c);
+  } catch (error) {
+    console.error('记录成就事件（秘境通关）失败:', error);
+  }
+};
+
+export const recordCraftItemEvent = async (
+  characterId: number,
+  recipeId: string | undefined,
+  craftKind: string | undefined,
+  itemId: string | undefined,
+  count: number,
+  recipeType?: string,
+): Promise<void> => {
+  const rid = asNonEmptyString(recipeId) ?? undefined;
+  const kind = asNonEmptyString(craftKind) ?? undefined;
+  const iid = asNonEmptyString(itemId) ?? undefined;
+  const rtype = asNonEmptyString(recipeType) ?? undefined;
+  const c = normalizePositiveInt(count, 1);
+
+  try {
+    await resetRecurringTaskProgressIfNeeded(characterId);
+    await applyTaskEvent(characterId, {
+      type: 'craft_item',
+      recipeId: rid,
+      recipeType: rtype,
+      craftKind: kind,
+      itemId: iid,
+      count: c,
+    });
+  } catch (error) {
+    console.error('记录任务事件（炼制）失败:', error);
+  }
+
+  try {
+    await updateSectionProgress(characterId, {
+      type: 'craft_item',
+      recipeId: rid,
+      recipeType: rtype,
+      craftKind: kind,
+      itemId: iid,
+      count: c,
+    });
+  } catch (error) {
+    console.error('记录主线事件（炼制）失败:', error);
+  }
+
+  try {
+    if (rid) await updateAchievementProgress(characterId, `craft:recipe:${rid}`, c);
+    if (kind) await updateAchievementProgress(characterId, `craft:kind:${kind}`, c);
+    if (iid) await updateAchievementProgress(characterId, `craft:item:${iid}`, c);
+  } catch (error) {
+    console.error('记录成就事件（炼制）失败:', error);
+  }
+};
+
 export type NpcTalkTaskOption = {
   taskId: string;
   title: string;
@@ -1074,6 +1251,7 @@ export const npcTalk = async (
   if (!Number.isFinite(cid) || cid <= 0) return { success: false, message: '角色不存在' };
   const nid = asNonEmptyString(npcId);
   if (!nid) return { success: false, message: 'NPC不存在' };
+  await resetRecurringTaskProgressIfNeeded(cid);
 
   const npcRes = await query(`SELECT id, name, talk_tree_id FROM npc_def WHERE enabled = true AND id = $1 LIMIT 1`, [nid]);
   if ((npcRes.rows ?? []).length === 0) return { success: false, message: 'NPC不存在' };

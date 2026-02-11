@@ -302,6 +302,30 @@ export const getDungeonPreview = (dungeonId: string, rank?: number): Promise<Dun
   return api.get(`/dungeon/preview/${dungeonId}`, { params: { rank } });
 };
 
+export interface DungeonWeeklyTargetDto {
+  id: string;
+  title: string;
+  description: string;
+  target: number;
+  current: number;
+  done: boolean;
+  progress: number;
+}
+
+export interface DungeonWeeklyTargetsResponse {
+  success: boolean;
+  message?: string;
+  data?: {
+    period: { weekStart: string; weekEnd: string };
+    summary: { totalClears: number; targetClears: number };
+    targets: DungeonWeeklyTargetDto[];
+  };
+}
+
+export const getDungeonWeeklyTargets = (): Promise<DungeonWeeklyTargetsResponse> => {
+  return api.get('/dungeon/weekly-targets');
+};
+
 export type DungeonInstanceStatus = 'preparing' | 'running' | 'cleared' | 'failed' | 'abandoned';
 
 export type DungeonInstanceParticipant = {

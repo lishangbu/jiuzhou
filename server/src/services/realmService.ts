@@ -12,6 +12,8 @@ export interface RealmRequirementView {
   title: string;
   detail: string;
   status: RealmRequirementStatus;
+  sourceType?: string;
+  sourceRef?: string;
 }
 
 export interface RealmCostView {
@@ -77,6 +79,20 @@ type TechniquesCountMinLayerRequirement = {
   title: string;
 };
 type ItemQtyMinRequirement = { id: string; type: 'item_qty_min'; itemDefId: string; qty: number; title: string };
+type DungeonClearMinRequirement = {
+  id: string;
+  type: 'dungeon_clear_min';
+  title: string;
+  minCount: number;
+  dungeonId?: string;
+  difficultyId?: string;
+};
+type VersionLockedRequirement = {
+  id: string;
+  type: 'version_locked';
+  title: string;
+  reason?: string;
+};
 
 type BreakthroughRequirement =
   | ExpMinRequirement
@@ -86,6 +102,8 @@ type BreakthroughRequirement =
   | MainAndSubTechniqueLayerMinRequirement
   | TechniquesCountMinLayerRequirement
   | ItemQtyMinRequirement
+  | DungeonClearMinRequirement
+  | VersionLockedRequirement
   | { id: string; type: string; title: string };
 
 type CostExp = { type: 'exp'; amount: number };
@@ -305,6 +323,39 @@ const getTechniquesCountMinLayer = async (client: PoolClient, characterId: numbe
   return Number(res.rows?.[0]?.cnt ?? 0) || 0;
 };
 
+const getDungeonClearCount = async (args: {
+  client: PoolClient;
+  characterId: number;
+  dungeonId?: string;
+  difficultyId?: string;
+}): Promise<number> => {
+  const { client, characterId } = args;
+  const dungeonId = String(args.dungeonId || '').trim();
+  const difficultyId = String(args.difficultyId || '').trim();
+
+  const where: string[] = ['character_id = $1', `result = 'cleared'`];
+  const values: Array<number | string> = [characterId];
+
+  if (dungeonId) {
+    values.push(dungeonId);
+    where.push(`dungeon_id = $${values.length}`);
+  }
+  if (difficultyId) {
+    values.push(difficultyId);
+    where.push(`difficulty_id = $${values.length}`);
+  }
+
+  const res = await client.query(
+    `
+      SELECT COUNT(1)::int AS cnt
+      FROM dungeon_record
+      WHERE ${where.join(' AND ')}
+    `,
+    values
+  );
+  return Number(res.rows?.[0]?.cnt ?? 0) || 0;
+};
+
 const evaluateRequirements = async (args: {
   client: PoolClient;
   characterId: number;
@@ -327,6 +378,18 @@ const evaluateRequirements = async (args: {
   const out: RealmRequirementView[] = [];
   const mainTech = await getEquippedMainTechnique(client, characterId);
   let equippedSubs: Array<{ techniqueId: string; name: string; layer: number; slotIndex: number }> | null = null;
+  const dungeonClearCountCache = new Map<string, number>();
+
+  const getCachedDungeonClearCount = async (dungeonId?: string, difficultyId?: string): Promise<number> => {
+    const d = String(dungeonId || '').trim();
+    const diff = String(difficultyId || '').trim();
+    const cacheKey = `${d}|${diff}`;
+    if (dungeonClearCountCache.has(cacheKey)) return dungeonClearCountCache.get(cacheKey) || 0;
+    const cnt = await getDungeonClearCount({ client, characterId, dungeonId: d, difficultyId: diff });
+    dungeonClearCountCache.set(cacheKey, cnt);
+    return cnt;
+  };
+
   for (const r of reqs) {
     const id = String((r as any)?.id || '');
     const title = String((r as any)?.title || '条件');
@@ -448,6 +511,46 @@ const evaluateRequirements = async (args: {
         title,
         detail: `${itemName} × ${qtyNeed}（当前 ${qtyHave}）`,
         status: ok ? 'done' : 'todo',
+      });
+      continue;
+    }
+
+    if (type === 'dungeon_clear_min') {
+      const minCount = Math.max(1, Number((r as any).minCount ?? 0) || 1);
+      const dungeonId = String((r as any).dungeonId || '').trim();
+      const difficultyId = String((r as any).difficultyId || '').trim();
+      const clearCount = await getCachedDungeonClearCount(dungeonId, difficultyId);
+      const ok = clearCount >= minCount;
+      const scopeText = dungeonId
+        ? difficultyId
+          ? `${dungeonId}（${difficultyId}）`
+          : dungeonId
+        : '任意秘境';
+
+      out.push({
+        id: id || `dungeon-clear-${dungeonId || 'any'}-${difficultyId || 'any'}-${minCount}`,
+        title,
+        detail: `${scopeText} 通关 ≥ ${minCount} 次（当前 ${clearCount}）`,
+        status: ok ? 'done' : 'todo',
+        sourceType: 'dungeon_record',
+        sourceRef: difficultyId
+          ? `dungeon:${dungeonId || '*'}|difficulty:${difficultyId}`
+          : dungeonId
+            ? `dungeon:${dungeonId}`
+            : 'dungeon:*',
+      });
+      continue;
+    }
+
+    if (type === 'version_locked') {
+      const reason = String((r as any).reason || '').trim() || '当前版本暂未开放';
+      out.push({
+        id: id || `version-locked-${Math.random().toString(36).slice(2)}`,
+        title,
+        detail: reason,
+        status: 'todo',
+        sourceType: 'version_gate',
+        sourceRef: 'realm:version_gate',
       });
       continue;
     }
@@ -765,7 +868,12 @@ export const breakthroughToNextRealm = async (userId: number): Promise<RealmBrea
         requirements: bt.requirements ?? [],
       });
       const unmet = reqViews.find((r) => r.status !== 'done');
-      if (unmet) return { success: false, message: `条件未满足：${unmet.title}` };
+      if (unmet) {
+        if (unmet.sourceType === 'version_gate') {
+          return { success: false, message: unmet.detail || '当前版本暂未开放' };
+        }
+        return { success: false, message: `条件未满足：${unmet.title}` };
+      }
 
       const costsBuilt = await buildCostsView({ client, costs: bt.costs ?? [] });
       if (exp < costsBuilt.exp) return { success: false, message: `经验不足，需要 ${costsBuilt.exp}` };

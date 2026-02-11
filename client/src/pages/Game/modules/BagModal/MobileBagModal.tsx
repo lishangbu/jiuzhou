@@ -49,6 +49,7 @@ import {
 } from './bagShared';
 import type { BagAction, BagCategory, BagItem, BagSort } from './bagShared';
 import DisassembleModal from './DisassembleModal';
+import CraftModal from './CraftModal';
 import './MobileBagModal.scss';
 
 /* ─── 排序面板 ─── */
@@ -542,6 +543,7 @@ const MobileBagModal: React.FC<MobileBagModalProps> = ({ open, onClose }) => {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [growthOpen, setGrowthOpen] = useState(false);
   const [disassembleOpen, setDisassembleOpen] = useState(false);
+  const [craftOpen, setCraftOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [info, setInfo] = useState<InventoryInfoData | null>(null);
   const [items, setItems] = useState<BagItem[]>([]);
@@ -786,6 +788,9 @@ const MobileBagModal: React.FC<MobileBagModalProps> = ({ open, onClose }) => {
       {/* ── 底部操作栏 ── */}
       <div className="mbag-footer">
         <div className="mbag-footer-actions">
+          <button className="mbag-footer-btn" disabled={loading} onClick={() => setCraftOpen(true)}>
+            炼制
+          </button>
           <button className="mbag-footer-btn" disabled={loading} onClick={() => void handleBatchDisassemble()}>
             分解
           </button>
@@ -835,6 +840,16 @@ const MobileBagModal: React.FC<MobileBagModalProps> = ({ open, onClose }) => {
         } : null}
         onClose={() => setDisassembleOpen(false)}
         onSuccess={refresh}
+      />
+
+      <CraftModal
+        open={craftOpen}
+        onClose={() => setCraftOpen(false)}
+        focusItemDefId={activeItem?.itemDefId}
+        onSuccess={async () => {
+          await refresh();
+          window.dispatchEvent(new Event('inventory:changed'));
+        }}
       />
 
       {/* ── 排序面板 ── */}
