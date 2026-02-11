@@ -210,6 +210,7 @@ export interface SkillEffect {
   chance?: number;  // 万分比
   resourceType?: 'lingqi' | 'qixue';  // 资源类型
   target?: 'self' | 'enemy' | 'ally';
+  hit_count?: number;
 }
 
 export interface SkillConditions {

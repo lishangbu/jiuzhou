@@ -153,6 +153,22 @@ function buildBuffRuntimeData(
   };
 }
 
+function isDirectDamageType(damageType: unknown): damageType is 'physical' | 'magic' | 'true' {
+  return damageType === 'physical' || damageType === 'magic' || damageType === 'true';
+}
+
+function resolveDamageHitCount(skill: BattleSkill): number {
+  let hitCount = 1;
+  for (const effect of skill.effects) {
+    if (effect.type !== 'damage') continue;
+    const effectHitCount = Math.floor(toFiniteNumber(effect.hit_count, 1));
+    if (effectHitCount > hitCount) {
+      hitCount = effectHitCount;
+    }
+  }
+  return Math.max(1, hitCount);
+}
+
 /**
  * 执行技能
  */
@@ -253,22 +269,34 @@ function executeSkillOnTarget(
   };
   
   // 处理伤害
-  if (skill.damageType && skill.coefficient > 0) {
-    const damageResult = calculateDamage(state, caster, target, skill);
-    
-    if (damageResult.isMiss) {
-      result.isMiss = true;
-    } else {
+  if (isDirectDamageType(skill.damageType) && skill.coefficient > 0) {
+    const hitCount = resolveDamageHitCount(skill);
+    let totalDamage = 0;
+    let totalShieldAbsorbed = 0;
+    let hasLandedHit = false;
+    let hasCrit = false;
+    let hasParry = false;
+    let hasElementBonus = false;
+
+    for (let i = 0; i < hitCount; i++) {
+      if (!target.isAlive) break;
+
+      const damageResult = calculateDamage(state, caster, target, skill);
+      if (damageResult.isMiss) {
+        continue;
+      }
+
+      hasLandedHit = true;
       const { actualDamage: damageApplied, shieldAbsorbed } = applyDamage(
         state, target, damageResult.damage, skill.damageType
       );
       const actualDamage = Math.max(0, damageApplied);
 
-      result.damage = actualDamage;
-      result.shieldAbsorbed = shieldAbsorbed;
-      result.isCrit = damageResult.isCrit;
-      result.isParry = damageResult.isParry;
-      result.isElementBonus = damageResult.isElementBonus;
+      totalDamage += actualDamage;
+      totalShieldAbsorbed += shieldAbsorbed;
+      hasCrit = hasCrit || damageResult.isCrit;
+      hasParry = hasParry || damageResult.isParry;
+      hasElementBonus = hasElementBonus || damageResult.isElementBonus;
       
       // 更新统计
       caster.stats.damageDealt += actualDamage;
@@ -308,6 +336,16 @@ function executeSkillOnTarget(
         });
         state.logs.push(...onCritLogs);
       }
+    }
+
+    if (!hasLandedHit) {
+      result.isMiss = true;
+    } else {
+      result.damage = totalDamage;
+      result.shieldAbsorbed = totalShieldAbsorbed;
+      result.isCrit = hasCrit;
+      result.isParry = hasParry;
+      result.isElementBonus = hasElementBonus;
     }
   }
   
