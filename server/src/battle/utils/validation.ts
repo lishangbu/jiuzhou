@@ -4,7 +4,6 @@
  */
 
 import type { BattleState, BattleUnit, BattleSkill, BattleAttrs } from '../types.js';
-import { BATTLE_CONSTANTS } from '../types.js';
 
 export interface ValidationResult {
   valid: boolean;
@@ -295,30 +294,3 @@ export function validatePlayerAction(
   return { valid: true };
 }
 
-/**
- * 验证战斗结果完整性（用于防止篡改）
- */
-export function validateBattleResult(state: BattleState): ValidationResult {
-  // 检查胜负判定是否正确
-  const attackerAlive = state.teams.attacker.units.some(u => u.isAlive);
-  const defenderAlive = state.teams.defender.units.some(u => u.isAlive);
-  
-  if (!attackerAlive && state.result !== 'defender_win') {
-    return { valid: false, error: '战斗结果与状态不符' };
-  }
-  
-  if (!defenderAlive && state.result !== 'attacker_win') {
-    return { valid: false, error: '战斗结果与状态不符' };
-  }
-  
-  // 检查回合数是否超限
-  const maxRounds = state.battleType === 'pvp' 
-    ? BATTLE_CONSTANTS.MAX_ROUNDS_PVP 
-    : BATTLE_CONSTANTS.MAX_ROUNDS_PVE;
-    
-  if (state.roundCount > maxRounds && state.result !== 'draw') {
-    return { valid: false, error: '回合数超限但未判定平局' };
-  }
-  
-  return { valid: true };
-}

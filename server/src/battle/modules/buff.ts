@@ -70,27 +70,6 @@ export function removeBuff(unit: BattleUnit, buffId: string): boolean {
 }
 
 /**
- * 移除指定类型的Buff
- */
-export function removeBuffByType(
-  unit: BattleUnit,
-  type: 'buff' | 'debuff',
-  count: number = 1
-): string[] {
-  const removed: string[] = [];
-  const toRemove = unit.buffs
-    .filter(b => b.type === type && b.dispellable)
-    .slice(0, count);
-  
-  for (const buff of toRemove) {
-    removeBuff(unit, buff.id);
-    removed.push(buff.name);
-  }
-  
-  return removed;
-}
-
-/**
  * 添加护盾
  */
 export function addShield(
@@ -278,17 +257,6 @@ export function recalculateUnitAttrs(unit: BattleUnit): void {
   unit.currentAttrs.wufang = Math.max(0, unit.currentAttrs.wufang);
   unit.currentAttrs.fafang = Math.max(0, unit.currentAttrs.fafang);
   unit.currentAttrs.sudu = Math.max(0, unit.currentAttrs.sudu);
-}
-
-/**
- * 检查是否有硬控
- */
-export function hasHardControl(unit: BattleUnit): boolean {
-  return unit.buffs.some(buff => 
-    buff.control === 'stun' || 
-    buff.control === 'freeze' ||
-    buff.control === 'fear'
-  );
 }
 
 /**

@@ -2,7 +2,7 @@
  * 九州修仙录 - 目标解析模块
  */
 
-import type { BattleState, BattleUnit, BattleSkill, SkillTargetType } from '../types.js';
+import type { BattleState, BattleUnit, BattleSkill } from '../types.js';
 import { shuffle } from '../utils/random.js';
 import { getTauntSource } from './control.js';
 
@@ -125,18 +125,6 @@ export function getLowestHpTarget(units: BattleUnit[]): BattleUnit | undefined {
 }
 
 /**
- * 获取最高血量目标
- */
-export function getHighestHpTarget(units: BattleUnit[]): BattleUnit | undefined {
-  const alive = units.filter(u => u.isAlive);
-  if (alive.length === 0) return undefined;
-  
-  return alive.reduce((highest, current) => {
-    return current.qixue > highest.qixue ? current : highest;
-  });
-}
-
-/**
  * 获取最高威胁目标（按输出伤害排序）
  */
 export function getHighestThreatTarget(units: BattleUnit[]): BattleUnit | undefined {
@@ -163,30 +151,3 @@ export function getHealTargets(allies: BattleUnit[], threshold: number = 0.7): B
   });
 }
 
-/**
- * 检查目标是否有效
- */
-export function isValidTarget(
-  target: BattleUnit,
-  targetType: SkillTargetType,
-  caster: BattleUnit,
-  allies: BattleUnit[],
-  enemies: BattleUnit[]
-): boolean {
-  if (!target.isAlive) return false;
-  
-  switch (targetType) {
-    case 'self':
-      return target.id === caster.id;
-    case 'single_enemy':
-    case 'all_enemy':
-    case 'random_enemy':
-      return enemies.some(e => e.id === target.id);
-    case 'single_ally':
-    case 'all_ally':
-    case 'random_ally':
-      return allies.some(a => a.id === target.id);
-    default:
-      return false;
-  }
-}

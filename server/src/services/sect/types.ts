@@ -22,16 +22,6 @@ export interface SectDefRow {
   updated_at: string;
 }
 
-export interface SectMemberRow {
-  id: number;
-  sect_id: string;
-  character_id: number;
-  position: SectPosition;
-  contribution: string | number;
-  weekly_contribution: number;
-  joined_at: string;
-}
-
 export interface SectBuildingRow {
   id: number;
   sect_id: string;
@@ -133,4 +123,3 @@ export interface SectListResult extends Result {
   limit?: number;
   total?: number;
 }
-

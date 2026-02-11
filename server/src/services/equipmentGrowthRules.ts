@@ -17,13 +17,6 @@ export interface SocketedGemEntry {
   icon?: string;
 }
 
-export const QUALITY_RANK_BY_NAME: Record<string, number> = {
-  黄: 1,
-  玄: 2,
-  地: 3,
-  天: 4,
-};
-
 const QUALITY_MULTIPLIER_BY_RANK: Record<number, number> = {
   1: 1,
   2: 1.2,

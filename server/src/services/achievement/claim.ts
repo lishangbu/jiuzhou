@@ -7,7 +7,6 @@ import {
   ensureCharacterAchievementPoints,
   normalizeRewards,
   parseClaimedThresholds,
-  parseJsonObject,
 } from './shared.js';
 import type {
   AchievementClaimTitle,
@@ -436,20 +435,4 @@ export const claimAchievementPointsReward = async (
   } finally {
     client.release();
   }
-};
-
-export const normalizeTitleEffectsForApi = (effects: unknown): Record<string, number> => {
-  const source = parseJsonObject<Record<string, unknown>>(effects);
-  const flat = parseJsonObject<Record<string, unknown>>(source.flat);
-  const input = Object.keys(flat).length > 0 ? flat : source;
-  const out: Record<string, number> = {};
-
-  for (const [key, value] of Object.entries(input)) {
-    const n = Number(value);
-    if (!Number.isFinite(n)) continue;
-    const v = Math.floor(n);
-    if (v === 0) continue;
-    out[key] = v;
-  }
-  return out;
 };

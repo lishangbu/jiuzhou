@@ -3,8 +3,7 @@
  */
 import type { Game, Ctx } from 'boardgame.io';
 import type { GameState, CharacterAttributes } from './GameState.js';
-import { initialGameState, dbToCharacterAttributes } from './GameState.js';
-import { query } from '../config/database.js';
+import { initialGameState } from './GameState.js';
 
 // 加点类型
 type AttributeKey = 'jing' | 'qi' | 'shen';
@@ -82,41 +81,6 @@ export const JiuzhouGame: Game<GameState> = {
   },
 
   endIf: () => false, // 游戏永不结束
-};
-
-// 从数据库加载角色数据
-export const loadCharacterFromDB = async (userId: number): Promise<CharacterAttributes | null> => {
-  try {
-    const result = await query('SELECT * FROM characters WHERE user_id = $1', [userId]);
-    if (result.rows.length === 0) return null;
-    return dbToCharacterAttributes(result.rows[0]);
-  } catch (error) {
-    console.error('加载角色数据失败:', error);
-    return null;
-  }
-};
-
-// 保存加点到数据库
-export const saveAttributePointsToDB = async (
-  userId: number,
-  attributeKey: AttributeKey,
-  amount: number
-): Promise<boolean> => {
-  try {
-    const updateSQL = `
-      UPDATE characters 
-      SET ${attributeKey} = ${attributeKey} + $1,
-          attribute_points = attribute_points - $1,
-          updated_at = CURRENT_TIMESTAMP
-      WHERE user_id = $2 AND attribute_points >= $1
-      RETURNING *
-    `;
-    const result = await query(updateSQL, [amount, userId]);
-    return result.rows.length > 0;
-  } catch (error) {
-    console.error('保存加点失败:', error);
-    return false;
-  }
 };
 
 export default JiuzhouGame;

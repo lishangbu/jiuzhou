@@ -483,34 +483,3 @@ function createEmptyStats(): BattleStats {
     killCount: 0,
   };
 }
-
-/**
- * 计算战斗奖励
- */
-export function calculateRewards(
-  state: BattleState,
-  monsters: MonsterData[],
-  _playerRealm: string
-): { exp: number; silver: number; drops: Array<{ itemDefId: string; quantity: number }> } {
-  if (state.result !== 'attacker_win') {
-    return { exp: 0, silver: 0, drops: [] };
-  }
-  
-  let totalExp = 0;
-  let totalSilver = 0;
-  const drops: Array<{ itemDefId: string; quantity: number }> = [];
-  
-  for (const monster of monsters) {
-    // 经验
-    totalExp += monster.exp_reward;
-    
-    // 银两
-    const silverRange = monster.silver_reward_max - monster.silver_reward_min;
-    totalSilver += monster.silver_reward_min + Math.floor(Math.random() * (silverRange + 1));
-    
-    // 掉落（需要查询掉落池，这里简化处理）
-    // TODO: 实现掉落池查询
-  }
-  
-  return { exp: totalExp, silver: totalSilver, drops };
-}

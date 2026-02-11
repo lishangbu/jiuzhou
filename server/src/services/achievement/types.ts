@@ -2,8 +2,6 @@ export type AchievementTrackType = 'counter' | 'flag' | 'multi';
 
 export type AchievementStatus = 'in_progress' | 'completed' | 'claimed';
 
-export type AchievementCategory = string;
-
 export type AchievementRewardConfig =
   | { type: 'silver'; amount: number }
   | { type: 'spirit_stones'; amount: number }

@@ -781,54 +781,6 @@ const checkPrereqSatisfied = async (characterId: number, prereqTaskIds: string[]
   return true;
 };
 
-export const acceptTask = async (
-  characterId: number,
-  taskId: string,
-): Promise<{ success: boolean; message: string; data?: { taskId: string } }> => {
-  const cid = Number(characterId);
-  if (!Number.isFinite(cid) || cid <= 0) return { success: false, message: '角色不存在' };
-  const tid = asNonEmptyString(taskId);
-  if (!tid) return { success: false, message: '任务ID不能为空' };
-  await resetRecurringTaskProgressIfNeeded(cid);
-
-  const defRes = await query(`SELECT id, category, prereq_task_ids FROM task_def WHERE id = $1 AND enabled = true LIMIT 1`, [tid]);
-  if ((defRes.rows ?? []).length === 0) return { success: false, message: '任务不存在' };
-  const taskCategory = normalizeTaskCategory(defRes.rows[0]?.category) ?? 'main';
-  const prereqTaskIds = asStringArray(defRes.rows[0]?.prereq_task_ids);
-  const prereqOk = await checkPrereqSatisfied(cid, prereqTaskIds);
-  if (!prereqOk) return { success: false, message: '前置任务未完成' };
-
-  const existsRes = await query(
-    `SELECT status FROM character_task_progress WHERE character_id = $1 AND task_id = $2 LIMIT 1`,
-    [cid, tid],
-  );
-  if ((existsRes.rows ?? []).length > 0) {
-    const st = asTaskProgressStatusDb(existsRes.rows[0]?.status);
-    if (st !== 'claimed') return { success: false, message: '任务已接取' };
-    if (taskCategory === 'main' || taskCategory === 'side') return { success: false, message: '任务已完成，不可重复接取' };
-    if (taskCategory === 'daily') return { success: false, message: '今日任务已完成' };
-    if (taskCategory === 'event') return { success: false, message: '本周活动任务已完成' };
-  }
-
-  await query(
-    `
-      INSERT INTO character_task_progress (character_id, task_id, status, progress, tracked, accepted_at, completed_at, claimed_at, updated_at)
-      VALUES ($1, $2, 'ongoing', '{}'::jsonb, true, NOW(), NULL, NULL, NOW())
-      ON CONFLICT (character_id, task_id) DO UPDATE SET
-        status = EXCLUDED.status,
-        progress = EXCLUDED.progress,
-        tracked = EXCLUDED.tracked,
-        accepted_at = NOW(),
-        completed_at = NULL,
-        claimed_at = NULL,
-        updated_at = NOW()
-    `,
-    [cid, tid],
-  );
-
-  return { success: true, message: 'ok', data: { taskId: tid } };
-};
-
 export const acceptTaskFromNpc = async (
   characterId: number,
   taskId: string,

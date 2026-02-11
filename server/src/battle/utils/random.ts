@@ -33,13 +33,6 @@ export function getRandomInt(state: BattleState, max: number): number {
 }
 
 /**
- * 获取 [min, max] 范围的随机整数
- */
-export function getRandomRange(state: BattleState, min: number, max: number): number {
-  return min + Math.floor(getNextRandom(state) * (max - min + 1));
-}
-
-/**
  * 万分比概率判定
  * @param state 战斗状态
  * @param rate 万分比概率 (0-10000)
@@ -55,15 +48,6 @@ export function rollChance(state: BattleState, rate: number): boolean {
  */
 export function generateBattleSeed(): number {
   return Math.floor(Math.random() * 2147483647);
-}
-
-/**
- * 从数组中随机选择一个元素
- */
-export function randomPick<T>(state: BattleState, array: T[]): T | undefined {
-  if (array.length === 0) return undefined;
-  const index = getRandomInt(state, array.length);
-  return array[index];
 }
 
 /**

@@ -5,15 +5,14 @@
 import { query } from '../config/database.js';
 import { redis } from '../config/redis.js';
 import {
-  BattleEngine,
   createPVEBattle,
   createPVPBattle,
-  type BattleState,
-  type BattleSetBonusEffect,
   type CharacterData,
   type MonsterData,
   type SkillData
-} from '../battle/index.js';
+} from '../battle/BattleFactory.js';
+import { BattleEngine } from '../battle/BattleEngine.js';
+import type { BattleState, BattleSetBonusEffect } from '../battle/types.js';
 import {
   distributeBattleRewards,
   type BattleParticipant,
