@@ -970,6 +970,95 @@ const countPlayerDeaths = (logs: unknown): number => {
   return count;
 };
 
+type DungeonRewardItem = {
+  itemDefId: string;
+  qty: number;
+  bindType?: string;
+};
+
+type DungeonRewardBundle = {
+  exp: number;
+  silver: number;
+  items: DungeonRewardItem[];
+};
+
+const randomIntInclusive = (min: number, max: number): number => {
+  const safeMin = Math.floor(Math.min(min, max));
+  const safeMax = Math.floor(Math.max(min, max));
+  if (safeMin === safeMax) return safeMin;
+  return Math.floor(Math.random() * (safeMax - safeMin + 1)) + safeMin;
+};
+
+const normalizeRewardAmount = (value: unknown): number => {
+  if (typeof value === 'number' || typeof value === 'string') {
+    return Math.max(0, Math.floor(asNumber(value, 0)));
+  }
+  const obj = asObject(value);
+  if (!obj) return 0;
+  const min = Math.max(0, Math.floor(asNumber(obj.min, 0)));
+  const max = Math.max(min, Math.floor(asNumber(obj.max, min)));
+  return randomIntInclusive(min, max);
+};
+
+const mergeRewardItems = (items: DungeonRewardItem[]): DungeonRewardItem[] => {
+  const merged = new Map<string, DungeonRewardItem>();
+  for (const item of items) {
+    const key = `${item.itemDefId}|${item.bindType ?? ''}`;
+    const existing = merged.get(key);
+    if (existing) {
+      existing.qty += item.qty;
+      continue;
+    }
+    merged.set(key, { ...item });
+  }
+  return Array.from(merged.values());
+};
+
+const rollRewardItems = (itemsValue: unknown): DungeonRewardItem[] => {
+  const items: DungeonRewardItem[] = [];
+  for (const raw of asArray(itemsValue)) {
+    const obj = asObject(raw);
+    if (!obj) continue;
+    const itemDefId = asString(obj.item_def_id, '').trim();
+    if (!itemDefId) continue;
+    const chance = Math.max(0, Math.min(1, asNumber(obj.chance, 1)));
+    if (chance <= 0 || Math.random() > chance) continue;
+
+    const qtyExact = Math.floor(asNumber(obj.qty, 0));
+    const qtyMin = Math.max(1, Math.floor(asNumber(obj.qty_min, qtyExact > 0 ? qtyExact : 1)));
+    const qtyMax = Math.max(qtyMin, Math.floor(asNumber(obj.qty_max, qtyExact > 0 ? qtyExact : qtyMin)));
+    const qty = qtyExact > 0 ? qtyExact : randomIntInclusive(qtyMin, qtyMax);
+    if (qty <= 0) continue;
+
+    const bindType = asString(obj.bind_type, '').trim();
+    items.push({
+      itemDefId,
+      qty,
+      ...(bindType ? { bindType } : {}),
+    });
+  }
+  return mergeRewardItems(items);
+};
+
+const rollDungeonRewardBundle = (rewardConfig: unknown, rewardMult: number): DungeonRewardBundle => {
+  const rewardObj = asObject(rewardConfig);
+  if (!rewardObj) return { exp: 0, silver: 0, items: [] };
+  const mult = rewardMult > 0 ? rewardMult : 1;
+  return {
+    exp: Math.max(0, Math.floor(normalizeRewardAmount(rewardObj.exp) * mult)),
+    silver: Math.max(0, Math.floor(normalizeRewardAmount(rewardObj.silver) * mult)),
+    items: rollRewardItems(rewardObj.items),
+  };
+};
+
+const mergeDungeonRewardBundle = (base: DungeonRewardBundle, append: DungeonRewardBundle): DungeonRewardBundle => {
+  return {
+    exp: base.exp + append.exp,
+    silver: base.silver + append.silver,
+    items: mergeRewardItems([...base.items, ...append.items]),
+  };
+};
+
 export const createDungeonInstance = async (
   userId: number,
   dungeonId: string,
@@ -1324,31 +1413,198 @@ export const nextDungeonInstance = async (
       const attackerStats = asObject(stats.attacker) ?? {};
       const totalDamage = Math.floor(asNumber(attackerStats.damageDealt, 0));
       const timeSpentSec = Math.max(0, Math.floor((Date.now() - new Date(inst.start_time || inst.created_at).getTime()) / 1000));
-
-      await query(
-        `UPDATE dungeon_instance SET status = 'cleared', end_time = NOW(), time_spent_sec = $2, total_damage = $3, death_count = $4 WHERE id = $1`,
-        [instanceId, timeSpentSec, totalDamage, deathCount]
-      );
-
-      for (const p of participants) {
-        await query(
-          `
-            INSERT INTO dungeon_record (character_id, dungeon_id, difficulty_id, instance_id, result, time_spent_sec, damage_dealt, death_count, rewards, is_first_clear)
-            VALUES ($1, $2, $3, $4, 'cleared', $5, $6, $7, $8::jsonb, FALSE)
-          `,
-          [p.characterId, inst.dungeon_id, inst.difficulty_id, instanceId, timeSpentSec, totalDamage, deathCount, JSON.stringify({})]
-        );
-      }
-
+      const client = await pool.connect();
+      const pendingMailByCharacter = new Map<number, { userId: number; items: MailAttachItem[] }>();
       try {
+        await client.query('BEGIN');
+
+        const instLockRes = await client.query(`SELECT status FROM dungeon_instance WHERE id = $1 LIMIT 1 FOR UPDATE`, [instanceId]);
+        if (instLockRes.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return { success: false, message: '秘境实例不存在' };
+        }
+        const lockedStatus = asString(instLockRes.rows[0]?.status, '');
+        if (lockedStatus !== 'running') {
+          await client.query('ROLLBACK');
+          if (lockedStatus === 'cleared' || lockedStatus === 'failed' || lockedStatus === 'abandoned') {
+            return { success: true, data: { instanceId, status: lockedStatus as DungeonInstanceStatus, finished: true } };
+          }
+          return { success: false, message: '秘境状态异常，无法结算' };
+        }
+
+        await client.query(
+          `UPDATE dungeon_instance SET status = 'cleared', end_time = NOW(), time_spent_sec = $2, total_damage = $3, death_count = $4 WHERE id = $1`,
+          [instanceId, timeSpentSec, totalDamage, deathCount]
+        );
+
+        const difficultyRes = await client.query(
+          `SELECT first_clear_rewards, reward_mult FROM dungeon_difficulty WHERE id = $1 LIMIT 1`,
+          [inst.difficulty_id]
+        );
+        const firstClearRewardConfig = difficultyRes.rows[0]?.first_clear_rewards ?? {};
+        const stageRewardMult = Math.max(0, asNumber(difficultyRes.rows[0]?.reward_mult, 1));
+        const stageRes = await client.query(
+          `SELECT stage_index, stage_rewards FROM dungeon_stage WHERE difficulty_id = $1 ORDER BY stage_index ASC`,
+          [inst.difficulty_id]
+        );
+        const participantCharacterIds = participants.map((p) => Number(p.characterId)).filter((id) => Number.isFinite(id) && id > 0);
+        const clearCountMap = new Map<number, number>();
+        if (participantCharacterIds.length > 0) {
+          const clearCountRes = await client.query(
+            `
+              SELECT character_id, COUNT(1)::int AS cnt
+              FROM dungeon_record
+              WHERE character_id = ANY($1)
+                AND dungeon_id = $2
+                AND difficulty_id = $3
+                AND result = 'cleared'
+              GROUP BY character_id
+            `,
+            [participantCharacterIds, inst.dungeon_id, inst.difficulty_id]
+          );
+          for (const row of clearCountRes.rows as Array<{ character_id: unknown; cnt: unknown }>) {
+            clearCountMap.set(asNumber(row.character_id, 0), asNumber(row.cnt, 0));
+          }
+        }
+
         for (const p of participants) {
           const characterId = Number(p.characterId);
           if (!Number.isFinite(characterId) || characterId <= 0) continue;
-          await updateAchievementProgress(characterId, `dungeon:clear:${inst.dungeon_id}`, 1);
-        }
-      } catch {}
+          let rewardBundle: DungeonRewardBundle = { exp: 0, silver: 0, items: [] };
+          for (const row of stageRes.rows as Array<{ stage_rewards: unknown }>) {
+            rewardBundle = mergeDungeonRewardBundle(
+              rewardBundle,
+              rollDungeonRewardBundle(row.stage_rewards, stageRewardMult)
+            );
+          }
 
-      return { success: true, data: { instanceId, status: 'cleared', finished: true } };
+          const isFirstClear = asNumber(clearCountMap.get(characterId), 0) <= 0;
+          if (isFirstClear) {
+            rewardBundle = mergeDungeonRewardBundle(
+              rewardBundle,
+              rollDungeonRewardBundle(firstClearRewardConfig, 1)
+            );
+          }
+
+          if (rewardBundle.exp > 0 || rewardBundle.silver > 0) {
+            await client.query(
+              `UPDATE characters SET exp = exp + $1, silver = silver + $2, updated_at = NOW() WHERE id = $3`,
+              [rewardBundle.exp, rewardBundle.silver, characterId]
+            );
+          }
+
+          const grantedItems: Array<{ item_def_id: string; qty: number; item_ids: number[] }> = [];
+          for (const rewardItem of rewardBundle.items) {
+            const createOptions: CreateItemOptions = {
+              location: 'bag',
+              obtainedFrom: 'dungeon_clear_reward',
+              ...(rewardItem.bindType ? { bindType: rewardItem.bindType } : {}),
+              dbClient: client,
+            };
+            const createResult = await createItem(p.userId, characterId, rewardItem.itemDefId, rewardItem.qty, createOptions);
+            if (createResult.success) {
+              grantedItems.push({
+                item_def_id: rewardItem.itemDefId,
+                qty: rewardItem.qty,
+                item_ids: createResult.itemIds || [],
+              });
+              continue;
+            }
+
+            if (createResult.message === '背包已满') {
+              const pending = pendingMailByCharacter.get(characterId) || { userId: p.userId, items: [] };
+              const existing = pending.items.find(
+                (x) =>
+                  x.item_def_id === rewardItem.itemDefId &&
+                  (x.options?.bindType || 'none') === (rewardItem.bindType || 'none')
+              );
+              if (existing) {
+                existing.qty += rewardItem.qty;
+              } else {
+                pending.items.push({
+                  item_def_id: rewardItem.itemDefId,
+                  qty: rewardItem.qty,
+                  ...(rewardItem.bindType ? { options: { bindType: rewardItem.bindType } } : {}),
+                });
+              }
+              pendingMailByCharacter.set(characterId, pending);
+              grantedItems.push({
+                item_def_id: rewardItem.itemDefId,
+                qty: rewardItem.qty,
+                item_ids: [],
+              });
+              continue;
+            }
+
+            console.warn(`秘境结算发奖失败: ${rewardItem.itemDefId}, ${createResult.message}`);
+          }
+
+          const rewardsPayload = {
+            exp: rewardBundle.exp,
+            silver: rewardBundle.silver,
+            items: grantedItems,
+            is_first_clear: isFirstClear,
+          };
+
+          await client.query(
+            `
+              INSERT INTO dungeon_record (character_id, dungeon_id, difficulty_id, instance_id, result, time_spent_sec, damage_dealt, death_count, rewards, is_first_clear)
+              VALUES ($1, $2, $3, $4, 'cleared', $5, $6, $7, $8::jsonb, $9)
+            `,
+            [
+              characterId,
+              inst.dungeon_id,
+              inst.difficulty_id,
+              instanceId,
+              timeSpentSec,
+              totalDamage,
+              deathCount,
+              JSON.stringify(rewardsPayload),
+              isFirstClear,
+            ]
+          );
+        }
+
+        await client.query('COMMIT');
+
+        for (const [receiverCharacterId, entry] of pendingMailByCharacter.entries()) {
+          const chunkSize = 10;
+          for (let i = 0; i < entry.items.length; i += chunkSize) {
+            const chunk = entry.items.slice(i, i + chunkSize);
+            const mailRes = await sendSystemMail(
+              entry.userId,
+              receiverCharacterId,
+              '秘境通关奖励补发',
+              '由于背包已满，部分秘境通关奖励已通过邮件补发，请及时领取。',
+              { items: chunk },
+              30
+            );
+            if (!mailRes.success) {
+              console.warn(`秘境奖励补发邮件发送失败: ${mailRes.message}`);
+            }
+          }
+        }
+
+        try {
+          for (const p of participants) {
+            const characterId = Number(p.characterId);
+            if (!Number.isFinite(characterId) || characterId <= 0) continue;
+            await updateAchievementProgress(characterId, `dungeon:clear:${inst.dungeon_id}`, 1);
+          }
+        } catch {}
+
+        return { success: true, data: { instanceId, status: 'cleared', finished: true } };
+      } catch (error) {
+        try {
+          await client.query('ROLLBACK');
+        } catch {
+          void 0;
+        }
+        console.error('秘境结算失败:', error);
+        return { success: false, message: '秘境结算失败' };
+      } finally {
+        client.release();
+      }
     }
 
     const nextStageWave = await getStageAndWave(inst.difficulty_id, nextStage, nextWave);

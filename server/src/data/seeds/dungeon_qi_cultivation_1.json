@@ -21,7 +21,11 @@
         "stamina_cost": 10,
         "time_limit_sec": 900,
         "revive_limit": 3,
-        "tags": ["养气期", "历练", "狼王"],
+        "tags": [
+          "养气期",
+          "历练",
+          "狼王"
+        ],
         "sort_weight": 120,
         "enabled": true,
         "version": 1
@@ -33,13 +37,27 @@
           "name": "普通",
           "difficulty_rank": 1,
           "monster_level_add": 0,
-          "monster_attr_mult": 1.0,
-          "reward_mult": 1.0,
+          "monster_attr_mult": 1,
+          "reward_mult": 1,
           "min_realm": "炼精化炁·养气期",
           "unlock_prev_difficulty": false,
           "first_clear_rewards": {
-            "items": [{ "item_def_id": "cons-001", "qty": 2 }],
-            "silver": 50
+            "items": [
+              {
+                "item_def_id": "cons-001",
+                "qty": 4
+              },
+              {
+                "item_def_id": "cons-002",
+                "qty": 2
+              },
+              {
+                "item_def_id": "mat-005",
+                "qty": 3
+              }
+            ],
+            "silver": 120,
+            "exp": 120
           },
           "drop_pool_id": null,
           "enabled": true,
@@ -52,17 +70,45 @@
               "type": "battle",
               "description": "狼群在林间游弋，伺机袭击闯入者。",
               "time_limit_sec": 0,
-              "clear_condition": { "type": "kill_all" },
+              "clear_condition": {
+                "type": "kill_all"
+              },
               "fail_condition": {},
-              "stage_rewards": {},
+              "stage_rewards": {
+                "silver": {
+                  "min": 20,
+                  "max": 35
+                },
+                "exp": 55,
+                "items": [
+                  {
+                    "item_def_id": "cons-001",
+                    "qty_min": 1,
+                    "qty_max": 2,
+                    "chance": 0.85
+                  },
+                  {
+                    "item_def_id": "mat-005",
+                    "qty_min": 1,
+                    "qty_max": 2,
+                    "chance": 0.65
+                  }
+                ]
+              },
               "events": [],
               "waves": [
                 {
                   "wave_index": 1,
                   "spawn_delay_sec": 0,
                   "monsters": [
-                    { "monster_def_id": "monster-gray-wolf", "count": 2 },
-                    { "monster_def_id": "monster-wild-boar", "count": 1 }
+                    {
+                      "monster_def_id": "monster-gray-wolf",
+                      "count": 2
+                    },
+                    {
+                      "monster_def_id": "monster-wild-boar",
+                      "count": 1
+                    }
                   ],
                   "wave_rewards": {}
                 },
@@ -70,7 +116,10 @@
                   "wave_index": 2,
                   "spawn_delay_sec": 2,
                   "monsters": [
-                    { "monster_def_id": "monster-gray-wolf", "count": 3 }
+                    {
+                      "monster_def_id": "monster-gray-wolf",
+                      "count": 3
+                    }
                   ],
                   "wave_rewards": {}
                 }
@@ -84,17 +133,51 @@
               "type": "battle",
               "description": "更凶猛的山野妖狼加入战局，战斗愈发激烈。",
               "time_limit_sec": 0,
-              "clear_condition": { "type": "kill_all" },
+              "clear_condition": {
+                "type": "kill_all"
+              },
               "fail_condition": {},
-              "stage_rewards": {},
+              "stage_rewards": {
+                "silver": {
+                  "min": 25,
+                  "max": 45
+                },
+                "exp": 70,
+                "items": [
+                  {
+                    "item_def_id": "cons-002",
+                    "qty_min": 1,
+                    "qty_max": 1,
+                    "chance": 0.55
+                  },
+                  {
+                    "item_def_id": "mat-005",
+                    "qty_min": 1,
+                    "qty_max": 3,
+                    "chance": 0.8
+                  },
+                  {
+                    "item_def_id": "enhance-001",
+                    "qty_min": 1,
+                    "qty_max": 1,
+                    "chance": 0.2
+                  }
+                ]
+              },
               "events": [],
               "waves": [
                 {
                   "wave_index": 1,
                   "spawn_delay_sec": 0,
                   "monsters": [
-                    { "monster_def_id": "monster-mountain-wolf", "count": 2 },
-                    { "monster_def_id": "monster-venomous-snake", "count": 1 }
+                    {
+                      "monster_def_id": "monster-mountain-wolf",
+                      "count": 2
+                    },
+                    {
+                      "monster_def_id": "monster-venomous-snake",
+                      "count": 1
+                    }
                   ],
                   "wave_rewards": {}
                 },
@@ -102,7 +185,10 @@
                   "wave_index": 2,
                   "spawn_delay_sec": 2,
                   "monsters": [
-                    { "monster_def_id": "monster-mountain-wolf", "count": 3 }
+                    {
+                      "monster_def_id": "monster-mountain-wolf",
+                      "count": 3
+                    }
                   ],
                   "wave_rewards": {}
                 }
@@ -116,11 +202,36 @@
               "type": "boss",
               "description": "狼王咆哮而出，率领残余狼群发动最后的猛攻。",
               "time_limit_sec": 0,
-              "clear_condition": { "type": "kill_all" },
+              "clear_condition": {
+                "type": "kill_all"
+              },
               "fail_condition": {},
               "stage_rewards": {
-                "silver": { "min": 20, "max": 40 },
-                "exp": 60
+                "silver": {
+                  "min": 55,
+                  "max": 90
+                },
+                "exp": 160,
+                "items": [
+                  {
+                    "item_def_id": "mat-005",
+                    "qty_min": 2,
+                    "qty_max": 4,
+                    "chance": 1
+                  },
+                  {
+                    "item_def_id": "cons-004",
+                    "qty_min": 1,
+                    "qty_max": 1,
+                    "chance": 0.22
+                  },
+                  {
+                    "item_def_id": "set-qingfeng-weapon",
+                    "qty_min": 1,
+                    "qty_max": 1,
+                    "chance": 0.025
+                  }
+                ]
               },
               "events": [],
               "waves": [
@@ -128,8 +239,14 @@
                   "wave_index": 1,
                   "spawn_delay_sec": 0,
                   "monsters": [
-                    { "monster_def_id": "monster-elite-wolf-king", "count": 1 },
-                    { "monster_def_id": "monster-gray-wolf", "count": 2 }
+                    {
+                      "monster_def_id": "monster-elite-wolf-king",
+                      "count": 1
+                    },
+                    {
+                      "monster_def_id": "monster-gray-wolf",
+                      "count": 2
+                    }
                   ],
                   "wave_rewards": {}
                 }
@@ -148,8 +265,26 @@
           "min_realm": "炼精化炁·养气期",
           "unlock_prev_difficulty": true,
           "first_clear_rewards": {
-            "items": [{ "item_def_id": "cons-002", "qty": 1 }],
-            "silver": 80
+            "items": [
+              {
+                "item_def_id": "equip-weapon-002",
+                "qty": 1
+              },
+              {
+                "item_def_id": "cons-004",
+                "qty": 1
+              },
+              {
+                "item_def_id": "enhance-001",
+                "qty": 2
+              },
+              {
+                "item_def_id": "set-qingfeng-head",
+                "qty": 1
+              }
+            ],
+            "silver": 220,
+            "exp": 220
           },
           "drop_pool_id": null,
           "enabled": true,
@@ -162,17 +297,51 @@
               "type": "battle",
               "description": "狼群更为凶残，攻击频率与配合显著提升。",
               "time_limit_sec": 0,
-              "clear_condition": { "type": "kill_all" },
+              "clear_condition": {
+                "type": "kill_all"
+              },
               "fail_condition": {},
-              "stage_rewards": {},
+              "stage_rewards": {
+                "silver": {
+                  "min": 35,
+                  "max": 55
+                },
+                "exp": 90,
+                "items": [
+                  {
+                    "item_def_id": "mat-005",
+                    "qty_min": 1,
+                    "qty_max": 3,
+                    "chance": 0.85
+                  },
+                  {
+                    "item_def_id": "cons-002",
+                    "qty_min": 1,
+                    "qty_max": 1,
+                    "chance": 0.6
+                  },
+                  {
+                    "item_def_id": "enhance-001",
+                    "qty_min": 1,
+                    "qty_max": 1,
+                    "chance": 0.25
+                  }
+                ]
+              },
               "events": [],
               "waves": [
                 {
                   "wave_index": 1,
                   "spawn_delay_sec": 0,
                   "monsters": [
-                    { "monster_def_id": "monster-mountain-wolf", "count": 2 },
-                    { "monster_def_id": "monster-gray-wolf", "count": 2 }
+                    {
+                      "monster_def_id": "monster-mountain-wolf",
+                      "count": 2
+                    },
+                    {
+                      "monster_def_id": "monster-gray-wolf",
+                      "count": 2
+                    }
                   ],
                   "wave_rewards": {}
                 },
@@ -180,8 +349,14 @@
                   "wave_index": 2,
                   "spawn_delay_sec": 2,
                   "monsters": [
-                    { "monster_def_id": "monster-mountain-wolf", "count": 3 },
-                    { "monster_def_id": "monster-venomous-snake", "count": 1 }
+                    {
+                      "monster_def_id": "monster-mountain-wolf",
+                      "count": 3
+                    },
+                    {
+                      "monster_def_id": "monster-venomous-snake",
+                      "count": 1
+                    }
                   ],
                   "wave_rewards": {}
                 }
@@ -195,16 +370,47 @@
               "type": "battle",
               "description": "巢穴入口守卫森严，稍有不慎便会被围攻。",
               "time_limit_sec": 0,
-              "clear_condition": { "type": "kill_all" },
+              "clear_condition": {
+                "type": "kill_all"
+              },
               "fail_condition": {},
-              "stage_rewards": {},
+              "stage_rewards": {
+                "silver": {
+                  "min": 45,
+                  "max": 70
+                },
+                "exp": 115,
+                "items": [
+                  {
+                    "item_def_id": "mat-005",
+                    "qty_min": 2,
+                    "qty_max": 4,
+                    "chance": 0.9
+                  },
+                  {
+                    "item_def_id": "cons-004",
+                    "qty_min": 1,
+                    "qty_max": 1,
+                    "chance": 0.25
+                  },
+                  {
+                    "item_def_id": "enhance-001",
+                    "qty_min": 1,
+                    "qty_max": 1,
+                    "chance": 0.35
+                  }
+                ]
+              },
               "events": [],
               "waves": [
                 {
                   "wave_index": 1,
                   "spawn_delay_sec": 0,
                   "monsters": [
-                    { "monster_def_id": "monster-mountain-wolf", "count": 4 }
+                    {
+                      "monster_def_id": "monster-mountain-wolf",
+                      "count": 4
+                    }
                   ],
                   "wave_rewards": {}
                 },
@@ -212,8 +418,14 @@
                   "wave_index": 2,
                   "spawn_delay_sec": 2,
                   "monsters": [
-                    { "monster_def_id": "monster-gray-wolf", "count": 3 },
-                    { "monster_def_id": "monster-wild-boar", "count": 1 }
+                    {
+                      "monster_def_id": "monster-gray-wolf",
+                      "count": 3
+                    },
+                    {
+                      "monster_def_id": "monster-wild-boar",
+                      "count": 1
+                    }
                   ],
                   "wave_rewards": {}
                 }
@@ -227,12 +439,48 @@
               "type": "boss",
               "description": "狼王更为狂暴，呼啸声中带着压迫的杀意。",
               "time_limit_sec": 0,
-              "clear_condition": { "type": "kill_all" },
+              "clear_condition": {
+                "type": "kill_all"
+              },
               "fail_condition": {},
               "stage_rewards": {
-                "silver": { "min": 30, "max": 60 },
-                "exp": 90,
-                "items": [{ "item_def_id": "mat-005", "qty_min": 1, "qty_max": 2, "chance": 0.6 }]
+                "silver": {
+                  "min": 90,
+                  "max": 140
+                },
+                "exp": 280,
+                "items": [
+                  {
+                    "item_def_id": "mat-005",
+                    "qty_min": 4,
+                    "qty_max": 7,
+                    "chance": 1
+                  },
+                  {
+                    "item_def_id": "enhance-002",
+                    "qty_min": 1,
+                    "qty_max": 2,
+                    "chance": 0.3
+                  },
+                  {
+                    "item_def_id": "set-qingfeng-weapon",
+                    "qty_min": 1,
+                    "qty_max": 1,
+                    "chance": 0.06
+                  },
+                  {
+                    "item_def_id": "set-qingfeng-head",
+                    "qty_min": 1,
+                    "qty_max": 1,
+                    "chance": 0.05
+                  },
+                  {
+                    "item_def_id": "set-qingfeng-clothes",
+                    "qty_min": 1,
+                    "qty_max": 1,
+                    "chance": 0.04
+                  }
+                ]
               },
               "events": [],
               "waves": [
@@ -240,7 +488,10 @@
                   "wave_index": 1,
                   "spawn_delay_sec": 0,
                   "monsters": [
-                    { "monster_def_id": "monster-elite-wolf-king", "count": 1 }
+                    {
+                      "monster_def_id": "monster-elite-wolf-king",
+                      "count": 1
+                    }
                   ],
                   "wave_rewards": {}
                 },
@@ -248,7 +499,10 @@
                   "wave_index": 2,
                   "spawn_delay_sec": 5,
                   "monsters": [
-                    { "monster_def_id": "monster-gray-wolf", "count": 2 }
+                    {
+                      "monster_def_id": "monster-gray-wolf",
+                      "count": 2
+                    }
                   ],
                   "wave_rewards": {}
                 }

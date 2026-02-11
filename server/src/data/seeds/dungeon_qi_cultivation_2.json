@@ -21,7 +21,11 @@
         "stamina_cost": 8,
         "time_limit_sec": 900,
         "revive_limit": 3,
-        "tags": ["养气期", "材料", "矿洞"],
+        "tags": [
+          "养气期",
+          "材料",
+          "矿洞"
+        ],
         "sort_weight": 110,
         "enabled": true,
         "version": 1
@@ -33,13 +37,27 @@
           "name": "普通",
           "difficulty_rank": 1,
           "monster_level_add": 0,
-          "monster_attr_mult": 1.0,
-          "reward_mult": 1.0,
+          "monster_attr_mult": 1,
+          "reward_mult": 1,
           "min_realm": "炼精化炁·养气期",
           "unlock_prev_difficulty": false,
           "first_clear_rewards": {
-            "items": [{ "item_def_id": "mat-002", "qty": 5 }],
-            "silver": 40
+            "items": [
+              {
+                "item_def_id": "mat-002",
+                "qty": 8
+              },
+              {
+                "item_def_id": "mat-007",
+                "qty": 4
+              },
+              {
+                "item_def_id": "enhance-001",
+                "qty": 1
+              }
+            ],
+            "silver": 100,
+            "exp": 100
           },
           "drop_pool_id": null,
           "enabled": true,
@@ -52,16 +70,47 @@
               "type": "battle",
               "description": "洞口湿滑阴冷，毒蛇潜伏在碎石间发起突袭。",
               "time_limit_sec": 0,
-              "clear_condition": { "type": "kill_all" },
+              "clear_condition": {
+                "type": "kill_all"
+              },
               "fail_condition": {},
-              "stage_rewards": {},
+              "stage_rewards": {
+                "silver": {
+                  "min": 18,
+                  "max": 32
+                },
+                "exp": 50,
+                "items": [
+                  {
+                    "item_def_id": "mat-002",
+                    "qty_min": 2,
+                    "qty_max": 4,
+                    "chance": 1
+                  },
+                  {
+                    "item_def_id": "mat-007",
+                    "qty_min": 1,
+                    "qty_max": 2,
+                    "chance": 0.45
+                  },
+                  {
+                    "item_def_id": "cons-006",
+                    "qty_min": 1,
+                    "qty_max": 1,
+                    "chance": 0.3
+                  }
+                ]
+              },
               "events": [],
               "waves": [
                 {
                   "wave_index": 1,
                   "spawn_delay_sec": 0,
                   "monsters": [
-                    { "monster_def_id": "monster-venomous-snake", "count": 3 }
+                    {
+                      "monster_def_id": "monster-venomous-snake",
+                      "count": 3
+                    }
                   ],
                   "wave_rewards": {}
                 },
@@ -69,8 +118,14 @@
                   "wave_index": 2,
                   "spawn_delay_sec": 2,
                   "monsters": [
-                    { "monster_def_id": "monster-stone-golem", "count": 1 },
-                    { "monster_def_id": "monster-venomous-snake", "count": 2 }
+                    {
+                      "monster_def_id": "monster-stone-golem",
+                      "count": 1
+                    },
+                    {
+                      "monster_def_id": "monster-venomous-snake",
+                      "count": 2
+                    }
                   ],
                   "wave_rewards": {}
                 }
@@ -84,16 +139,47 @@
               "type": "battle",
               "description": "碎岩回廊中石傀儡不断苏醒，阻挡前行之路。",
               "time_limit_sec": 0,
-              "clear_condition": { "type": "kill_all" },
+              "clear_condition": {
+                "type": "kill_all"
+              },
               "fail_condition": {},
-              "stage_rewards": {},
+              "stage_rewards": {
+                "silver": {
+                  "min": 25,
+                  "max": 40
+                },
+                "exp": 65,
+                "items": [
+                  {
+                    "item_def_id": "mat-002",
+                    "qty_min": 3,
+                    "qty_max": 5,
+                    "chance": 1
+                  },
+                  {
+                    "item_def_id": "mat-007",
+                    "qty_min": 1,
+                    "qty_max": 3,
+                    "chance": 0.6
+                  },
+                  {
+                    "item_def_id": "enhance-001",
+                    "qty_min": 1,
+                    "qty_max": 1,
+                    "chance": 0.25
+                  }
+                ]
+              },
               "events": [],
               "waves": [
                 {
                   "wave_index": 1,
                   "spawn_delay_sec": 0,
                   "monsters": [
-                    { "monster_def_id": "monster-stone-golem", "count": 2 }
+                    {
+                      "monster_def_id": "monster-stone-golem",
+                      "count": 2
+                    }
                   ],
                   "wave_rewards": {}
                 },
@@ -101,8 +187,14 @@
                   "wave_index": 2,
                   "spawn_delay_sec": 2,
                   "monsters": [
-                    { "monster_def_id": "monster-stone-golem", "count": 2 },
-                    { "monster_def_id": "monster-venomous-snake", "count": 1 }
+                    {
+                      "monster_def_id": "monster-stone-golem",
+                      "count": 2
+                    },
+                    {
+                      "monster_def_id": "monster-venomous-snake",
+                      "count": 1
+                    }
                   ],
                   "wave_rewards": {}
                 }
@@ -116,12 +208,48 @@
               "type": "boss",
               "description": "灵矿脉前的石傀儡守卫强悍无比，必须将其击溃才能安全采掘。",
               "time_limit_sec": 0,
-              "clear_condition": { "type": "kill_all" },
+              "clear_condition": {
+                "type": "kill_all"
+              },
               "fail_condition": {},
               "stage_rewards": {
-                "silver": { "min": 15, "max": 35 },
-                "exp": 55,
-                "items": [{ "item_def_id": "mat-002", "qty_min": 1, "qty_max": 3, "chance": 0.7 }]
+                "silver": {
+                  "min": 40,
+                  "max": 70
+                },
+                "exp": 120,
+                "items": [
+                  {
+                    "item_def_id": "mat-002",
+                    "qty_min": 4,
+                    "qty_max": 7,
+                    "chance": 1
+                  },
+                  {
+                    "item_def_id": "mat-007",
+                    "qty_min": 2,
+                    "qty_max": 4,
+                    "chance": 0.75
+                  },
+                  {
+                    "item_def_id": "enhance-001",
+                    "qty_min": 1,
+                    "qty_max": 2,
+                    "chance": 0.45
+                  },
+                  {
+                    "item_def_id": "mat-003",
+                    "qty_min": 1,
+                    "qty_max": 1,
+                    "chance": 0.08
+                  },
+                  {
+                    "item_def_id": "set-xuantie-weapon",
+                    "qty_min": 1,
+                    "qty_max": 1,
+                    "chance": 0.025
+                  }
+                ]
               },
               "events": [],
               "waves": [
@@ -129,7 +257,10 @@
                   "wave_index": 1,
                   "spawn_delay_sec": 0,
                   "monsters": [
-                    { "monster_def_id": "monster-stone-golem", "count": 1 }
+                    {
+                      "monster_def_id": "monster-stone-golem",
+                      "count": 1
+                    }
                   ],
                   "wave_rewards": {}
                 },
@@ -137,7 +268,10 @@
                   "wave_index": 2,
                   "spawn_delay_sec": 4,
                   "monsters": [
-                    { "monster_def_id": "monster-venomous-snake", "count": 2 }
+                    {
+                      "monster_def_id": "monster-venomous-snake",
+                      "count": 2
+                    }
                   ],
                   "wave_rewards": {}
                 }
@@ -156,8 +290,26 @@
           "min_realm": "炼精化炁·养气期",
           "unlock_prev_difficulty": true,
           "first_clear_rewards": {
-            "items": [{ "item_def_id": "enhance-001", "qty": 1 }],
-            "silver": 70
+            "items": [
+              {
+                "item_def_id": "enhance-002",
+                "qty": 1
+              },
+              {
+                "item_def_id": "mat-003",
+                "qty": 2
+              },
+              {
+                "item_def_id": "box-001",
+                "qty": 1
+              },
+              {
+                "item_def_id": "set-xuantie-head",
+                "qty": 1
+              }
+            ],
+            "silver": 180,
+            "exp": 180
           },
           "drop_pool_id": null,
           "enabled": true,
@@ -170,16 +322,47 @@
               "type": "battle",
               "description": "毒雾弥漫，蛇群更加狡诈，稍有不慎便会中毒。",
               "time_limit_sec": 0,
-              "clear_condition": { "type": "kill_all" },
+              "clear_condition": {
+                "type": "kill_all"
+              },
               "fail_condition": {},
-              "stage_rewards": {},
+              "stage_rewards": {
+                "silver": {
+                  "min": 30,
+                  "max": 50
+                },
+                "exp": 80,
+                "items": [
+                  {
+                    "item_def_id": "mat-002",
+                    "qty_min": 4,
+                    "qty_max": 7,
+                    "chance": 1
+                  },
+                  {
+                    "item_def_id": "mat-007",
+                    "qty_min": 2,
+                    "qty_max": 4,
+                    "chance": 0.75
+                  },
+                  {
+                    "item_def_id": "enhance-001",
+                    "qty_min": 1,
+                    "qty_max": 1,
+                    "chance": 0.45
+                  }
+                ]
+              },
               "events": [],
               "waves": [
                 {
                   "wave_index": 1,
                   "spawn_delay_sec": 0,
                   "monsters": [
-                    { "monster_def_id": "monster-venomous-snake", "count": 4 }
+                    {
+                      "monster_def_id": "monster-venomous-snake",
+                      "count": 4
+                    }
                   ],
                   "wave_rewards": {}
                 },
@@ -187,7 +370,10 @@
                   "wave_index": 2,
                   "spawn_delay_sec": 2,
                   "monsters": [
-                    { "monster_def_id": "monster-stone-golem", "count": 2 }
+                    {
+                      "monster_def_id": "monster-stone-golem",
+                      "count": 2
+                    }
                   ],
                   "wave_rewards": {}
                 }
@@ -201,17 +387,57 @@
               "type": "battle",
               "description": "矿道不断崩塌，石傀儡趁机围攻闯入者。",
               "time_limit_sec": 0,
-              "clear_condition": { "type": "kill_all" },
+              "clear_condition": {
+                "type": "kill_all"
+              },
               "fail_condition": {},
-              "stage_rewards": {},
+              "stage_rewards": {
+                "silver": {
+                  "min": 42,
+                  "max": 68
+                },
+                "exp": 110,
+                "items": [
+                  {
+                    "item_def_id": "mat-002",
+                    "qty_min": 5,
+                    "qty_max": 8,
+                    "chance": 1
+                  },
+                  {
+                    "item_def_id": "mat-007",
+                    "qty_min": 3,
+                    "qty_max": 5,
+                    "chance": 0.8
+                  },
+                  {
+                    "item_def_id": "mat-003",
+                    "qty_min": 1,
+                    "qty_max": 1,
+                    "chance": 0.12
+                  },
+                  {
+                    "item_def_id": "enhance-002",
+                    "qty_min": 1,
+                    "qty_max": 1,
+                    "chance": 0.2
+                  }
+                ]
+              },
               "events": [],
               "waves": [
                 {
                   "wave_index": 1,
                   "spawn_delay_sec": 0,
                   "monsters": [
-                    { "monster_def_id": "monster-stone-golem", "count": 3 },
-                    { "monster_def_id": "monster-venomous-snake", "count": 2 }
+                    {
+                      "monster_def_id": "monster-stone-golem",
+                      "count": 3
+                    },
+                    {
+                      "monster_def_id": "monster-venomous-snake",
+                      "count": 2
+                    }
                   ],
                   "wave_rewards": {}
                 },
@@ -219,7 +445,10 @@
                   "wave_index": 2,
                   "spawn_delay_sec": 2,
                   "monsters": [
-                    { "monster_def_id": "monster-stone-golem", "count": 3 }
+                    {
+                      "monster_def_id": "monster-stone-golem",
+                      "count": 3
+                    }
                   ],
                   "wave_rewards": {}
                 }
@@ -233,14 +462,65 @@
               "type": "boss",
               "description": "核心矿室中石傀儡守卫全面苏醒，必须在其重组前将其击碎。",
               "time_limit_sec": 0,
-              "clear_condition": { "type": "kill_all" },
+              "clear_condition": {
+                "type": "kill_all"
+              },
               "fail_condition": {},
               "stage_rewards": {
-                "silver": { "min": 25, "max": 55 },
-                "exp": 85,
+                "silver": {
+                  "min": 80,
+                  "max": 130
+                },
+                "exp": 220,
                 "items": [
-                  { "item_def_id": "mat-002", "qty_min": 2, "qty_max": 5, "chance": 0.8 },
-                  { "item_def_id": "mat-007", "qty_min": 1, "qty_max": 2, "chance": 0.25 }
+                  {
+                    "item_def_id": "mat-002",
+                    "qty_min": 7,
+                    "qty_max": 12,
+                    "chance": 1
+                  },
+                  {
+                    "item_def_id": "mat-007",
+                    "qty_min": 4,
+                    "qty_max": 7,
+                    "chance": 0.9
+                  },
+                  {
+                    "item_def_id": "mat-003",
+                    "qty_min": 1,
+                    "qty_max": 2,
+                    "chance": 0.22
+                  },
+                  {
+                    "item_def_id": "enhance-002",
+                    "qty_min": 1,
+                    "qty_max": 2,
+                    "chance": 0.4
+                  },
+                  {
+                    "item_def_id": "box-001",
+                    "qty_min": 1,
+                    "qty_max": 1,
+                    "chance": 0.35
+                  },
+                  {
+                    "item_def_id": "set-xuantie-weapon",
+                    "qty_min": 1,
+                    "qty_max": 1,
+                    "chance": 0.07
+                  },
+                  {
+                    "item_def_id": "set-xuantie-head",
+                    "qty_min": 1,
+                    "qty_max": 1,
+                    "chance": 0.06
+                  },
+                  {
+                    "item_def_id": "set-xuantie-clothes",
+                    "qty_min": 1,
+                    "qty_max": 1,
+                    "chance": 0.05
+                  }
                 ]
               },
               "events": [],
@@ -249,7 +529,10 @@
                   "wave_index": 1,
                   "spawn_delay_sec": 0,
                   "monsters": [
-                    { "monster_def_id": "monster-stone-golem", "count": 1 }
+                    {
+                      "monster_def_id": "monster-stone-golem",
+                      "count": 1
+                    }
                   ],
                   "wave_rewards": {}
                 },
@@ -257,7 +540,10 @@
                   "wave_index": 2,
                   "spawn_delay_sec": 4,
                   "monsters": [
-                    { "monster_def_id": "monster-stone-golem", "count": 2 }
+                    {
+                      "monster_def_id": "monster-stone-golem",
+                      "count": 2
+                    }
                   ],
                   "wave_rewards": {}
                 }
