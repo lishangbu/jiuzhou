@@ -238,8 +238,39 @@ const getSkillDetailItems = (skill: TechniqueSkill): Array<{ label: string; valu
   return items;
 };
 
+const INLINE_SKILL_DETAIL_ORDER = [
+  '描述',
+  '灵气消耗',
+  '冷却回合',
+  '目标类型',
+  '目标数量',
+  '伤害类型',
+  '伤害系数',
+  '缩放属性',
+  '气血消耗',
+  '固定伤害',
+] as const;
+
+const getSkillInlineDetailItems = (skill: TechniqueSkill): Array<{ label: string; value: string }> => {
+  const allItems = getSkillDetailItems(skill);
+  if (allItems.length === 0) return [];
+
+  const byLabel = new Map(allItems.map((item) => [item.label, item.value]));
+
+  const inlineItems = INLINE_SKILL_DETAIL_ORDER.reduce<Array<{ label: string; value: string }>>((acc, label) => {
+    const value = byLabel.get(label);
+    if (value !== undefined) {
+      acc.push({ label, value });
+    }
+    return acc;
+  }, []);
+
+  // 控制卡片信息密度，避免列表卡片过高
+  return inlineItems.slice(0, 7);
+};
+
 const getSkillInlineSummary = (skill: TechniqueSkill): string => {
-  const detailItems = getSkillDetailItems(skill);
+  const detailItems = getSkillInlineDetailItems(skill);
   if (detailItems.length === 0) return '暂无详细信息';
 
   return detailItems
@@ -248,7 +279,7 @@ const getSkillInlineSummary = (skill: TechniqueSkill): string => {
 };
 
 const renderSkillInlineDetails = (skill: TechniqueSkill): React.ReactNode => {
-  const detailItems = getSkillDetailItems(skill);
+  const detailItems = getSkillInlineDetailItems(skill);
   if (detailItems.length === 0) {
     return <div className="skill-inline-empty">暂无详细信息</div>;
   }
@@ -1148,8 +1179,10 @@ mu                    <span className="tech-table-name-text">{row.name}</span>
           <div className="skill-list">
             {availableSkills.map((s) => (
               <div key={s.id} className="skill-item">
-                <img className="skill-item-icon" src={s.icon} alt={s.name} />
-                <div className="skill-item-name">{s.name}</div>
+                <div className="skill-item-header">
+                  <img className="skill-item-icon" src={s.icon} alt={s.name} />
+                  <div className="skill-item-name">{s.name}</div>
+                </div>
                 <div className="skill-item-summary">{renderSkillInlineDetails(s)}</div>
                 <Button
                   size="small"

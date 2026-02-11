@@ -456,20 +456,20 @@
 
 .skill-list {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
+  gap: 12px;
 }
 
 .skill-item {
   border: 1px solid var(--border-color-soft);
   border-radius: 14px;
   background: var(--panel-bg-soft);
-  padding: 10px 10px;
+  padding: 12px 12px;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: stretch;
   justify-content: flex-start;
-  gap: 8px;
+  gap: 10px;
   cursor: default;
   user-select: none;
   transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
@@ -479,6 +479,14 @@
   border-color: var(--border-color);
   background: var(--hover-bg);
   transform: translateY(-1px);
+}
+
+.skill-item-header {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
 }
 
 .skill-item-icon {
@@ -493,11 +501,11 @@
 }
 
 .skill-item-name {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 900;
   color: var(--text-color);
   text-align: center;
-  line-height: 1.15;
+  line-height: 1.25;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -506,6 +514,31 @@
 
 .skill-item-summary {
   width: 100%;
+  border-top: 1px solid var(--border-color-soft);
+  padding-top: 8px;
+}
+
+.skill-item-summary .skill-inline-lines {
+  grid-template-columns: 1fr;
+  row-gap: 4px;
+}
+
+.skill-item-summary .skill-inline-row {
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.skill-item-summary .skill-inline-row.is-description {
+  justify-content: flex-start;
+}
+
+.skill-item-summary .skill-inline-row:not(.is-description) .skill-inline-value {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.skill-item-summary .skill-inline-row.is-description .skill-inline-value {
+  line-height: 1.45;
 }
 
 .skill-inline-lines {
