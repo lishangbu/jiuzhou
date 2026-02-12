@@ -2,6 +2,7 @@ import type { PoolClient } from 'pg';
 import { pool } from '../../config/database.js';
 import { assertMember, generateSectId, getCharacterSectId, hasPermission, positionRank, toNumber } from './db.js';
 import type { CreateResult, Result, SectDefRow, SectInfo, SectListResult, SectPosition } from './types.js';
+import { updateAchievementProgress } from '../achievementService.js';
 
 const DEFAULT_BUILDINGS: string[] = [
   'hall',
@@ -94,6 +95,9 @@ export const createSect = async (characterId: number, name: string, description?
     await upsertLogTx(client, sectId, 'create', characterId, null, `创建宗门：${name}`);
 
     await client.query('COMMIT');
+    try {
+      await updateAchievementProgress(characterId, 'sect:join', 1);
+    } catch {}
     return { success: true, message: '创建成功', sectId };
   } catch (error) {
     await client.query('ROLLBACK');

@@ -31,6 +31,144 @@ import type {
 import { updateAchievementProgress } from './achievement/progress.js';
 import { equipTitle, getTitleList } from './achievement/title.js';
 
+const REALM_ORDER = [
+  '凡人',
+  '炼精化炁·养气期',
+  '炼精化炁·通脉期',
+  '炼精化炁·凝炁期',
+  '炼炁化神·炼己期',
+  '炼炁化神·采药期',
+  '炼炁化神·结胎期',
+  '炼神返虚·养神期',
+  '炼神返虚·还虚期',
+  '炼神返虚·合道期',
+  '炼虚合道·证道期',
+  '炼虚合道·历劫期',
+  '炼虚合道·成圣期',
+] as const;
+
+const REALM_MAJOR_TO_FIRST: Record<string, string> = {
+  凡人: '凡人',
+  炼精化炁: '炼精化炁·养气期',
+  炼炁化神: '炼炁化神·炼己期',
+  炼神返虚: '炼神返虚·养神期',
+  炼虚合道: '炼虚合道·证道期',
+};
+
+const REALM_SUB_TO_FULL: Record<string, string> = {
+  养气期: '炼精化炁·养气期',
+  通脉期: '炼精化炁·通脉期',
+  凝炁期: '炼精化炁·凝炁期',
+  炼己期: '炼炁化神·炼己期',
+  采药期: '炼炁化神·采药期',
+  结胎期: '炼炁化神·结胎期',
+  养神期: '炼神返虚·养神期',
+  还虚期: '炼神返虚·还虚期',
+  合道期: '炼神返虚·合道期',
+  证道期: '炼虚合道·证道期',
+  历劫期: '炼虚合道·历劫期',
+  成圣期: '炼虚合道·成圣期',
+};
+
+const normalizeRealm = (realmRaw: unknown, subRealmRaw?: unknown): string => {
+  const realm = (asNonEmptyString(realmRaw) ?? '').trim();
+  const subRealm = (asNonEmptyString(subRealmRaw) ?? '').trim();
+  if (!realm && !subRealm) return '凡人';
+  if (realm && REALM_ORDER.includes(realm as (typeof REALM_ORDER)[number])) return realm;
+  if (realm && subRealm) {
+    const full = `${realm}·${subRealm}`;
+    if (REALM_ORDER.includes(full as (typeof REALM_ORDER)[number])) return full;
+  }
+  if (realm && REALM_MAJOR_TO_FIRST[realm]) return REALM_MAJOR_TO_FIRST[realm];
+  if (realm && REALM_SUB_TO_FULL[realm]) return REALM_SUB_TO_FULL[realm];
+  if (!realm && subRealm && REALM_SUB_TO_FULL[subRealm]) return REALM_SUB_TO_FULL[subRealm];
+  return realm || '凡人';
+};
+
+const getRealmRank = (realmRaw: unknown, subRealmRaw?: unknown): number => {
+  const normalized = normalizeRealm(realmRaw, subRealmRaw);
+  return REALM_ORDER.indexOf(normalized as (typeof REALM_ORDER)[number]);
+};
+
+const parseLayerRequirement = (trackKey: string): number | null => {
+  const prefix = 'skill:level:layer:';
+  if (!trackKey.startsWith(prefix)) return null;
+  const raw = trackKey.slice(prefix.length).trim();
+  if (!raw) return null;
+  const layer = Number(raw);
+  if (!Number.isFinite(layer)) return null;
+  const intLayer = Math.floor(layer);
+  return intLayer > 0 ? intLayer : null;
+};
+
+const syncStaticAchievementProgress = async (characterId: number): Promise<void> => {
+  const cid = asFiniteNonNegativeInt(characterId, 0);
+  if (!cid) return;
+
+  const characterRes = await query(`SELECT realm, sub_realm FROM characters WHERE id = $1 LIMIT 1`, [cid]);
+  const character = (characterRes.rows?.[0] ?? {}) as Record<string, unknown>;
+  const currentRealmRank = getRealmRank(character.realm, character.sub_realm);
+
+  const sectMemberRes = await query(`SELECT 1 FROM sect_member WHERE character_id = $1 LIMIT 1`, [cid]);
+  const isSectMember = (sectMemberRes.rows?.length ?? 0) > 0;
+
+  const maxLayerRes = await query(
+    `SELECT COALESCE(MAX(current_layer), 0)::int AS max_layer FROM character_technique WHERE character_id = $1`,
+    [cid],
+  );
+  const maxTechniqueLayer = asFiniteNonNegativeInt((maxLayerRes.rows?.[0] as Record<string, unknown> | undefined)?.max_layer, 0);
+
+  const pendingRes = await query(
+    `
+      SELECT d.track_key, d.track_type
+      FROM achievement_def d
+      JOIN character_achievement ca
+        ON ca.character_id = $1
+       AND ca.achievement_id = d.id
+      WHERE d.enabled = true
+        AND COALESCE(ca.status, 'in_progress') = 'in_progress'
+        AND (
+          d.track_key LIKE 'realm:reach:%'
+          OR d.track_key LIKE 'skill:level:layer:%'
+          OR d.track_key = 'sect:join'
+        )
+    `,
+    [cid],
+  );
+
+  const keysToSync = new Set<string>();
+  for (const row of pendingRes.rows as Array<Record<string, unknown>>) {
+    const trackKey = asNonEmptyString(row.track_key);
+    const trackType = asNonEmptyString(row.track_type) ?? 'counter';
+    if (!trackKey) continue;
+    if (trackType !== 'flag') continue;
+
+    if (trackKey === 'sect:join') {
+      if (isSectMember) keysToSync.add(trackKey);
+      continue;
+    }
+
+    if (trackKey.startsWith('realm:reach:')) {
+      const requiredRealm = trackKey.slice('realm:reach:'.length).trim();
+      if (!requiredRealm) continue;
+      const requiredRealmRank = getRealmRank(requiredRealm);
+      if (requiredRealmRank >= 0 && currentRealmRank >= requiredRealmRank) {
+        keysToSync.add(trackKey);
+      }
+      continue;
+    }
+
+    const requiredLayer = parseLayerRequirement(trackKey);
+    if (requiredLayer !== null && maxTechniqueLayer >= requiredLayer) {
+      keysToSync.add(trackKey);
+    }
+  }
+
+  for (const key of keysToSync) {
+    await updateAchievementProgress(cid, key, 1);
+  }
+};
+
 const extractMultiTargets = (value: unknown): string[] => {
   if (!Array.isArray(value)) return [];
   const out = new Set<string>();
@@ -260,6 +398,7 @@ export const getAchievementList = async (
 
   await ensureCharacterAchievementPoints(cid);
   await syncCharacterAchievements(cid);
+  await syncStaticAchievementProgress(cid);
 
   const page = Math.max(1, asFiniteNonNegativeInt(options?.page, 1));
   const limit = Math.max(1, Math.min(100, asFiniteNonNegativeInt(options?.limit, 20)));
@@ -345,6 +484,7 @@ export const getAchievementDetail = async (
 
   await ensureCharacterAchievementPoints(cid);
   await syncCharacterAchievements(cid);
+  await syncStaticAchievementProgress(cid);
 
   const res = await query(
     `
@@ -382,6 +522,7 @@ export const initCharacterAchievements = async (characterId: number): Promise<vo
   if (!cid) return;
   await ensureCharacterAchievementPoints(cid);
   await syncCharacterAchievements(cid);
+  await syncStaticAchievementProgress(cid);
 };
 
 export {
