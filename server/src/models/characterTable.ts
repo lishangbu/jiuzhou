@@ -304,6 +304,25 @@ const percentAttrColumns = [
   'tu_kangxing',
 ] as const;
 
+const v1MayOverScaledPercentColumns = [
+  'shanbi',
+  'zhaojia',
+  'baoji',
+  'kangbao',
+  'zengshang',
+  'zhiliao',
+  'jianliao',
+  'xixue',
+  'lengque',
+  'shuxing_shuzhi',
+  'kongzhi_kangxing',
+  'jin_kangxing',
+  'mu_kangxing',
+  'shui_kangxing',
+  'huo_kangxing',
+  'tu_kangxing',
+] as const;
+
 // 检查并添加缺失字段
 const checkAndAddColumns = async () => {
   const addedFields: string[] = [];
@@ -396,22 +415,56 @@ const ensurePercentAttrsAsActualValue = async () => {
   const hasLegacy = Boolean(legacyCheck.rows[0]?.has_legacy);
   if (!hasLegacy) return;
 
-  const updateParts = percentAttrColumns.map((col) => {
-    if (col === 'baoshang') {
-      return `${col} = CASE
-        WHEN ${col} > 1000 THEN ROUND((${col} / 10000.0)::numeric, 6)::DOUBLE PRECISION
-        WHEN ${col} > 10 THEN ROUND((${col} / 100.0)::numeric, 6)::DOUBLE PRECISION
-        ELSE ${col}
-      END`;
-    }
+  const updateParts = percentAttrColumns.map(
+    (col) => `${col} = CASE
+      WHEN ${col} > 10 THEN ROUND((${col} / 10000.0)::numeric, 6)::DOUBLE PRECISION
+      ELSE ${col}
+    END`
+  );
+  updateParts.push('updated_at = CURRENT_TIMESTAMP');
+  await query(`UPDATE characters SET ${updateParts.join(', ')} WHERE ${legacyWhereClause}`);
+};
+
+/**
+ * v2 纠偏：
+ * 旧 v1 里部分字段按 /100 转换，导致闪避/抗性等字段放大 100 倍。
+ * 这里按“疑似异常行”做回收，避免影响正常角色：
+ * - 先筛出至少一个可疑字段 > 2（200%）的角色；
+ * - 仅对这批角色，将可疑字段中明显超设计范围的值回退 /100。
+ */
+const fixOverScaledPercentAttrsFromV1 = async () => {
+  const suspectWhereClause = v1MayOverScaledPercentColumns
+    .map((col) => `${col} > 2`)
+    .join(' OR ');
+
+  const suspectCheck = await query(
+    `
+      SELECT EXISTS (
+        SELECT 1
+        FROM characters
+        WHERE ${suspectWhereClause}
+      ) AS has_suspect
+    `
+  );
+  const hasSuspect = Boolean(suspectCheck.rows[0]?.has_suspect);
+  if (!hasSuspect) return;
+
+  const updateParts = v1MayOverScaledPercentColumns.map((col) => {
+    const threshold = col === 'shanbi' ? 0.1 : 0.2;
     return `${col} = CASE
-      WHEN ${col} > 1000 THEN ROUND((${col} / 10000.0)::numeric, 6)::DOUBLE PRECISION
-      WHEN ${col} > 1 THEN ROUND((${col} / 100.0)::numeric, 6)::DOUBLE PRECISION
+      WHEN ${col} > ${threshold} AND ${col} <= 20 THEN ROUND((${col} / 100.0)::numeric, 6)::DOUBLE PRECISION
       ELSE ${col}
     END`;
   });
   updateParts.push('updated_at = CURRENT_TIMESTAMP');
-  await query(`UPDATE characters SET ${updateParts.join(', ')} WHERE ${legacyWhereClause}`);
+
+  await query(
+    `
+      UPDATE characters
+      SET ${updateParts.join(', ')}
+      WHERE ${suspectWhereClause}
+    `
+  );
 };
 
 // 初始化角色表
@@ -449,6 +502,12 @@ export const initCharacterTable = async (): Promise<void> => {
       migrationKey: 'characters_percent_attr_actual_value_v1',
       description: '角色百分比属性统一为比例值（1=100%）',
       execute: ensurePercentAttrsAsActualValue,
+    });
+
+    await runDbMigrationOnce({
+      migrationKey: 'characters_percent_attr_actual_value_v2_fix_overscaled',
+      description: '修正 v1 中被放大 100 倍的角色百分比属性值',
+      execute: fixOverScaledPercentAttrsFromV1,
     });
     
     // 创建触发器
