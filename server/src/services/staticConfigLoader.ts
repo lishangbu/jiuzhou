@@ -293,6 +293,57 @@ type DungeonSeedFile = {
 };
 type DialogueFile = { dialogues: DialogueDefConfig[] };
 
+export type TechniqueDefConfig = {
+  id: string;
+  code?: string;
+  name: string;
+  type: string;
+  quality: string;
+  quality_rank?: number;
+  max_layer?: number;
+  required_realm?: string;
+  attribute_type?: string;
+  attribute_element?: string;
+  tags?: string[];
+  description?: string | null;
+  long_desc?: string | null;
+  icon?: string | null;
+  obtain_type?: string | null;
+  obtain_hint?: string[];
+  sort_weight?: number;
+  version?: number;
+  enabled?: boolean;
+};
+
+export type SkillDefConfig = {
+  id: string;
+  code?: string;
+  name: string;
+  description?: string | null;
+  icon?: string | null;
+  source_type: string;
+  source_id?: string | null;
+  cost_lingqi?: number;
+  cost_qixue?: number;
+  cooldown?: number;
+  target_type: string;
+  target_count?: number;
+  damage_type?: string | null;
+  element?: string;
+  effects?: unknown[];
+  trigger_type?: string;
+  conditions?: unknown;
+  ai_priority?: number;
+  ai_conditions?: unknown;
+  upgrades?: unknown;
+  sort_weight?: number;
+  version?: number;
+  enabled?: boolean;
+};
+
+type TechniqueDefFile = { techniques: TechniqueDefConfig[] };
+type SkillDefFile = { skills: SkillDefConfig[] };
+
 let battlePassCache: BattlePassStaticConfig | null | undefined;
 let monthCardCache: MonthCardDef[] | null | undefined;
 let achievementDefCache: AchievementDefConfig[] | null | undefined;
@@ -306,6 +357,8 @@ let spawnRuleCache: SpawnRuleConfig[] | null | undefined;
 let bountyDefCache: BountyDefConfig[] | null | undefined;
 let dungeonDefCache: DungeonDefConfig[] | null | undefined;
 let dialogueDefCache: DialogueDefConfig[] | null | undefined;
+let techniqueDefCache: TechniqueDefConfig[] | null | undefined;
+let skillDefCache: SkillDefConfig[] | null | undefined;
 
 export const getBattlePassStaticConfig = (): BattlePassStaticConfig | null => {
   if (battlePassCache !== undefined) return battlePassCache;
@@ -465,5 +518,19 @@ export const getDialogueDefinitions = (): DialogueDefConfig[] => {
 
   dialogueDefCache = dialogues;
   return dialogueDefCache;
+};
+
+export const getTechniqueDefinitions = (): TechniqueDefConfig[] => {
+  if (techniqueDefCache !== undefined) return techniqueDefCache ?? [];
+  const file = readJsonFile<TechniqueDefFile>('technique_def.json');
+  techniqueDefCache = Array.isArray(file?.techniques) ? file.techniques : [];
+  return techniqueDefCache;
+};
+
+export const getSkillDefinitions = (): SkillDefConfig[] => {
+  if (skillDefCache !== undefined) return skillDefCache ?? [];
+  const file = readJsonFile<SkillDefFile>('skill_def.json');
+  skillDefCache = Array.isArray(file?.skills) ? file.skills : [];
+  return skillDefCache;
 };
 

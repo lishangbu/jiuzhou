@@ -35,7 +35,7 @@ import {
   recoverBattleStartResourcesByUserIds,
   setCharacterResourcesByCharacterId,
 } from './characterComputedService.js';
-import { getMonsterDefinitions } from './staticConfigLoader.js';
+import { getMonsterDefinitions, getSkillDefinitions } from './staticConfigLoader.js';
 
 // 活跃战斗缓存
 const activeBattles = new Map<string, BattleEngine>();
@@ -482,24 +482,12 @@ async function getCharacterBattleSkillData(characterId: number): Promise<SkillDa
   if (orderedSkillIds.length === 0) return [];
 
   const uniqIds = uniqueStringIds(orderedSkillIds);
-  const skillResult = await query(
-    `
-      SELECT
-        id, name,
-        cost_lingqi, cost_qixue, cooldown,
-        target_type, target_count,
-        damage_type, element,
-        effects, ai_priority, upgrades
-      FROM skill_def
-      WHERE enabled = true AND id = ANY($1)
-    `,
-    [uniqIds]
-  );
-
-  const byId = new Map<string, any>();
-  for (const row of skillResult.rows) {
-    const id = String((row as any)?.id ?? '').trim();
-    if (id) byId.set(id, row);
+  const idSet = new Set(uniqIds);
+  const byId = new Map<string, ReturnType<typeof getSkillDefinitions>[number]>();
+  for (const row of getSkillDefinitions()) {
+    if (row.enabled === false) continue;
+    if (!idSet.has(row.id)) continue;
+    byId.set(row.id, row);
   }
 
   const skills: SkillData[] = [];
@@ -508,12 +496,12 @@ async function getCharacterBattleSkillData(characterId: number): Promise<SkillDa
     if (!row) continue;
 
     const skillData = {
-      cost_lingqi: Math.max(0, Math.floor(Number(row.cost_lingqi) || 0)),
-      cost_qixue: Math.max(0, Math.floor(Number(row.cost_qixue) || 0)),
-      cooldown: Math.max(0, Math.floor(Number(row.cooldown) || 0)),
-      target_count: Math.max(1, Math.floor(Number(row.target_count) || 1)),
+      cost_lingqi: Math.max(0, Math.floor(Number(row.cost_lingqi ?? 0) || 0)),
+      cost_qixue: Math.max(0, Math.floor(Number(row.cost_qixue ?? 0) || 0)),
+      cooldown: Math.max(0, Math.floor(Number(row.cooldown ?? 0) || 0)),
+      target_count: Math.max(1, Math.floor(Number(row.target_count ?? 1) || 1)),
       effects: cloneEffects(Array.isArray(row.effects) ? row.effects : (row.effects ?? [])),
-      ai_priority: Math.max(0, Math.floor(Number(row.ai_priority) || 50)),
+      ai_priority: Math.max(0, Math.floor(Number(row.ai_priority ?? 50) || 50)),
     };
 
     if (slot.upgradeLevel > 0) {

@@ -13,6 +13,7 @@ import {
 import { createItem } from './itemService.js';
 import { getRoomsInMap } from './mapService.js';
 import { getRealmOrderIndex } from './shared/realmOrder.js';
+import { getTechniqueDefinitions } from './staticConfigLoader.js';
 
 type ChapterDto = {
   id: string;
@@ -301,12 +302,14 @@ const decorateSectionRewards = async (db: DbQueryLike, rewards: Record<string, u
   const techniques = asArray<string>((rewards as { techniques?: unknown }).techniques).map((x) => asString(x).trim()).filter(Boolean);
   const techniqueDefMap = new Map<string, { name: string; icon: string | null }>();
   if (techniques.length > 0) {
-    const res = await db.query(`SELECT id, name, icon FROM technique_def WHERE id = ANY($1::text[])`, [techniques]);
-    for (const row of res.rows ?? []) {
-      const r = row as { id?: unknown; name?: unknown; icon?: unknown };
-      const id = asString(r.id).trim();
-      if (!id) continue;
-      techniqueDefMap.set(id, { name: asString(r.name).trim(), icon: asString(r.icon).trim() || null });
+    const idSet = new Set(techniques);
+    for (const entry of getTechniqueDefinitions()) {
+      if (entry.enabled === false) continue;
+      if (!idSet.has(entry.id)) continue;
+      techniqueDefMap.set(entry.id, {
+        name: asString(entry.name).trim(),
+        icon: asString(entry.icon).trim() || null,
+      });
     }
   }
 
@@ -1037,12 +1040,9 @@ const grantSectionRewardsTx = async (
   for (const techId of techniques) {
     const t = asString(techId);
     if (!t) continue;
-    const techRes = await client.query(
-      `SELECT name, icon FROM technique_def WHERE id = $1 AND enabled = true`,
-      [t],
-    );
-    const techniqueName = asString(techRes.rows?.[0]?.name);
-    const techniqueIcon = asString(techRes.rows?.[0]?.icon);
+    const techniqueDef = getTechniqueDefinitions().find((entry) => entry.id === t && entry.enabled !== false) ?? null;
+    const techniqueName = asString(techniqueDef?.name);
+    const techniqueIcon = asString(techniqueDef?.icon);
     const existsRes = await client.query(
       `SELECT 1 FROM character_technique WHERE character_id = $1 AND technique_id = $2 LIMIT 1`,
       [characterId, t],

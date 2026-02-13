@@ -1,4 +1,5 @@
 import { query } from '../config/database.js';
+import { getSkillDefinitions, getTechniqueDefinitions } from './staticConfigLoader.js';
 
 export type TechniqueDefRow = {
   id: string;
@@ -84,36 +85,59 @@ const getItemMetaMap = async (itemIds: string[]): Promise<Map<string, { name: st
 };
 
 export const getEnabledTechniqueDefs = async (): Promise<TechniqueDefRow[]> => {
-  const result = await query(
-    `
-      SELECT
-        id, code, name, type, quality, quality_rank, max_layer, required_realm,
-        attribute_type, attribute_element,
-        tags, description, long_desc, icon, obtain_type, obtain_hint,
-        sort_weight, version, enabled
-      FROM technique_def
-      WHERE enabled = true
-      ORDER BY sort_weight DESC, quality_rank DESC, id ASC
-    `
-  );
-  return result.rows;
+  const rows = getTechniqueDefinitions()
+    .filter((entry) => entry.enabled !== false)
+    .map((entry) => ({
+      id: entry.id,
+      code: entry.code ?? null,
+      name: entry.name,
+      type: entry.type,
+      quality: entry.quality,
+      quality_rank: Number(entry.quality_rank ?? 1),
+      max_layer: Number(entry.max_layer ?? 1),
+      required_realm: entry.required_realm ?? '凡人',
+      attribute_type: entry.attribute_type ?? 'physical',
+      attribute_element: entry.attribute_element ?? 'none',
+      tags: Array.isArray(entry.tags) ? entry.tags : [],
+      description: entry.description ?? null,
+      long_desc: entry.long_desc ?? null,
+      icon: entry.icon ?? null,
+      obtain_type: entry.obtain_type ?? null,
+      obtain_hint: Array.isArray(entry.obtain_hint) ? entry.obtain_hint : [],
+      sort_weight: Number(entry.sort_weight ?? 0),
+      version: Number(entry.version ?? 1),
+      enabled: true,
+    } satisfies TechniqueDefRow))
+    .sort((left, right) => right.sort_weight - left.sort_weight || right.quality_rank - left.quality_rank || left.id.localeCompare(right.id));
+  return rows;
 };
 
 export const getTechniqueDefById = async (techniqueId: string): Promise<TechniqueDefRow | null> => {
-  const result = await query(
-    `
-      SELECT
-        id, code, name, type, quality, quality_rank, max_layer, required_realm,
-        attribute_type, attribute_element,
-        tags, description, long_desc, icon, obtain_type, obtain_hint,
-        sort_weight, version, enabled
-      FROM technique_def
-      WHERE id = $1
-      LIMIT 1
-    `,
-    [techniqueId]
-  );
-  return result.rows[0] ?? null;
+  const id = String(techniqueId || '').trim();
+  if (!id) return null;
+  const entry = getTechniqueDefinitions().find((row) => row.id === id && row.enabled !== false);
+  if (!entry) return null;
+  return {
+    id: entry.id,
+    code: entry.code ?? null,
+    name: entry.name,
+    type: entry.type,
+    quality: entry.quality,
+    quality_rank: Number(entry.quality_rank ?? 1),
+    max_layer: Number(entry.max_layer ?? 1),
+    required_realm: entry.required_realm ?? '凡人',
+    attribute_type: entry.attribute_type ?? 'physical',
+    attribute_element: entry.attribute_element ?? 'none',
+    tags: Array.isArray(entry.tags) ? entry.tags : [],
+    description: entry.description ?? null,
+    long_desc: entry.long_desc ?? null,
+    icon: entry.icon ?? null,
+    obtain_type: entry.obtain_type ?? null,
+    obtain_hint: Array.isArray(entry.obtain_hint) ? entry.obtain_hint : [],
+    sort_weight: Number(entry.sort_weight ?? 0),
+    version: Number(entry.version ?? 1),
+    enabled: true,
+  };
 };
 
 export const getTechniqueLayersByTechniqueId = async (techniqueId: string): Promise<TechniqueLayerRow[]> => {
@@ -146,21 +170,35 @@ export const getTechniqueLayersByTechniqueId = async (techniqueId: string): Prom
 };
 
 export const getSkillsByTechniqueId = async (techniqueId: string): Promise<SkillDefRow[]> => {
-  const result = await query(
-    `
-      SELECT
-        id, code, name, description, icon, source_type, source_id,
-        cost_lingqi, cost_qixue, cooldown, target_type, target_count,
-        damage_type, element,
-        effects, trigger_type, conditions, ai_priority, ai_conditions, upgrades,
-        sort_weight, version, enabled
-      FROM skill_def
-      WHERE source_type = 'technique' AND source_id = $1 AND enabled = true
-      ORDER BY sort_weight DESC, id ASC
-    `,
-    [techniqueId]
-  );
-  return result.rows;
+  return getSkillDefinitions()
+    .filter((entry) => entry.enabled !== false)
+    .filter((entry) => entry.source_type === 'technique' && entry.source_id === techniqueId)
+    .map((entry) => ({
+      id: entry.id,
+      code: entry.code ?? null,
+      name: entry.name,
+      description: entry.description ?? null,
+      icon: entry.icon ?? null,
+      source_type: entry.source_type,
+      source_id: entry.source_id ?? null,
+      cost_lingqi: Number(entry.cost_lingqi ?? 0),
+      cost_qixue: Number(entry.cost_qixue ?? 0),
+      cooldown: Number(entry.cooldown ?? 0),
+      target_type: entry.target_type,
+      target_count: Number(entry.target_count ?? 1),
+      damage_type: entry.damage_type ?? null,
+      element: entry.element ?? 'none',
+      effects: Array.isArray(entry.effects) ? entry.effects : [],
+      trigger_type: entry.trigger_type ?? 'active',
+      conditions: entry.conditions ?? null,
+      ai_priority: Number(entry.ai_priority ?? 50),
+      ai_conditions: entry.ai_conditions ?? null,
+      upgrades: entry.upgrades ?? [],
+      sort_weight: Number(entry.sort_weight ?? 0),
+      version: Number(entry.version ?? 1),
+      enabled: true,
+    } satisfies SkillDefRow))
+    .sort((left, right) => right.sort_weight - left.sort_weight || left.id.localeCompare(right.id));
 };
 
 export const getTechniqueDetailById = async (

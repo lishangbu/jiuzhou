@@ -20,6 +20,7 @@ import {
   applyCharacterResourceDeltaByCharacterId,
   getCharacterComputedByCharacterId,
 } from './characterComputedService.js';
+import { getTechniqueDefinitions } from './staticConfigLoader.js';
 
 // 物品定义接口
 export interface ItemDef {
@@ -504,16 +505,13 @@ export const useItem = async (
           return { success: false, message: '功法书配置异常，缺少功法ID' };
         }
 
-        const techniqueRes = await client.query(
-          'SELECT id, name, required_realm FROM technique_def WHERE id = $1 AND enabled = true LIMIT 1',
-          [techniqueId]
-        );
-        if (techniqueRes.rows.length === 0) {
+        const techniqueDef = getTechniqueDefinitions().find((entry) => entry.id === techniqueId && entry.enabled !== false) ?? null;
+        if (!techniqueDef) {
           await client.query('ROLLBACK');
           return { success: false, message: '目标功法不存在或未开放' };
         }
 
-        const requiredRealm = String(techniqueRes.rows[0].required_realm || '').trim();
+        const requiredRealm = String(techniqueDef.required_realm || '').trim();
         if (!isRealmSufficient(charRow.realm, requiredRealm, charRow.sub_realm)) {
           await client.query('ROLLBACK');
           return { success: false, message: `境界不足，需要达到${requiredRealm}` };
@@ -537,7 +535,7 @@ export const useItem = async (
         hasLearnTechnique = true;
         lootResults.push({
           type: 'technique',
-          name: String(techniqueRes.rows[0].name || techniqueId),
+          name: String(techniqueDef.name || techniqueId),
           amount: 1,
         });
         continue;

@@ -5,7 +5,7 @@ import path from 'path';
 import { updateSectionProgress } from './mainQuestService.js';
 import { updateAchievementProgress } from './achievementService.js';
 import { invalidateCharacterComputedCache } from './characterComputedService.js';
-import { getDungeonDefinitions } from './staticConfigLoader.js';
+import { getDungeonDefinitions, getTechniqueDefinitions } from './staticConfigLoader.js';
 
 export type RealmRequirementStatus = 'done' | 'todo' | 'unknown';
 
@@ -230,13 +230,14 @@ const getTechniqueDefMap = async (
   client: PoolClient,
   techniqueIds: string[]
 ): Promise<Record<string, { name: string }>> => {
+  void client;
   const ids = Array.from(new Set(techniqueIds.map((s) => String(s || '').trim()).filter((s) => !!s)));
   if (ids.length === 0) return {};
-  const res = await client.query(`SELECT id, name FROM technique_def WHERE id = ANY($1::text[])`, [ids]);
   const out: Record<string, { name: string }> = {};
-  for (const r of res.rows as any[]) {
-    if (!r?.id) continue;
-    out[String(r.id)] = { name: String(r.name || r.id) };
+  for (const entry of getTechniqueDefinitions()) {
+    if (entry.enabled === false) continue;
+    if (!ids.includes(entry.id)) continue;
+    out[String(entry.id)] = { name: String(entry.name || entry.id) };
   }
   return out;
 };
@@ -288,11 +289,15 @@ const getEquippedMainTechnique = async (
   client: PoolClient,
   characterId: number
 ): Promise<{ techniqueId: string; name: string; layer: number } | null> => {
+  const nameByTechniqueId = new Map(
+    getTechniqueDefinitions()
+      .filter((entry) => entry.enabled !== false)
+      .map((entry) => [entry.id, String(entry.name || entry.id)] as const),
+  );
   const res = await client.query(
     `
-      SELECT ct.technique_id, ct.current_layer, td.name
+      SELECT ct.technique_id, ct.current_layer
       FROM character_technique ct
-      JOIN technique_def td ON td.id = ct.technique_id
       WHERE ct.character_id = $1 AND ct.slot_type = 'main'
       LIMIT 1
     `,
@@ -301,7 +306,7 @@ const getEquippedMainTechnique = async (
   if (res.rows.length === 0) return null;
   const row = res.rows[0] as any;
   const techniqueId = String(row.technique_id || '').trim();
-  const name = String(row.name || techniqueId || '主功法');
+  const name = nameByTechniqueId.get(techniqueId) || techniqueId || '主功法';
   const layer = Number(row.current_layer ?? 0) || 0;
   if (!techniqueId) return null;
   return { techniqueId, name, layer };
@@ -311,11 +316,15 @@ const getEquippedSubTechniques = async (
   client: PoolClient,
   characterId: number
 ): Promise<Array<{ techniqueId: string; name: string; layer: number; slotIndex: number }>> => {
+  const nameByTechniqueId = new Map(
+    getTechniqueDefinitions()
+      .filter((entry) => entry.enabled !== false)
+      .map((entry) => [entry.id, String(entry.name || entry.id)] as const),
+  );
   const res = await client.query(
     `
-      SELECT ct.technique_id, ct.current_layer, ct.slot_index, td.name
+      SELECT ct.technique_id, ct.current_layer, ct.slot_index
       FROM character_technique ct
-      JOIN technique_def td ON td.id = ct.technique_id
       WHERE ct.character_id = $1 AND ct.slot_type = 'sub'
       ORDER BY ct.slot_index ASC
     `,
@@ -324,7 +333,7 @@ const getEquippedSubTechniques = async (
   return (res.rows as any[])
     .map((row) => {
       const techniqueId = String(row?.technique_id || '').trim();
-      const name = String(row?.name || techniqueId || '副功法');
+      const name = nameByTechniqueId.get(techniqueId) || techniqueId || '副功法';
       const layer = Number(row?.current_layer ?? 0) || 0;
       const slotIndex = Number(row?.slot_index ?? 0) || 0;
       if (!techniqueId || slotIndex <= 0) return null;
