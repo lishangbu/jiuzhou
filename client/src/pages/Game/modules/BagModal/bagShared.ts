@@ -452,7 +452,7 @@ export const buildAffixRerollCostPlan = (
   const lockCount = Math.max(0, Math.min(30, Math.floor(Number(lockCountRaw) || 0)));
   const lockMultiplier = Math.pow(2, lockCount);
   const multiplier = Math.pow(SILVER_GROWTH_BASE, lockCount);
-  const baseSilver = Math.max(1000, Math.floor(realmRank * realmRank * 400));
+  const baseSilver = Math.floor(realmRank * realmRank * 500);
   const silverCost = Math.max(0, Math.floor(baseSilver * multiplier));
   const spiritStoneCost =
     lockCount > 0 ? Math.max(0, Math.floor((lockMultiplier - 1) * realmRank * 2)) : 0;
