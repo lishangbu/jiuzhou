@@ -12,6 +12,7 @@ import { getGameServer } from '../game/GameServer.js';
 import {
   buildEquipmentDisplayBaseAttrs,
 } from '../services/equipmentGrowthRules.js';
+import { getCharacterComputedByCharacterId } from '../services/characterComputedService.js';
 
 const router = Router();
 
@@ -547,8 +548,7 @@ router.post('/equip', async (req: Request, res: Response) => {
       return res.json(result);
     }
 
-    const characterResult = await query('SELECT * FROM characters WHERE id = $1', [characterId]);
-    const character = characterResult.rows.length > 0 ? characterResult.rows[0] : null;
+    const character = await getCharacterComputedByCharacterId(characterId, { bypassStaticCache: true });
 
     try {
       const gameServer = getGameServer();
@@ -598,8 +598,7 @@ router.post('/unequip', async (req: Request, res: Response) => {
       return res.json(result);
     }
 
-    const characterResult = await query('SELECT * FROM characters WHERE id = $1', [characterId]);
-    const character = characterResult.rows.length > 0 ? characterResult.rows[0] : null;
+    const character = await getCharacterComputedByCharacterId(characterId, { bypassStaticCache: true });
 
     try {
       const gameServer = getGameServer();

@@ -1,14 +1,37 @@
 import { query } from '../config/database.js';
 import { REALM_ORDER } from './shared/realmOrder.js';
+import { getCharacterComputedBatchByCharacterIds } from './characterComputedService.js';
 
 const clampLimit = (limit?: number, fallback: number = 50): number => {
   const n = Number.isFinite(Number(limit)) ? Math.floor(Number(limit)) : fallback;
   return Math.max(1, Math.min(200, n));
 };
 
-const realmRankCaseSql = (): string => {
-  const parts = REALM_ORDER.map((r, idx) => `WHEN '${r.replaceAll("'", "''")}' THEN ${idx}`);
-  return `CASE realm ${parts.join(' ')} ELSE 0 END`;
+const REALM_RANK_MAP = new Map<string, number>(REALM_ORDER.map((r, idx) => [r, idx]));
+
+const getRealmRank = (realmRaw: unknown): number => {
+  const realm = String(realmRaw || '').trim();
+  return REALM_RANK_MAP.get(realm) ?? 0;
+};
+
+const computePower = (row: {
+  wugong?: number;
+  fagong?: number;
+  wufang?: number;
+  fafang?: number;
+  max_qixue?: number;
+  max_lingqi?: number;
+  sudu?: number;
+}): number => {
+  return (
+    (Number(row.wugong ?? 0) || 0)
+    + (Number(row.fagong ?? 0) || 0)
+    + (Number(row.wufang ?? 0) || 0)
+    + (Number(row.fafang ?? 0) || 0)
+    + (Number(row.max_qixue ?? 0) || 0)
+    + (Number(row.max_lingqi ?? 0) || 0)
+    + (Number(row.sudu ?? 0) || 0)
+  );
 };
 
 export type RealmRankRow = {
@@ -50,38 +73,47 @@ export const getRealmRanks = async (
 ): Promise<{ success: boolean; message: string; data?: RealmRankRow[] }> => {
   const l = clampLimit(limit, 50);
   try {
-    const realmRankSql = realmRankCaseSql();
     const res = await query(
       `
-        SELECT
-          ROW_NUMBER() OVER (ORDER BY ${realmRankSql} DESC, power DESC, id ASC)::int AS rank,
-          nickname AS name,
-          realm,
-          power::int
-        FROM (
-          SELECT
-            id,
-            nickname,
-            realm,
-            (
-              COALESCE(wugong, 0)
-              + COALESCE(fagong, 0)
-              + COALESCE(wufang, 0)
-              + COALESCE(fafang, 0)
-              + COALESCE(max_qixue, 0)
-              + COALESCE(max_lingqi, 0)
-              + COALESCE(sudu, 0)
-            )::bigint AS power
-          FROM characters
-          WHERE nickname IS NOT NULL AND nickname <> ''
-        ) t
-        ORDER BY rank
-        LIMIT $1
+        SELECT id, nickname, realm
+        FROM characters
+        WHERE nickname IS NOT NULL AND nickname <> ''
       `,
-      [l]
+      []
     );
 
-    return { success: true, message: 'ok', data: res.rows as any };
+    const ids = res.rows
+      .map((row) => Number((row as Record<string, unknown>).id))
+      .filter((id) => Number.isFinite(id) && id > 0);
+    const computedMap = await getCharacterComputedBatchByCharacterIds(ids);
+
+    const rows = res.rows.map((row) => {
+      const record = row as Record<string, unknown>;
+      const id = Number(record.id);
+      const computed = computedMap.get(id);
+      const power = computed ? Math.max(0, computePower(computed)) : 0;
+      return {
+        id,
+        name: String(record.nickname ?? ''),
+        realm: String(record.realm ?? '凡人'),
+        power,
+        realmRank: getRealmRank(record.realm),
+      };
+    });
+
+    rows.sort((a, b) => {
+      if (a.realmRank !== b.realmRank) return b.realmRank - a.realmRank;
+      if (a.power !== b.power) return b.power - a.power;
+      return a.id - b.id;
+    });
+
+    const data: RealmRankRow[] = rows.slice(0, l).map((row, index) => ({
+      rank: index + 1,
+      name: row.name,
+      realm: row.realm,
+      power: row.power,
+    }));
+    return { success: true, message: 'ok', data };
   } catch (error) {
     console.error('获取境界排行榜失败:', error);
     return { success: false, message: '获取境界排行榜失败' };

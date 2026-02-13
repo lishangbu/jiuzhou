@@ -114,6 +114,26 @@ function clampNumber(value: number, min: number, max: number): number {
   return value;
 }
 
+const MONSTER_RATIO_ATTR_KEYS: ReadonlySet<keyof BattleAttrs> = new Set([
+  'mingzhong',
+  'shanbi',
+  'zhaojia',
+  'baoji',
+  'baoshang',
+  'kangbao',
+  'zengshang',
+  'zhiliao',
+  'jianliao',
+  'xixue',
+  'lengque',
+  'kongzhi_kangxing',
+  'jin_kangxing',
+  'mu_kangxing',
+  'shui_kangxing',
+  'huo_kangxing',
+  'tu_kangxing',
+]);
+
 function applyMonsterEncounterScaling(state: BattleState, base: BattleAttrs, monster: MonsterData): BattleAttrs {
   const variance = clampNumber(toNumber(monster.attr_variance, 0.05), 0, 1);
   const minMul = toNumber(monster.attr_multiplier_min, 0.9);
@@ -156,8 +176,11 @@ function applyMonsterEncounterScaling(state: BattleState, base: BattleAttrs, mon
     const raw = Number((base as any)[k]) || 0;
     const wave = variance > 0 ? (getNextRandom(state) * 2 - 1) * variance : 0;
     const factor = (1 + wave) * overallMultiplier;
-    const scaled = Math.round(raw * factor);
-    (next as any)[k] = Math.max(0, scaled);
+    const scaled = raw * factor;
+    const normalized = MONSTER_RATIO_ATTR_KEYS.has(k)
+      ? Number(scaled.toFixed(6))
+      : Math.round(scaled);
+    (next as any)[k] = Math.max(0, normalized);
   }
 
   next.max_qixue = Math.max(1, next.max_qixue);
@@ -417,32 +440,32 @@ function extractMonsterAttrs(data: MonsterData): BattleAttrs {
   const attrs = data.base_attrs || {};
   
   return {
-    max_qixue: attrs.max_qixue || attrs.qixue || 100,
-    max_lingqi: attrs.max_lingqi || attrs.lingqi || 0,
-    wugong: attrs.wugong || 0,
-    fagong: attrs.fagong || 0,
-    wufang: attrs.wufang || 0,
-    fafang: attrs.fafang || 0,
-    sudu: attrs.sudu || 1,
-    mingzhong: attrs.mingzhong || 9000,
-    shanbi: attrs.shanbi || 0,
-    zhaojia: attrs.zhaojia || 0,
-    baoji: attrs.baoji || 0,
-    baoshang: attrs.baoshang ?? 0,
-    kangbao: attrs.kangbao || 0,
-    zengshang: attrs.zengshang || 0,
-    zhiliao: attrs.zhiliao || 0,
-    jianliao: attrs.jianliao || 0,
-    xixue: attrs.xixue || 0,
-    lengque: attrs.lengque || 0,
-    kongzhi_kangxing: attrs.kongzhi_kangxing || 0,
-    jin_kangxing: attrs.jin_kangxing || 0,
-    mu_kangxing: attrs.mu_kangxing || 0,
-    shui_kangxing: attrs.shui_kangxing || 0,
-    huo_kangxing: attrs.huo_kangxing || 0,
-    tu_kangxing: attrs.tu_kangxing || 0,
-    qixue_huifu: attrs.qixue_huifu || 0,
-    lingqi_huifu: attrs.lingqi_huifu || 0,
+    max_qixue: toNumber(attrs.max_qixue ?? attrs.qixue, 100),
+    max_lingqi: toNumber(attrs.max_lingqi ?? attrs.lingqi, 0),
+    wugong: toNumber(attrs.wugong, 0),
+    fagong: toNumber(attrs.fagong, 0),
+    wufang: toNumber(attrs.wufang, 0),
+    fafang: toNumber(attrs.fafang, 0),
+    sudu: toNumber(attrs.sudu, 1),
+    mingzhong: toNumber(attrs.mingzhong, 0.9),
+    shanbi: toNumber(attrs.shanbi, 0),
+    zhaojia: toNumber(attrs.zhaojia, 0),
+    baoji: toNumber(attrs.baoji, 0),
+    baoshang: toNumber(attrs.baoshang, 0),
+    kangbao: toNumber(attrs.kangbao, 0),
+    zengshang: toNumber(attrs.zengshang, 0),
+    zhiliao: toNumber(attrs.zhiliao, 0),
+    jianliao: toNumber(attrs.jianliao, 0),
+    xixue: toNumber(attrs.xixue, 0),
+    lengque: toNumber(attrs.lengque, 0),
+    kongzhi_kangxing: toNumber(attrs.kongzhi_kangxing, 0),
+    jin_kangxing: toNumber(attrs.jin_kangxing, 0),
+    mu_kangxing: toNumber(attrs.mu_kangxing, 0),
+    shui_kangxing: toNumber(attrs.shui_kangxing, 0),
+    huo_kangxing: toNumber(attrs.huo_kangxing, 0),
+    tu_kangxing: toNumber(attrs.tu_kangxing, 0),
+    qixue_huifu: toNumber(attrs.qixue_huifu, 0),
+    lingqi_huifu: toNumber(attrs.lingqi_huifu, 0),
     realm: data.realm || '凡人',
     element: data.element || 'none',
   };

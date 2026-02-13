@@ -11,6 +11,10 @@ import type { PoolClient } from 'pg';
 import { randomInt } from 'crypto';
 import { lockCharacterInventoryMutexTx } from './inventoryMutex.js';
 import {
+  getCharacterComputedByCharacterId,
+  invalidateCharacterComputedCache,
+} from './characterComputedService.js';
+import {
   ENHANCE_MAX_LEVEL,
   REFINE_MAX_LEVEL,
   buildEnhanceCostPlan,
@@ -183,37 +187,12 @@ const invertDelta = (delta: Map<CharacterAttrKey, number>) => {
 };
 
 const applyCharacterAttrDeltaTx = async (
-  client: PoolClient,
-  characterId: number,
-  delta: Map<CharacterAttrKey, number>
+  _client: PoolClient,
+  _characterId: number,
+  _delta: Map<CharacterAttrKey, number>
 ): Promise<void> => {
-  const entries = [...delta.entries()].filter(([, v]) => Number.isFinite(v) && v !== 0);
-  if (entries.length === 0) return;
-
-  const setSqlParts: string[] = [];
-  const params: unknown[] = [];
-
-  for (const [key, value] of entries) {
-    params.push(value);
-    setSqlParts.push(`${key} = GREATEST(0, ${key} + $${params.length})`);
-  }
-
-  params.push(characterId);
-  setSqlParts.push(`updated_at = NOW()`);
-
-  await client.query(
-    `UPDATE characters SET ${setSqlParts.join(', ')} WHERE id = $${params.length}`,
-    params
-  );
-
-  await client.query(
-    `UPDATE characters
-     SET qixue = LEAST(qixue, max_qixue),
-         lingqi = LEAST(lingqi, max_lingqi),
-         updated_at = NOW()
-     WHERE id = $1`,
-    [characterId]
-  );
+  // 角色属性改为运行时计算后，不再把装备/词条差分写入 characters 表。
+  return;
 };
 
 const getEquipmentAttrDeltaByInstanceIdTx = async (
@@ -434,14 +413,6 @@ const addCharacterCurrenciesTx = async (
     [characterId, silverGain, spiritGain]
   );
   return { success: true, message: '增加成功' };
-};
-
-const getCharacterSnapshotTx = async (client: PoolClient, characterId: number, userId: number): Promise<unknown | null> => {
-  const characterResult = await client.query('SELECT * FROM characters WHERE id = $1 AND user_id = $2 LIMIT 1', [
-    characterId,
-    userId,
-  ]);
-  return characterResult.rows.length > 0 ? characterResult.rows[0] : null;
 };
 
 const diffEquipmentAttrIfEquippedTx = async (
@@ -1946,6 +1917,7 @@ export const equipItem = async (
     await applyCharacterAttrDeltaTx(client, characterId, setBonusDelta);
 
     await client.query('COMMIT');
+    await invalidateCharacterComputedCache(characterId);
     return { success: true, message: '穿戴成功', equippedSlot: item.equip_slot, swappedOutItemId };
   } catch (error) {
     await client.query('ROLLBACK');
@@ -2037,6 +2009,7 @@ export const unequipItem = async (
     await applyCharacterAttrDeltaTx(client, characterId, setBonusDelta);
 
     await client.query('COMMIT');
+    await invalidateCharacterComputedCache(characterId);
     return { success: true, message: '卸下成功', movedTo: { location: targetLocation, slot } };
   } catch (error) {
     await client.query('ROLLBACK');
@@ -2168,9 +2141,9 @@ export const enhanceEquipment = async (
       return { success: false, message: applyDiffRes.message };
     }
 
-    const character = await getCharacterSnapshotTx(client, characterId, userId);
-
     await client.query('COMMIT');
+    await invalidateCharacterComputedCache(characterId);
+    const character = await getCharacterComputedByCharacterId(characterId, { bypassStaticCache: true });
     return {
       success,
       message: success ? '强化成功' : '强化失败',
@@ -2292,9 +2265,9 @@ export const refineEquipment = async (
       return { success: false, message: applyDiffRes.message };
     }
 
-    const character = await getCharacterSnapshotTx(client, characterId, userId);
-
     await client.query('COMMIT');
+    await invalidateCharacterComputedCache(characterId);
+    const character = await getCharacterComputedByCharacterId(characterId, { bypassStaticCache: true });
     return {
       success,
       message: success ? '精炼成功' : '精炼失败',
@@ -2444,9 +2417,9 @@ export const rerollEquipmentAffixes = async (
       return { success: false, message: applyDiffRes.message };
     }
 
-    const character = await getCharacterSnapshotTx(client, characterId, userId);
-
     await client.query('COMMIT');
+    await invalidateCharacterComputedCache(characterId);
+    const character = await getCharacterComputedByCharacterId(characterId, { bypassStaticCache: true });
     return {
       success: true,
       message: '洗炼成功',
@@ -2595,9 +2568,9 @@ export const socketEquipment = async (
       return { success: false, message: applyDiffRes.message };
     }
 
-    const character = await getCharacterSnapshotTx(client, characterId, userId);
-
     await client.query('COMMIT');
+    await invalidateCharacterComputedCache(characterId);
+    const character = await getCharacterComputedByCharacterId(characterId, { bypassStaticCache: true });
     return {
       success: true,
       message: replacedGem ? '替换镶嵌成功' : '镶嵌成功',

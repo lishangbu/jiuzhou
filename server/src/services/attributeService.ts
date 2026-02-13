@@ -2,6 +2,7 @@
  * 属性加点服务
  */
 import { query } from '../config/database.js';
+import { invalidateCharacterComputedCacheByUserId } from './characterComputedService.js';
 
 type AttributeKey = 'jing' | 'qi' | 'shen';
 
@@ -60,6 +61,7 @@ export const addAttributePoint = async (
     if (result.rows.length === 0) {
       return { success: false, message: '加点失败' };
     }
+    await invalidateCharacterComputedCacheByUserId(userId);
 
     return {
       success: true,
@@ -121,6 +123,7 @@ export const removeAttributePoint = async (
     if (result.rows.length === 0) {
       return { success: false, message: '减点失败' };
     }
+    await invalidateCharacterComputedCacheByUserId(userId);
 
     return {
       success: true,
@@ -182,6 +185,7 @@ export const batchAddPoints = async (
     if (result.rows.length === 0) {
       return { success: false, message: '加点失败' };
     }
+    await invalidateCharacterComputedCacheByUserId(userId);
 
     return {
       success: true,
@@ -224,6 +228,7 @@ export const resetAttributePoints = async (
     `;
 
     await query(resetSQL, [totalPoints, userId]);
+    await invalidateCharacterComputedCacheByUserId(userId);
 
     return {
       success: true,
@@ -235,4 +240,3 @@ export const resetAttributePoints = async (
     return { success: false, message: '服务器错误' };
   }
 };
-

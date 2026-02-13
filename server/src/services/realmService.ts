@@ -4,6 +4,7 @@ import { readFile, stat } from 'fs/promises';
 import path from 'path';
 import { updateSectionProgress } from './mainQuestService.js';
 import { updateAchievementProgress } from './achievementService.js';
+import { invalidateCharacterComputedCache } from './characterComputedService.js';
 
 export type RealmRequirementStatus = 'done' | 'todo' | 'unknown';
 
@@ -142,13 +143,6 @@ type RealmBreakthroughConfigFile = {
 
 let cachedConfig: RealmBreakthroughConfigFile | null = null;
 let cachedConfigPath: string | null = null;
-
-const applyPct = (base: number, pct: number): number => {
-  const b = Number.isFinite(base) ? Math.floor(base) : 0;
-  const p = Number.isFinite(pct) ? pct : 0;
-  if (b <= 0 || p === 0) return b;
-  return Math.max(0, Math.floor(b * (1 + p)));
-};
 
 const pickFirstExistingPath = async (candidates: string[]): Promise<string | null> => {
   for (const p of candidates) {
@@ -872,10 +866,7 @@ export const breakthroughToNextRealm = async (userId: number): Promise<RealmBrea
     const result = await withClient<RealmBreakthroughResult>(async (client) => {
       const charRes = await client.query(
         `SELECT 
-           id, realm, sub_realm, exp, spirit_stones, attribute_points,
-           qixue, max_qixue, lingqi, max_lingqi,
-           wugong, fagong, wufang, fafang,
-           kongzhi_kangxing
+           id, realm, sub_realm, exp, spirit_stones, attribute_points
          FROM characters
          WHERE user_id = $1
          FOR UPDATE`,
@@ -892,15 +883,6 @@ export const breakthroughToNextRealm = async (userId: number): Promise<RealmBrea
       const exp = Number(row.exp ?? 0) || 0;
       const spiritStones = Number(row.spirit_stones ?? 0) || 0;
       const attributePoints = Number(row.attribute_points ?? 0) || 0;
-      const qixue = Number(row.qixue ?? 0) || 0;
-      const maxQixue = Number(row.max_qixue ?? 0) || 0;
-      const lingqi = Number(row.lingqi ?? 0) || 0;
-      const maxLingqi = Number(row.max_lingqi ?? 0) || 0;
-      const wugong = Number(row.wugong ?? 0) || 0;
-      const fagong = Number(row.fagong ?? 0) || 0;
-      const wufang = Number(row.wufang ?? 0) || 0;
-      const fafang = Number(row.fafang ?? 0) || 0;
-      const kongzhiKangxing = Number(row.kongzhi_kangxing ?? 0) || 0;
 
       const nextRealm = getNextRealmName(cfg.realmOrder, fromRealm);
       if (!nextRealm) return { success: false, message: '已达最高境界' };
@@ -944,22 +926,11 @@ export const breakthroughToNextRealm = async (userId: number): Promise<RealmBrea
       }
 
       const rewards = bt.rewards || {};
-      const pct = rewards.pct || {};
-      const addPercent = rewards.addPercent || {};
       const apAdd = Math.max(0, Number(rewards.attributePoints ?? 0) || 0);
 
       const newExp = exp - costsBuilt.exp;
       const newSpiritStones = spiritStones - costsBuilt.spiritStones;
       const newAttributePoints = attributePoints + apAdd;
-
-      const newMaxQixue = applyPct(maxQixue, Number((pct as any).max_qixue ?? 0) || 0);
-      const newMaxLingqi = applyPct(maxLingqi, Number((pct as any).max_lingqi ?? 0) || 0);
-      const newWugong = applyPct(wugong, Number((pct as any).wugong ?? 0) || 0);
-      const newFagong = applyPct(fagong, Number((pct as any).fagong ?? 0) || 0);
-      const newWufang = applyPct(wufang, Number((pct as any).wufang ?? 0) || 0);
-      const newFafang = applyPct(fafang, Number((pct as any).fafang ?? 0) || 0);
-      const kkAdd = Number((addPercent as any).kongzhi_kangxing ?? 0) || 0;
-      const newKongzhiKangxing = Math.max(0, kongzhiKangxing + kkAdd);
 
       await client.query(
         `
@@ -969,32 +940,14 @@ export const breakthroughToNextRealm = async (userId: number): Promise<RealmBrea
               exp = $2,
               spirit_stones = $3,
               attribute_points = $4,
-              qixue = $5,
-              max_qixue = $6,
-              lingqi = $7,
-              max_lingqi = $8,
-              wugong = $9,
-              fagong = $10,
-              wufang = $11,
-              fafang = $12,
-              kongzhi_kangxing = $13,
               updated_at = NOW()
-          WHERE id = $14
+          WHERE id = $5
         `,
         [
           bt.to,
           newExp,
           newSpiritStones,
           newAttributePoints,
-          Math.min(qixue, newMaxQixue),
-          newMaxQixue,
-          Math.min(lingqi, newMaxLingqi),
-          newMaxLingqi,
-          newWugong,
-          newFagong,
-          newWufang,
-          newFafang,
-          newKongzhiKangxing,
           characterId,
         ]
       );
@@ -1028,6 +981,14 @@ export const breakthroughToNextRealm = async (userId: number): Promise<RealmBrea
         },
       };
     });
+
+    if (result.success) {
+      const charRes = await query('SELECT id FROM characters WHERE user_id = $1 LIMIT 1', [userId]);
+      const characterId = Number(charRes.rows?.[0]?.id);
+      if (Number.isFinite(characterId) && characterId > 0) {
+        await invalidateCharacterComputedCache(characterId);
+      }
+    }
 
     return result;
   } catch (error) {

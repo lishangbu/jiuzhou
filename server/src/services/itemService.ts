@@ -16,6 +16,10 @@ import {
 import { lockCharacterInventoryMutexTx } from './inventoryMutex.js';
 import { buildEquipmentDisplayBaseAttrs } from './equipmentGrowthRules.js';
 import { getRealmRankZeroBased } from './shared/realmOrder.js';
+import {
+  applyCharacterResourceDeltaByCharacterId,
+  getCharacterComputedByCharacterId,
+} from './characterComputedService.js';
 
 // 物品定义接口
 export interface ItemDef {
@@ -238,7 +242,7 @@ export const useItem = async (
     await lockCharacterInventoryMutexTx(client, characterId);
 
     const charResult = await client.query(
-      'SELECT id, realm, sub_realm, qixue, max_qixue, lingqi, max_lingqi FROM characters WHERE id = $1 FOR UPDATE',
+      'SELECT id, realm, sub_realm FROM characters WHERE id = $1 FOR UPDATE',
       [characterId]
     );
     if (charResult.rows.length === 0) {
@@ -246,6 +250,11 @@ export const useItem = async (
       return { success: false, message: '角色不存在' };
     }
     const charRow = charResult.rows[0];
+    const computedBefore = await getCharacterComputedByCharacterId(characterId);
+    if (!computedBefore) {
+      await client.query('ROLLBACK');
+      return { success: false, message: '角色数据异常' };
+    }
 
     // 获取物品实例
     const instanceResult = await client.query(`
@@ -580,18 +589,9 @@ export const useItem = async (
       }
     }
 
-    const nextQixue = Math.min(
-      Number(charRow.max_qixue) || 0,
-      Math.max(0, (Number(charRow.qixue) || 0) + deltaQixue)
-    );
-    const nextLingqi = Math.min(
-      Number(charRow.max_lingqi) || 0,
-      Math.max(0, (Number(charRow.lingqi) || 0) + deltaLingqi)
-    );
-
-    const setClauses = ['qixue = $2', 'lingqi = $3', 'updated_at = NOW()'];
-    const setValues: any[] = [characterId, nextQixue, nextLingqi];
-    let paramIdx = 4;
+    const setClauses = ['updated_at = NOW()'];
+    const setValues: any[] = [characterId];
+    let paramIdx = 2;
 
     if (deltaExp !== 0) {
       setClauses.push(`exp = exp + $${paramIdx}`);
@@ -610,7 +610,7 @@ export const useItem = async (
     }
 
     const updatedCharResult = await client.query(
-      `UPDATE characters SET ${setClauses.join(', ')} WHERE id = $1 RETURNING id, qixue, max_qixue, lingqi, max_lingqi, exp, silver, spirit_stones`,
+      `UPDATE characters SET ${setClauses.join(', ')} WHERE id = $1 RETURNING id`,
       setValues
     );
 
@@ -668,8 +668,16 @@ export const useItem = async (
     }
 
     await client.query('COMMIT');
+    if (deltaQixue !== 0 || deltaLingqi !== 0) {
+      await applyCharacterResourceDeltaByCharacterId(characterId, {
+        qixue: deltaQixue,
+        lingqi: deltaLingqi,
+      });
+    }
 
-    const updatedChar = updatedCharResult.rows.length > 0 ? updatedCharResult.rows[0] : undefined;
+    const updatedChar = updatedCharResult.rows.length > 0
+      ? await getCharacterComputedByCharacterId(characterId, { bypassStaticCache: true })
+      : undefined;
     return {
       success: true,
       message: '使用成功',

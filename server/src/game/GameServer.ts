@@ -8,8 +8,11 @@ import type { CharacterAttributes } from './GameState.js';
 import { dbToCharacterAttributes } from './GameState.js';
 import { query } from '../config/database.js';
 import { verifyToken, verifySession } from '../services/authService.js';
-import { calculateTechniquePassives } from '../services/characterTechniqueService.js';
 import { applyStaminaRecoveryByUserId } from '../services/staminaService.js';
+import {
+  getCharacterComputedByUserId,
+  invalidateCharacterComputedCacheByUserId,
+} from '../services/characterComputedService.js';
 
 // 玩家会话
 interface PlayerSession {
@@ -338,67 +341,9 @@ class GameServer {
   private async loadCharacter(userId: number): Promise<CharacterAttributes | null> {
     try {
       await applyStaminaRecoveryByUserId(userId);
-      const result = await query('SELECT * FROM characters WHERE user_id = $1', [userId]);
-      if (result.rows.length === 0) return null;
-      const row = result.rows[0] as any;
-      const characterId = Number(row.id);
-      const character = dbToCharacterAttributes(row);
-      if (!Number.isFinite(characterId) || characterId <= 0) {
-        return character;
-      }
-      const passiveRes = await calculateTechniquePassives(characterId);
-      if (!passiveRes.success || !passiveRes.data) {
-        return character;
-      }
-      const passives = passiveRes.data;
-      const keys = Object.keys(passives);
-      if (keys.length === 0) {
-        return character;
-      }
-      const merged: CharacterAttributes = { ...character };
-      const percentAdditiveKeys = new Set([
-        'mingzhong',
-        'shanbi',
-        'zhaojia',
-        'baoji',
-        'baoshang',
-        'kangbao',
-        'zengshang',
-        'zhiliao',
-        'jianliao',
-        'xixue',
-        'lengque',
-        'shuxing_shuzhi',
-        'kongzhi_kangxing',
-        'jin_kangxing',
-        'mu_kangxing',
-        'shui_kangxing',
-        'huo_kangxing',
-        'tu_kangxing',
-      ]);
-      const percentMultiplyKeys = new Set(['wugong', 'fagong', 'wufang', 'fafang', 'max_qixue']);
-      const toCamel = (k: string) => k.replace(/_([a-z])/g, (_, c) => String(c).toUpperCase());
-      const mergedAny = merged as any;
-      for (const key of keys) {
-        const value = passives[key];
-        if (typeof value !== 'number') continue;
-        const camelKey = toCamel(key);
-        const baseValue = typeof mergedAny[camelKey] === 'number' ? (mergedAny[camelKey] as number) : undefined;
-        if (baseValue == null) continue;
-
-        if (percentAdditiveKeys.has(key)) {
-          mergedAny[camelKey] = baseValue + value;
-          continue;
-        }
-
-        if (percentMultiplyKeys.has(key)) {
-          mergedAny[camelKey] = Math.floor(baseValue * (1 + value));
-          continue;
-        }
-
-        mergedAny[camelKey] = baseValue + value;
-      }
-      return merged;
+      const computed = await getCharacterComputedByUserId(userId);
+      if (!computed) return null;
+      return dbToCharacterAttributes(computed as unknown as Record<string, unknown>);
     } catch (error) {
       console.error('加载角色失败:', error);
       return null;
@@ -450,6 +395,9 @@ class GameServer {
         RETURNING *
       `;
       const result = await query(updateSQL, [amount, userId]);
+      if (result.rows.length > 0) {
+        await invalidateCharacterComputedCacheByUserId(userId);
+      }
       return result.rows.length > 0;
     } catch (error) {
       console.error('保存加点失败:', error);

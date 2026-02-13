@@ -7,6 +7,7 @@ import {
   normalizeAutoDisassembleSetting,
   type AutoDisassembleRuleSet,
 } from './autoDisassembleRules.js';
+import { getCharacterComputedByUserId } from './characterComputedService.js';
 
 export interface Character {
   id: number;
@@ -80,14 +81,13 @@ export interface CharacterResult {
 export const checkCharacter = async (userId: number): Promise<CharacterResult> => {
   try {
     await applyStaminaRecoveryByUserId(userId);
-    const result = await query('SELECT * FROM characters WHERE user_id = $1', [userId]);
-    
-    if (result.rows.length > 0) {
+    const character = await getCharacterComputedByUserId(userId);
+    if (character) {
       return {
         success: true,
         message: '已有角色',
         data: {
-          character: result.rows[0],
+          character: character as unknown as Character,
           hasCharacter: true,
         },
       };
@@ -133,26 +133,14 @@ export const createCharacter = async (
         spirit_stones, silver, realm, exp,
         attribute_points, jing, qi, shen,
         attribute_type, attribute_element,
-        qixue, max_qixue, lingqi, max_lingqi,
-        wugong, fagong, wufang, fafang,
-        mingzhong, shanbi, zhaojia, baoji, baoshang,
-        kangbao, zengshang, zhiliao, jianliao, xixue, lengque,
-        shuxing_shuzhi, kongzhi_kangxing,
-        jin_kangxing, mu_kangxing, shui_kangxing, huo_kangxing, tu_kangxing,
-        qixue_huifu, lingqi_huifu, sudu, fuyuan
+        current_map_id, current_room_id
       ) VALUES (
         $1, $2, $3, '散修',
         0, 0, '凡人', 0,
         0, 0, 0, 0,
         'physical', 'none',
-        100, 100, 0, 0,
-        5, 0, 2, 0,
-        9000, 500, 500, 1000, 15000,
-        0, 0, 0, 0, 0, 0,
-        0, 0,
-        0, 0, 0, 0, 0,
-        0, 0, 1, 1
-      ) RETURNING *
+        'map-qingyun-village', 'room-village-center'
+      ) RETURNING id
     `;
     
     const result = await query(insertSQL, [userId, nickname, gender]);
@@ -167,11 +155,16 @@ export const createCharacter = async (
       console.error('初始化角色成就失败:', error);
     }
 
+    const computedCharacter = await getCharacterComputedByUserId(userId);
+    if (!computedCharacter) {
+      return { success: false, message: '角色创建成功，但读取角色数据失败' };
+    }
+
     return {
       success: true,
       message: '角色创建成功',
       data: {
-        character: result.rows[0],
+        character: computedCharacter as unknown as Character,
         hasCharacter: true,
       },
     };
@@ -185,9 +178,8 @@ export const createCharacter = async (
 export const getCharacter = async (userId: number): Promise<CharacterResult> => {
   try {
     await applyStaminaRecoveryByUserId(userId);
-    const result = await query('SELECT * FROM characters WHERE user_id = $1', [userId]);
-    
-    if (result.rows.length === 0) {
+    const character = await getCharacterComputedByUserId(userId);
+    if (!character) {
       return { success: false, message: '角色不存在' };
     }
     
@@ -195,7 +187,7 @@ export const getCharacter = async (userId: number): Promise<CharacterResult> => 
       success: true,
       message: '获取成功',
       data: {
-        character: result.rows[0],
+        character: character as unknown as Character,
         hasCharacter: true,
       },
     };

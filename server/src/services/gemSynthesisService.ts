@@ -3,6 +3,7 @@ import { pool, query } from '../config/database.js';
 import { randomInt } from 'crypto';
 import { addItemToInventoryTx } from './inventoryService.js';
 import { lockCharacterInventoryMutexTx } from './inventoryMutex.js';
+import { getCharacterComputedByCharacterId } from './characterComputedService.js';
 
 export type GemType = 'attack' | 'defense' | 'survival' | 'all';
 type GemTypeToken = 'atk' | 'def' | 'sur' | 'all';
@@ -299,11 +300,6 @@ const getCharacterWalletTx = async (
     silver: clampInt(row.silver, 0, Number.MAX_SAFE_INTEGER),
     spiritStones: clampInt(row.spirit_stones, 0, Number.MAX_SAFE_INTEGER),
   };
-};
-
-const getCharacterSnapshotTx = async (client: PoolClient, characterId: number): Promise<unknown> => {
-  const result = await client.query('SELECT * FROM characters WHERE id = $1 LIMIT 1', [characterId]);
-  return result.rows[0] ?? null;
 };
 
 const getGemRecipeRows = async (
@@ -669,9 +665,8 @@ export const synthesizeGem = async (
       };
     }
 
-    const character = await getCharacterSnapshotTx(client, characterId);
-
     await client.query('COMMIT');
+    const character = await getCharacterComputedByCharacterId(characterId, { bypassStaticCache: true });
     const message =
       successCount <= 0
         ? '宝石合成失败，材料已损失'
@@ -885,9 +880,8 @@ export const synthesizeGemBatch = async (
 
     await updateCharacterWalletTx(client, characterId, wallet);
 
-    const character = await getCharacterSnapshotTx(client, characterId);
-
     await client.query('COMMIT');
+    const character = await getCharacterComputedByCharacterId(characterId, { bypassStaticCache: true });
     const totalSuccess = steps.reduce((sum, step) => sum + step.successCount, 0);
     const totalFail = steps.reduce((sum, step) => sum + step.failCount, 0);
     const message =

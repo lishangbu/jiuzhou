@@ -7,6 +7,7 @@ import { updateSectionProgress } from './mainQuestService.js';
 import { updateAchievementProgress } from './achievementService.js';
 import { isCharacterInBattle } from './battleService.js';
 import { getRealmRankZeroBased } from './shared/realmOrder.js';
+import { invalidateCharacterComputedCache } from './characterComputedService.js';
 
 // ============================================
 // 类型定义
@@ -217,6 +218,7 @@ export const learnTechnique = async (
     `, [characterId, techniqueId, obtainedFrom, obtainedRefId || null]);
     
     await client.query('COMMIT');
+    await invalidateCharacterComputedCache(characterId);
     return { 
       success: true, 
       message: `成功学习${techResult.rows[0].name}`, 
@@ -439,6 +441,7 @@ export const upgradeTechnique = async (
     );
     
     await client.query('COMMIT');
+    await invalidateCharacterComputedCache(characterId);
 
     try {
       await updateSectionProgress(characterId, { type: 'upgrade_technique', techniqueId, layer: nextLayer });
@@ -573,6 +576,7 @@ export const equipTechnique = async (
     }
     
     await client.query('COMMIT');
+    await invalidateCharacterComputedCache(characterId);
     return { success: true, message: '装备成功' };
     
   } catch (error) {
@@ -622,6 +626,7 @@ export const unequipTechnique = async (
     }
     
     await client.query('COMMIT');
+    await invalidateCharacterComputedCache(characterId);
     return { success: true, message: '卸下成功' };
     
   } catch (error) {

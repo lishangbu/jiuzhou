@@ -25,9 +25,16 @@ import {
 import { getRoomInMap } from './mapService.js';
 import { getGameServer } from '../game/GameServer.js';
 import { recordKillMonsterEvent } from './taskService.js';
-import { calculateTechniquePassives, getBattleSkills } from './characterTechniqueService.js';
+import { getBattleSkills } from './characterTechniqueService.js';
 import { getArenaStatus } from './arenaService.js';
 import type { PoolClient } from 'pg';
+import {
+  applyCharacterResourceDeltaByCharacterId,
+  getCharacterComputedByCharacterId,
+  getCharacterComputedByUserId,
+  recoverBattleStartResourcesByUserIds,
+  setCharacterResourcesByCharacterId,
+} from './characterComputedService.js';
 
 // 活跃战斗缓存
 const activeBattles = new Map<string, BattleEngine>();
@@ -229,78 +236,8 @@ function withBattleStartResources<T extends { qixue?: number; max_qixue?: number
 type QueryExecutor = Pick<PoolClient, 'query'>;
 
 async function restoreBattleStartResourcesInDb(userIds: number[], queryExecutor?: QueryExecutor): Promise<void> {
-  const uniqUserIds = [...new Set(userIds)].filter((id) => Number.isFinite(id) && id > 0);
-  if (uniqUserIds.length === 0) return;
-  const executeQuery = queryExecutor ? queryExecutor.query.bind(queryExecutor) : query;
-  await executeQuery(
-    `
-      UPDATE characters
-      SET
-        qixue = max_qixue,
-        lingqi = GREATEST(COALESCE(lingqi, 0), FLOOR(COALESCE(max_lingqi, 0) * 0.5)),
-        updated_at = CURRENT_TIMESTAMP
-      WHERE user_id = ANY($1)
-    `,
-    [uniqUserIds]
-  );
-}
-
-async function applyTechniquePassivesToCharacterData<T extends Record<string, any>>(
-  characterId: number,
-  base: T
-): Promise<T> {
-  if (!Number.isFinite(characterId) || characterId <= 0) return base;
-  try {
-    const passiveRes = await calculateTechniquePassives(characterId);
-    if (!passiveRes.success || !passiveRes.data) return base;
-    const passives = passiveRes.data;
-    const keys = Object.keys(passives);
-    if (keys.length === 0) return base;
-
-    const merged: any = { ...base };
-    const percentAdditiveKeys = new Set([
-      'mingzhong',
-      'shanbi',
-      'zhaojia',
-      'baoji',
-      'baoshang',
-      'kangbao',
-      'zengshang',
-      'zhiliao',
-      'jianliao',
-      'xixue',
-      'lengque',
-      'kongzhi_kangxing',
-      'jin_kangxing',
-      'mu_kangxing',
-      'shui_kangxing',
-      'huo_kangxing',
-      'tu_kangxing',
-      'shuxing_shuzhi',
-    ]);
-    const percentMultiplyKeys = new Set(['wugong', 'fagong', 'wufang', 'fafang', 'max_qixue']);
-
-    for (const key of keys) {
-      const value = passives[key];
-      if (typeof value !== 'number') continue;
-      if (!(key in merged)) continue;
-      const baseValue = typeof merged[key] === 'number' ? (merged[key] as number) : undefined;
-      if (baseValue == null) continue;
-      if (percentAdditiveKeys.has(key)) {
-        merged[key] = baseValue + value;
-        continue;
-      }
-      if (percentMultiplyKeys.has(key)) {
-        merged[key] = Math.floor(baseValue * (1 + value));
-        continue;
-      }
-      merged[key] = baseValue + value;
-    }
-
-    return merged as T;
-  } catch {
-    return base;
-  }
+  void queryExecutor;
+  await recoverBattleStartResourcesByUserIds(userIds);
 }
 
 function toRecord(value: unknown): Record<string, unknown> {
@@ -784,25 +721,32 @@ async function getTeamMembersData(userId: number, characterId: number): Promise<
 
   // 获取队伍中其他成员的数据（排除自己）
   const teamMembersResult = await query(
-    `SELECT c.* FROM team_members tm
-     JOIN characters c ON tm.character_id = c.id
-     WHERE tm.team_id = $1 AND c.id != $2
+    `SELECT tm.character_id FROM team_members tm
+     WHERE tm.team_id = $1 AND tm.character_id != $2
      ORDER BY tm.role DESC, tm.joined_at ASC`,
     [teamId, characterId]
   );
 
   const members = await Promise.all(
     teamMembersResult.rows.map(async (row) => {
-      const base = row as CharacterData;
-      const memberCharacterId = Number((row as any)?.id);
-      const withPassives = await applyTechniquePassivesToCharacterData(memberCharacterId, base);
-      const data = await attachSetBonusEffectsToCharacterData(memberCharacterId, withPassives);
+      const memberCharacterId = Number((row as any)?.character_id);
+      if (!Number.isFinite(memberCharacterId) || memberCharacterId <= 0) {
+        return null;
+      }
+      const base = await getCharacterComputedByCharacterId(memberCharacterId);
+      if (!base) return null;
+      const data = await attachSetBonusEffectsToCharacterData(memberCharacterId, base as CharacterData);
       const skills = await getCharacterBattleSkillData(memberCharacterId);
       return { data, skills };
     }),
   );
 
-  return { isInTeam: true, isLeader, teamId, members };
+  return {
+    isInTeam: true,
+    isLeader,
+    teamId,
+    members: members.filter((x): x is { data: CharacterData; skills: SkillData[] } => x !== null),
+  };
 }
 
 /**
@@ -813,23 +757,12 @@ export async function startPVEBattle(
   monsterIds: string[]
 ): Promise<BattleResult> {
   try {
-    const charResult = await query(
-      'SELECT * FROM characters WHERE user_id = $1',
-      [userId]
-    );
-    
-    if (charResult.rows.length === 0) {
+    const characterBase = await getCharacterComputedByUserId(userId);
+    if (!characterBase) {
       return { success: false, message: '角色不存在' };
     }
-    
-    const charRow = charResult.rows[0] as any;
-    const characterId = Number(charRow.id);
-    const characterBase = charRow as CharacterData & {
-      current_map_id?: string;
-      current_room_id?: string;
-    };
-    const characterWithPassives = await applyTechniquePassivesToCharacterData(characterId, characterBase);
-    const characterWithSetBonus = await attachSetBonusEffectsToCharacterData(characterId, characterWithPassives);
+    const characterId = Number(characterBase.id);
+    const characterWithSetBonus = await attachSetBonusEffectsToCharacterData(characterId, characterBase as CharacterData);
     
     if (characterWithSetBonus.qixue <= 0) {
       return { success: false, message: '气血不足，无法战斗' };
@@ -845,8 +778,8 @@ export async function startPVEBattle(
       return { success: false, message: '请指定战斗目标' };
     }
 
-    const mapId = character.current_map_id || '';
-    const roomId = character.current_room_id || '';
+    const mapId = characterBase.current_map_id || '';
+    const roomId = characterBase.current_room_id || '';
     if (!mapId || !roomId) {
       return { success: false, message: '角色位置异常，无法战斗' };
     }
@@ -1071,15 +1004,13 @@ export async function startDungeonPVEBattle(
   options?: StartDungeonPVEBattleOptions
 ): Promise<BattleResult> {
   try {
-    const charResult = await query('SELECT * FROM characters WHERE user_id = $1', [userId]);
-    if (charResult.rows.length === 0) {
+    const baseCharacter = await getCharacterComputedByUserId(userId);
+    if (!baseCharacter) {
       return { success: false, message: '角色不存在' };
     }
 
-    const baseCharacter = charResult.rows[0] as CharacterData;
-    const characterId = Number((baseCharacter as any)?.id);
-    const characterWithPassives = await applyTechniquePassivesToCharacterData(characterId, baseCharacter);
-    const characterWithSetBonus = await attachSetBonusEffectsToCharacterData(characterId, characterWithPassives);
+    const characterId = Number(baseCharacter.id);
+    const characterWithSetBonus = await attachSetBonusEffectsToCharacterData(characterId, baseCharacter as CharacterData);
     if (characterWithSetBonus.qixue <= 0) {
       return { success: false, message: '气血不足，无法战斗' };
     }
@@ -1189,13 +1120,12 @@ export async function startPVPBattle(
   battleId?: string
 ): Promise<BattleResult> {
   try {
-    const charResult = await query('SELECT * FROM characters WHERE user_id = $1', [userId]);
-    if (charResult.rows.length === 0) {
+    const challengerBase = await getCharacterComputedByUserId(userId);
+    if (!challengerBase) {
       return { success: false, message: '角色不存在' };
     }
 
-    const challengerBase = charResult.rows[0] as CharacterData;
-    const challengerCharacterId = Number((challengerBase as any)?.id);
+    const challengerCharacterId = Number(challengerBase.id);
     if (!Number.isFinite(challengerCharacterId) || challengerCharacterId <= 0) {
       return { success: false, message: '角色数据异常' };
     }
@@ -1205,13 +1135,12 @@ export async function startPVPBattle(
       return { success: false, message: '对手参数错误' };
     }
 
-    const oppRes = await query('SELECT * FROM characters WHERE id = $1 LIMIT 1', [oppId]);
-    if (oppRes.rows.length === 0) {
+    const opponentBase = await getCharacterComputedByCharacterId(oppId);
+    if (!opponentBase) {
       return { success: false, message: '对手不存在' };
     }
 
-    const opponentBase = oppRes.rows[0] as CharacterData;
-    const opponentUserId = Number((opponentBase as any)?.user_id);
+    const opponentUserId = Number(opponentBase.user_id);
     if (!Number.isFinite(opponentUserId) || opponentUserId <= 0) {
       return { success: false, message: '对手数据异常' };
     }
@@ -1223,10 +1152,8 @@ export async function startPVPBattle(
       return { success: false, message: '角色正在战斗中' };
     }
 
-    const challengerWithPassives = await applyTechniquePassivesToCharacterData(challengerCharacterId, challengerBase);
-    const opponentWithPassives = await applyTechniquePassivesToCharacterData(oppId, opponentBase);
-    const challenger = await attachSetBonusEffectsToCharacterData(challengerCharacterId, challengerWithPassives);
-    const opponent = await attachSetBonusEffectsToCharacterData(oppId, opponentWithPassives);
+    const challenger = await attachSetBonusEffectsToCharacterData(challengerCharacterId, challengerBase as CharacterData);
+    const opponent = await attachSetBonusEffectsToCharacterData(oppId, opponentBase as CharacterData);
     const recoveredChallenger = withBattleStartResources(challenger);
     const recoveredOpponent = withBattleStartResources(opponent);
 
@@ -1419,18 +1346,14 @@ async function finishBattle(
   // 构建参与者信息
   const participants: BattleParticipant[] = [];
   for (const participantUserId of participantUserIds) {
-    const charResult = await query(
-      'SELECT id, nickname, fuyuan FROM characters WHERE user_id = $1',
-      [participantUserId]
-    );
-    if (charResult.rows.length > 0) {
-      participants.push({
-        userId: participantUserId,
-        characterId: charResult.rows[0].id,
-        nickname: charResult.rows[0].nickname,
-        fuyuan: Number(charResult.rows[0].fuyuan ?? 1),
-      });
-    }
+    const computed = await getCharacterComputedByUserId(participantUserId);
+    if (!computed) continue;
+    participants.push({
+      userId: participantUserId,
+      characterId: computed.id,
+      nickname: computed.nickname,
+      fuyuan: Number(computed.fuyuan ?? 1),
+    });
   }
   
   // 使用掉落服务分发奖励
@@ -1441,15 +1364,13 @@ async function finishBattle(
       dropResult = await distributeBattleRewards(monsters, participants, true);
 
       for (const participantUserId of participantUserIds) {
-        await query(
-          `
-            UPDATE characters
-            SET qixue = LEAST(qixue + FLOOR(max_qixue * 0.3), max_qixue),
-                updated_at = CURRENT_TIMESTAMP
-            WHERE user_id = $1
-          `,
-          [participantUserId]
-        );
+        const computed = await getCharacterComputedByUserId(participantUserId);
+        if (!computed) continue;
+        const healAmount = Math.floor(computed.max_qixue * 0.3);
+        await setCharacterResourcesByCharacterId(computed.id, {
+          qixue: Math.min(computed.max_qixue, computed.qixue + healAmount),
+          lingqi: computed.lingqi,
+        });
       }
 
       try {
@@ -1471,15 +1392,10 @@ async function finishBattle(
       } catch {}
     } else if (result.result === 'defender_win') {
       for (const participantUserId of participantUserIds) {
-        await query(
-          `
-            UPDATE characters
-            SET qixue = GREATEST(1, qixue - FLOOR(max_qixue * 0.1)),
-                updated_at = CURRENT_TIMESTAMP
-            WHERE user_id = $1
-          `,
-          [participantUserId]
-        );
+        const computed = await getCharacterComputedByUserId(participantUserId);
+        if (!computed) continue;
+        const loss = Math.floor(computed.max_qixue * 0.1);
+        await applyCharacterResourceDeltaByCharacterId(computed.id, { qixue: -loss }, { minQixue: 1 });
       }
     }
   }
@@ -1607,13 +1523,10 @@ export async function abandonBattle(
   
   // 扣除所有参与者气血作为惩罚
   for (const participantUserId of participants) {
-    await query(`
-      UPDATE characters 
-      SET 
-        qixue = GREATEST(1, qixue - FLOOR(max_qixue * 0.1)),
-        updated_at = CURRENT_TIMESTAMP
-      WHERE user_id = $1
-    `, [participantUserId]);
+    const computed = await getCharacterComputedByUserId(participantUserId);
+    if (!computed) continue;
+    const loss = Math.floor(computed.max_qixue * 0.1);
+    await applyCharacterResourceDeltaByCharacterId(computed.id, { qixue: -loss }, { minQixue: 1 });
   }
 
   try {
@@ -1631,8 +1544,8 @@ export async function abandonBattle(
       gameServer.emitToUser(participantUserId, 'battle:update', { kind: 'battle_abandoned', battleId, success: true, message: '已放弃战斗' });
       void gameServer.pushCharacterUpdate(participantUserId);
       if (state.battleType === 'pvp') {
-        const charRes = await query('SELECT id FROM characters WHERE user_id = $1', [participantUserId]);
-        const characterId = Number(charRes.rows?.[0]?.id);
+        const computed = await getCharacterComputedByUserId(participantUserId);
+        const characterId = Number(computed?.id);
         if (Number.isFinite(characterId) && characterId > 0) {
           const statusRes = await getArenaStatus(characterId);
           if (statusRes.success && statusRes.data) {

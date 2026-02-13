@@ -5,6 +5,7 @@ import {
   normalizeTitleEffects,
 } from './shared.js';
 import type { ServiceResult, TitleInfo, TitleListResult } from './types.js';
+import { invalidateCharacterComputedCache } from '../characterComputedService.js';
 
 const computeEffectDelta = (
   current: Record<string, number>,
@@ -22,43 +23,11 @@ const computeEffectDelta = (
 const updateCharacterAttrsWithDeltaTx = async (
   characterId: number,
   titleName: string,
-  delta: Record<string, number>,
+  _delta: Record<string, number>,
   client: { query: (text: string, params?: unknown[]) => Promise<unknown> },
 ): Promise<void> => {
-  const keys = Object.keys(delta);
-  const setClauses: string[] = [];
   const params: unknown[] = [characterId, titleName];
-
-  for (const key of keys) {
-    params.push(delta[key]);
-    setClauses.push(`${key} = GREATEST(0, ${key} + $${params.length})`);
-  }
-
-  if (setClauses.length === 0) {
-    await client.query(`UPDATE characters SET title = $2, updated_at = NOW() WHERE id = $1`, params);
-  } else {
-    await client.query(
-      `
-        UPDATE characters
-        SET title = $2,
-            ${setClauses.join(', ')},
-            updated_at = NOW()
-        WHERE id = $1
-      `,
-      params,
-    );
-  }
-
-  await client.query(
-    `
-      UPDATE characters
-      SET qixue = LEAST(qixue, max_qixue),
-          lingqi = LEAST(lingqi, max_lingqi),
-          updated_at = NOW()
-      WHERE id = $1
-    `,
-    [characterId],
-  );
+  await client.query(`UPDATE characters SET title = $2, updated_at = NOW() WHERE id = $1`, params);
 };
 
 export const getTitleList = async (characterId: number): Promise<TitleListResult> => {
@@ -193,6 +162,7 @@ export const equipTitle = async (characterId: number, titleId: string): Promise<
     await updateCharacterAttrsWithDeltaTx(cid, targetName, delta, client);
 
     await client.query('COMMIT');
+    await invalidateCharacterComputedCache(cid);
     return { success: true, message: 'ok' };
   } catch (error) {
     await client.query('ROLLBACK');
