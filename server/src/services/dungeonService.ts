@@ -1769,14 +1769,6 @@ export const nextDungeonInstance = async (
                   dbClient: client,
                 });
               },
-              deleteItemInstances: async (ownerCharacterId, itemIds) => {
-                const safeItemIds = itemIds.filter((id) => Number.isInteger(id) && id > 0);
-                if (safeItemIds.length <= 0) return;
-                await client.query(
-                  'DELETE FROM item_instance WHERE owner_character_id = $1 AND id = ANY($2)',
-                  [ownerCharacterId, safeItemIds]
-                );
-              },
               addSilver: async (ownerCharacterId, silverGain) => {
                 const safeSilver = Math.max(0, Math.floor(Number(silverGain) || 0));
                 if (safeSilver <= 0) return { success: true, message: '无需增加银两' };

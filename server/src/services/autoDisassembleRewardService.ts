@@ -1,4 +1,5 @@
-import { resolveQualityRank } from './equipmentDisassembleRules.js';
+import type { GenerateOptions } from './equipmentService.js';
+import { generateEquipment } from './equipmentService.js';
 import { buildDisassembleRewardPlan } from './disassembleRewardPlanner.js';
 import {
   shouldAutoDisassembleBySetting,
@@ -34,7 +35,6 @@ export type GrantItemCreateFn = (params: {
   equipOptions?: unknown;
 }) => Promise<GrantItemCreateResult>;
 
-export type DeleteItemInstancesFn = (characterId: number, itemIds: number[]) => Promise<void>;
 export type AddCharacterSilverFn = (
   characterId: number,
   silver: number
@@ -56,7 +56,6 @@ export interface GrantRewardItemWithAutoDisassembleInput {
   autoDisassembleSetting: AutoDisassembleSetting;
   sourceObtainedFrom: string;
   createItem: GrantItemCreateFn;
-  deleteItemInstances: DeleteItemInstancesFn;
   addSilver?: AddCharacterSilverFn;
   sourceEquipOptions?: unknown;
 }
@@ -120,12 +119,6 @@ const appendPendingMailItem = (
   });
 };
 
-const resolveGeneratedQualityRank = (createResult: GrantItemCreateResult): number => {
-  const raw = Number(createResult.equipment?.qualityRank);
-  if (Number.isInteger(raw) && raw > 0) return raw;
-  return resolveQualityRank(createResult.equipment?.quality);
-};
-
 const mergeResult = (
   target: GrantRewardItemWithAutoDisassembleResult,
   source: GrantRewardItemWithAutoDisassembleResult
@@ -147,6 +140,74 @@ const createEmptyResult = (): GrantRewardItemWithAutoDisassembleResult => ({
   warnings: [],
   gainedSilver: 0,
 });
+
+const isQualityName = (value: unknown): value is '黄' | '玄' | '地' | '天' => {
+  return value === '黄' || value === '玄' || value === '地' || value === '天';
+};
+
+const toGenerateOptions = (raw: unknown): GenerateOptions => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const record = raw as Record<string, unknown>;
+  const out: GenerateOptions = {};
+
+  if (isQualityName(record.quality)) {
+    out.quality = record.quality;
+  }
+
+  if (record.qualityWeights && typeof record.qualityWeights === 'object' && !Array.isArray(record.qualityWeights)) {
+    const inputWeights = record.qualityWeights as Record<string, unknown>;
+    const weights: Partial<Record<'黄' | '玄' | '地' | '天', number>> = {};
+    for (const [key, value] of Object.entries(inputWeights)) {
+      if (!isQualityName(key)) continue;
+      const n = Number(value);
+      if (!Number.isFinite(n) || n <= 0) continue;
+      weights[key] = n;
+    }
+    if (Object.keys(weights).length > 0) {
+      out.qualityWeights = weights as Record<'黄' | '玄' | '地' | '天', number>;
+    }
+  }
+
+  const realmRank = Number(record.realmRank);
+  if (Number.isInteger(realmRank) && realmRank > 0) {
+    out.realmRank = realmRank;
+  }
+
+  if (typeof record.identified === 'boolean') {
+    out.identified = record.identified;
+  }
+
+  const bindType = String(record.bindType || '').trim();
+  if (bindType) {
+    out.bindType = bindType;
+  }
+
+  const obtainedFrom = String(record.obtainedFrom || '').trim();
+  if (obtainedFrom) {
+    out.obtainedFrom = obtainedFrom;
+  }
+
+  const seed = Number(record.seed);
+  if (Number.isInteger(seed)) {
+    out.seed = seed;
+  }
+
+  const fuyuan = Number(record.fuyuan);
+  if (Number.isFinite(fuyuan) && fuyuan > 0) {
+    out.fuyuan = fuyuan;
+  }
+
+  return out;
+};
+
+const buildEquipRollOptionsForAttempt = (raw: unknown, attemptIndex: number): GenerateOptions => {
+  const normalized = toGenerateOptions(raw);
+  if (Number.isInteger(normalized.seed)) return normalized;
+  return {
+    ...normalized,
+    seed: Date.now() + attemptIndex * 7919 + Math.floor(Math.random() * 1000),
+  };
+};
 
 export const grantRewardItemWithAutoDisassemble = async (
   input: GrantRewardItemWithAutoDisassembleInput
@@ -173,7 +234,7 @@ export const grantRewardItemWithAutoDisassemble = async (
       qty: normalizedQty,
       ...(input.bindType ? { bindType: input.bindType } : {}),
       obtainedFrom: input.sourceObtainedFrom,
-      ...(input.sourceEquipOptions ? { equipOptions: input.sourceEquipOptions } : {}),
+      ...(input.sourceEquipOptions !== undefined ? { equipOptions: input.sourceEquipOptions } : {}),
     });
 
     if (createResult.success) {
@@ -203,25 +264,29 @@ export const grantRewardItemWithAutoDisassemble = async (
   }
 
   for (let i = 0; i < normalizedQty; i++) {
-    const sourceCreateOptions = {
-      itemDefId: input.itemDefId,
-      qty: 1,
-      ...(input.bindType ? { bindType: input.bindType } : {}),
-      obtainedFrom: input.sourceObtainedFrom,
-      ...(input.sourceEquipOptions ? { equipOptions: input.sourceEquipOptions } : {}),
-    } as const;
+    let sourceEquipOptionsForCreate = input.sourceEquipOptions;
+    let generatedQualityRank = baseQualityRank;
 
-    const sourceCreateResult = await input.createItem({
-      ...sourceCreateOptions,
-    });
+    const createSourceItem = async () => {
+      const sourceCreateResult = await input.createItem({
+        itemDefId: input.itemDefId,
+        qty: 1,
+        ...(input.bindType ? { bindType: input.bindType } : {}),
+        obtainedFrom: input.sourceObtainedFrom,
+        ...(sourceEquipOptionsForCreate !== undefined ? { equipOptions: sourceEquipOptionsForCreate } : {}),
+      });
 
-    if (!sourceCreateResult.success) {
+      if (sourceCreateResult.success) {
+        appendGrantedItem(result, input.itemDefId, 1, normalizeItemIds(sourceCreateResult.itemIds));
+        return;
+      }
+
       if (sourceCreateResult.message === '背包已满') {
         const options =
-          input.bindType || input.sourceEquipOptions
+          input.bindType || sourceEquipOptionsForCreate !== undefined
             ? {
                 ...(input.bindType ? { bindType: input.bindType } : {}),
-                ...(input.sourceEquipOptions ? { equipOptions: input.sourceEquipOptions } : {}),
+                ...(sourceEquipOptionsForCreate !== undefined ? { equipOptions: sourceEquipOptionsForCreate } : {}),
               }
             : undefined;
         appendPendingMailItem(result, {
@@ -230,14 +295,31 @@ export const grantRewardItemWithAutoDisassemble = async (
           ...(options ? { options } : {}),
         });
         appendGrantedItem(result, input.itemDefId, 1, []);
-      } else {
-        result.warnings.push(`物品创建失败: ${input.itemDefId}, ${sourceCreateResult.message}`);
+        return;
       }
-      continue;
+
+      result.warnings.push(`物品创建失败: ${input.itemDefId}, ${sourceCreateResult.message}`);
+    };
+
+    /**
+     * 装备品质由生成器最终决定，必须先做一次“预生成”拿到真实品质，
+     * 才能进行自动分解判定；否则会用模板品质误判。
+     */
+    if (category === 'equipment') {
+      const equipRollOptions = buildEquipRollOptionsForAttempt(input.sourceEquipOptions, i + 1);
+      sourceEquipOptionsForCreate = equipRollOptions;
+      const generated = await generateEquipment(input.itemDefId, equipRollOptions);
+      if (generated) {
+        generatedQualityRank = Number.isInteger(generated.qualityRank) && generated.qualityRank > 0
+          ? generated.qualityRank
+          : baseQualityRank;
+      } else {
+        result.warnings.push(`装备预生成失败: ${input.itemDefId}`);
+        await createSourceItem();
+        continue;
+      }
     }
 
-    const sourceItemIds = normalizeItemIds(sourceCreateResult.itemIds);
-    const generatedQualityRank = resolveGeneratedQualityRank(sourceCreateResult) || baseQualityRank;
     const candidateMeta: AutoDisassembleCandidateMeta = {
       itemName,
       category,
@@ -246,7 +328,7 @@ export const grantRewardItemWithAutoDisassemble = async (
     };
 
     if (!shouldAutoDisassembleBySetting(input.autoDisassembleSetting, candidateMeta)) {
-      appendGrantedItem(result, input.itemDefId, 1, sourceItemIds);
+      await createSourceItem();
       continue;
     }
 
@@ -263,7 +345,7 @@ export const grantRewardItemWithAutoDisassemble = async (
     });
     if (!rewardPlan.success) {
       result.warnings.push(`自动分解规则计算失败: ${input.itemDefId}, ${rewardPlan.message}`);
-      appendGrantedItem(result, input.itemDefId, 1, sourceItemIds);
+      await createSourceItem();
       continue;
     }
 
@@ -312,13 +394,10 @@ export const grantRewardItemWithAutoDisassemble = async (
     }
 
     if (!rewardApplySuccess) {
-      appendGrantedItem(result, input.itemDefId, 1, sourceItemIds);
+      await createSourceItem();
       continue;
     }
 
-    if (sourceItemIds.length > 0) {
-      await input.deleteItemInstances(input.characterId, sourceItemIds);
-    }
     mergeResult(result, tempResult);
   }
 

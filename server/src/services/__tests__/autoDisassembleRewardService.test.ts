@@ -21,7 +21,7 @@ const createCreateItemMock = (
   return { calls, fn };
 };
 
-test('命中自动分解时应删除原装备并发放分解材料', async () => {
+test('命中自动分解时应发放分解材料', async () => {
   const { calls, fn } = createCreateItemMock([
     {
       success: true,
@@ -35,8 +35,6 @@ test('命中自动分解时应删除原装备并发放分解材料', async () =>
       itemIds: [201],
     },
   ]);
-  const deleteCalls: Array<{ characterId: number; itemIds: number[] }> = [];
-
   const result = await grantRewardItemWithAutoDisassemble({
     characterId: 88,
     itemDefId: 'equip-weapon-001',
@@ -57,16 +55,12 @@ test('命中自动分解时应删除原装备并发放分解材料', async () =>
     },
     sourceObtainedFrom: 'dungeon_clear_reward',
     createItem: fn,
-    deleteItemInstances: async (characterId, itemIds) => {
-      deleteCalls.push({ characterId, itemIds: [...itemIds] });
-    },
   });
 
   assert.deepEqual(result.warnings, []);
   assert.deepEqual(result.pendingMailItems, []);
   assert.deepEqual(result.grantedItems, [{ itemDefId: 'enhance-001', qty: 1, itemIds: [201] }]);
   assert.equal(result.gainedSilver, 0);
-  assert.deepEqual(deleteCalls, [{ characterId: 88, itemIds: [101] }]);
   assert.equal(calls.length, 2);
   assert.equal(calls[0]?.itemDefId, 'equip-weapon-001');
   assert.equal(calls[0]?.obtainedFrom, 'dungeon_clear_reward');
@@ -87,8 +81,6 @@ test('分解材料入包失败且背包满时应走邮件补发', async () => {
       message: '背包已满',
     },
   ]);
-  const deleteCalls: Array<{ characterId: number; itemIds: number[] }> = [];
-
   const result = await grantRewardItemWithAutoDisassemble({
     characterId: 99,
     itemDefId: 'equip-armor-001',
@@ -109,16 +101,12 @@ test('分解材料入包失败且背包满时应走邮件补发', async () => {
     },
     sourceObtainedFrom: 'dungeon_clear_reward',
     createItem: fn,
-    deleteItemInstances: async (characterId, itemIds) => {
-      deleteCalls.push({ characterId, itemIds: [...itemIds] });
-    },
   });
 
   assert.deepEqual(result.warnings, []);
   assert.deepEqual(result.grantedItems, [{ itemDefId: 'enhance-001', qty: 1, itemIds: [] }]);
   assert.deepEqual(result.pendingMailItems, [{ item_def_id: 'enhance-001', qty: 1 }]);
   assert.equal(result.gainedSilver, 0);
-  assert.deepEqual(deleteCalls, [{ characterId: 99, itemIds: [102] }]);
 });
 
 test('未开启自动分解时应保持原奖励逻辑', async () => {
@@ -152,7 +140,6 @@ test('未开启自动分解时应保持原奖励逻辑', async () => {
     },
     sourceObtainedFrom: 'dungeon_clear_reward',
     createItem: fn,
-    deleteItemInstances: async () => {},
   });
 
   assert.deepEqual(result.warnings, []);
@@ -173,8 +160,6 @@ test('品质超过阈值时应保留原装备', async () => {
       equipment: { qualityRank: 4 },
     },
   ]);
-  const deleteCalls: Array<number[]> = [];
-
   const result = await grantRewardItemWithAutoDisassemble({
     characterId: 66,
     itemDefId: 'equip-necklace-001',
@@ -195,9 +180,6 @@ test('品质超过阈值时应保留原装备', async () => {
     },
     sourceObtainedFrom: 'dungeon_clear_reward',
     createItem: fn,
-    deleteItemInstances: async (_characterId, itemIds) => {
-      deleteCalls.push([...itemIds]);
-    },
   });
 
   assert.deepEqual(result.warnings, []);
@@ -205,7 +187,6 @@ test('品质超过阈值时应保留原装备', async () => {
   assert.deepEqual(result.grantedItems, [{ itemDefId: 'equip-necklace-001', qty: 1, itemIds: [303] }]);
   assert.equal(result.gainedSilver, 0);
   assert.equal(calls.length, 1);
-  assert.deepEqual(deleteCalls, []);
 });
 
 test('原装备入包失败且背包满时应补发原装备邮件', async () => {
@@ -238,7 +219,6 @@ test('原装备入包失败且背包满时应补发原装备邮件', async () =>
     sourceObtainedFrom: 'dungeon_clear_reward',
     sourceEquipOptions: { yellow: 70, purple: 30 },
     createItem: fn,
-    deleteItemInstances: async () => {},
   });
 
   assert.deepEqual(result.warnings, []);
@@ -256,7 +236,7 @@ test('原装备入包失败且背包满时应补发原装备邮件', async () =>
   assert.equal(result.gainedSilver, 0);
 });
 
-test('非装备命中规则时应按默认公式转化银两并删除原物品', async () => {
+test('非装备命中规则时应按默认公式转化银两', async () => {
   const { fn } = createCreateItemMock([
     {
       success: true,
@@ -264,7 +244,6 @@ test('非装备命中规则时应按默认公式转化银两并删除原物品',
       itemIds: [701],
     },
   ]);
-  const deleteCalls: Array<number[]> = [];
   const silverCalls: number[] = [];
 
   const result = await grantRewardItemWithAutoDisassemble({
@@ -287,9 +266,6 @@ test('非装备命中规则时应按默认公式转化银两并删除原物品',
     },
     sourceObtainedFrom: 'battle_drop',
     createItem: fn,
-    deleteItemInstances: async (_characterId, itemIds) => {
-      deleteCalls.push([...itemIds]);
-    },
     addSilver: async (_characterId, silver) => {
       silverCalls.push(silver);
       return { success: true, message: 'ok' };
@@ -300,6 +276,5 @@ test('非装备命中规则时应按默认公式转化银两并删除原物品',
   assert.deepEqual(result.grantedItems, []);
   assert.deepEqual(result.pendingMailItems, []);
   assert.equal(result.gainedSilver, 100);
-  assert.deepEqual(deleteCalls, [[701]]);
   assert.deepEqual(silverCalls, [100]);
 });
