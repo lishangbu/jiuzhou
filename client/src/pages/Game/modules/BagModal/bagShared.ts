@@ -10,6 +10,7 @@ import type {
   ItemDefLite,
 } from "../../../../services/api";
 import { getEquipRealmRankForReroll as getEquipRealmRankForRerollShared } from "../../shared/realm";
+import { buildEquipmentAffixDisplayText } from "../../shared/equipmentAffixText";
 
 /* ───────── 类型 ───────── */
 
@@ -468,26 +469,16 @@ export const buildAffixRerollCostPlan = (
 };
 
 export const formatEquipmentAffixLine = (affix: EquipmentAffix): string => {
-  const tierText = affix.tier ? `T${affix.tier}` : "T-";
-  const prefix = affix.is_legendary ? "传奇词条" : "词条";
-  const key = affix.attr_key;
-  const label = (key ? attrLabel[key] : undefined) ?? affix.name ?? key ?? "未知";
-
-  if (affix.apply_type === "special") {
-    return `${prefix} ${tierText}：${label}`;
-  }
-
-  if (typeof affix.value === "number") {
-    const isPercent =
-      affix.apply_type === "percent" ||
-      (key ? permyriadPercentKeys.has(key) : false);
-    const valText = isPercent
-      ? formatSignedPermyriadPercent(affix.value)
-      : formatSignedNumber(affix.value);
-    return `${prefix} ${tierText}：${label} ${valText}`;
-  }
-
-  return `${prefix} ${tierText}：${label}`;
+  const displayText = buildEquipmentAffixDisplayText(affix, {
+    normalPrefix: "词条",
+    legendaryPrefix: "传奇词条",
+    keyLabelMap: attrLabel,
+    fallbackLabel: "未知",
+    percentKeys: permyriadPercentKeys,
+    formatSignedNumber,
+    formatSignedPermyriadPercent,
+  });
+  return displayText ? displayText.fullText : "词条 T-：未知";
 };
 
 const toFiniteNumber = (value: unknown): number | null => {

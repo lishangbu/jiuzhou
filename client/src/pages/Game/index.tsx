@@ -61,6 +61,7 @@ import equipFemale from '../../assets/images/ui/ep.png';
 import coin01 from '../../assets/images/ui/sh_icon_0006_jinbi_02.png';
 import './index.scss';
 import { useIsMobile } from './shared/responsive';
+import { buildEquipmentAffixDisplayText, type EquipmentAffixTextInput } from './shared/equipmentAffixText';
 
 interface GameProps {
   onLogout?: () => void;
@@ -106,16 +107,7 @@ const EQUIPPED_SLOT_TO_UI_LABEL: Record<string, string> = {
   artifact: '法宝',
 };
 
-type EquipmentAffix = {
-  key?: string;
-  name?: string;
-  attr_key?: string;
-  apply_type?: string;
-  tier?: number;
-  value?: number;
-  is_legendary?: boolean;
-  description?: string;
-};
+type EquipmentAffix = EquipmentAffixTextInput;
 
 const EQUIP_QUALITY_COLOR: Record<string, string> = {
   天: 'var(--rarity-tian)',
@@ -338,23 +330,22 @@ const renderEquipTooltip = (uiSlot: string, it: InventoryItemDto) => {
           affixes.length ? (
             <div className="equip-tooltip-lines">
               {affixes.map((a, idx) => {
-                const key = a.attr_key;
-                const label = (key ? attrLabel[key] : undefined) ?? a.name ?? key ?? '未知';
-                const tierText = a.tier ? `T${a.tier}` : 'T-';
-                const prefix = a.is_legendary ? '传奇' : '词条';
-                const isSpecial = a.apply_type === 'special';
-                const valueText =
-                  !isSpecial && typeof a.value === 'number'
-                    ? a.apply_type === 'percent' || (key ? permyriadPercentKeys.has(key) : false)
-                      ? formatSignedPermyriadPercent(a.value)
-                      : formatSignedNumber(a.value)
-                    : '';
+                const displayText = buildEquipmentAffixDisplayText(a, {
+                  normalPrefix: '词条',
+                  legendaryPrefix: '传奇',
+                  keyLabelMap: attrLabel,
+                  fallbackLabel: '未知',
+                  percentKeys: permyriadPercentKeys,
+                  formatSignedNumber,
+                  formatSignedPermyriadPercent,
+                });
+                if (!displayText) return null;
                 return (
-                  <div key={`${a.key ?? label}-${idx}`} className="equip-tooltip-affix">
+                  <div key={`${a.key ?? displayText.label}-${idx}`} className="equip-tooltip-affix">
                     <span className="equip-tooltip-affix-k">
-                      {prefix} {tierText}：{label}
+                      {displayText.titleText}
                     </span>
-                    {valueText ? <span className="equip-tooltip-affix-v">{valueText}</span> : null}
+                    {displayText.valueText ? <span className="equip-tooltip-affix-v">{displayText.valueText}</span> : null}
                   </div>
                 );
               })}

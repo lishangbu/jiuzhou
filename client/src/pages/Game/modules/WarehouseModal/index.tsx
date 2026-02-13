@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import coin01 from '../../../../assets/images/ui/sh_icon_0006_jinbi_02.png';
 import { SERVER_BASE, getInventoryInfo, getInventoryItems, moveInventoryItem, type InventoryItemDto, type ItemDefLite } from '../../../../services/api';
 import { useIsMobile } from '../../shared/responsive';
+import { buildEquipmentAffixDisplayText, type EquipmentAffixTextInput } from '../../shared/equipmentAffixText';
 import './index.scss';
 
 type SlotSide = 'bag' | 'warehouse';
@@ -248,16 +249,7 @@ const formatSignedPermyriadPercent = (value: number): string => {
   return `${sign}${trimmed}%`;
 };
 
-type EquipmentAffix = {
-  key?: string;
-  name?: string;
-  attr_key?: string;
-  apply_type?: string;
-  tier?: number;
-  value?: number;
-  is_legendary?: boolean;
-  description?: string;
-};
+type EquipmentAffix = EquipmentAffixTextInput;
 
 const coerceAffixes = (value: unknown): EquipmentAffix[] => {
   if (!value) return [];
@@ -474,30 +466,20 @@ const WarehouseItemTooltip: React.FC<{ it: InventoryItemDto }> = ({ it }) => {
     if (!isEquip) return [];
     if (!it.identified) return ['未鉴定'];
     const sorted = [...affixes].sort((a, b) => (b.tier ?? 0) - (a.tier ?? 0));
-    const pickLabel = (a: EquipmentAffix): string => {
-      const key = (a.attr_key ?? '').trim();
-      const byKey = key ? translateKey(key) : null;
-      if (byKey) return byKey;
-      const byName = (a.name ?? '').trim();
-      if (byName && !hasLatin(byName)) return byName;
-      if (key && !hasLatin(key)) return key;
-      return '';
-    };
 
     const out: string[] = [];
     for (const a of sorted) {
-      const label = pickLabel(a);
-      if (!label) continue;
-      const tierText = a.tier ? `T${a.tier}` : 'T-';
-      const prefix = a.is_legendary ? '传奇词条' : '词条';
-      if (a.apply_type === 'special') {
-        out.push(`${prefix} ${tierText}：${label}`);
-        continue;
-      }
-      const key = (a.attr_key ?? '').trim();
-      const isPercent = a.apply_type === 'percent' || (key ? PERMYRIAD_PERCENT_KEYS.has(key) : false);
-      const valueText = typeof a.value === 'number' ? (isPercent ? formatSignedPermyriadPercent(a.value) : formatSignedNumber(a.value)) : '';
-      out.push(`${prefix} ${tierText}：${label}${valueText ? ` ${valueText}` : ''}`);
+      const displayText = buildEquipmentAffixDisplayText(a, {
+        normalPrefix: '词条',
+        legendaryPrefix: '传奇词条',
+        keyTranslator: translateKey,
+        rejectLatinLabel: true,
+        percentKeys: PERMYRIAD_PERCENT_KEYS,
+        formatSignedNumber,
+        formatSignedPermyriadPercent,
+      });
+      if (!displayText) continue;
+      out.push(displayText.fullText);
     }
     return out.length > 0 ? limitLines(out, 10) : ['无'];
   }, [affixes, isEquip, it.identified]);

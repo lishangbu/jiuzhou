@@ -1,0 +1,123 @@
+/**
+ * 作用：统一生成装备词条展示文本，避免各弹窗各写一套拼接逻辑。
+ * 输入：词条对象（名称、属性键、类型、数值、阶数）和展示选项（前缀、翻译映射、数值格式化函数）。
+ * 输出：用于 UI 的标题文本、数值文本、整行文本；当无法得到可展示名称时返回 null。
+ * 注意：这里仅处理“展示文案”，不负责词条解析、排序、鉴定状态判断。
+ */
+
+export type EquipmentAffixTextInput = {
+  key?: string;
+  name?: string;
+  attr_key?: string;
+  apply_type?: string;
+  tier?: number;
+  value?: number;
+  is_legendary?: boolean;
+  description?: string;
+};
+
+export type PickEquipmentAffixLabelOptions = {
+  keyLabelMap?: Readonly<Record<string, string>>;
+  keyTranslator?: (key: string) => string | null | undefined;
+  fallbackLabel?: string;
+  rejectLatinLabel?: boolean;
+};
+
+export type BuildEquipmentAffixDisplayTextOptions =
+  PickEquipmentAffixLabelOptions & {
+    normalPrefix: string;
+    legendaryPrefix: string;
+    percentKeys: ReadonlySet<string>;
+    formatSignedNumber: (value: number) => string;
+    formatSignedPermyriadPercent: (value: number) => string;
+  };
+
+export type EquipmentAffixDisplayText = {
+  label: string;
+  prefixText: string;
+  tierText: string;
+  titleText: string;
+  valueText: string;
+  fullText: string;
+};
+
+const hasLatinLetters = (value: string): boolean => /[A-Za-z]/.test(value);
+
+const normalizeText = (value: string | undefined): string => {
+  if (typeof value !== 'string') return '';
+  return value.trim();
+};
+
+const tryPickLabel = (raw: string, rejectLatinLabel: boolean): string => {
+  const text = raw.trim();
+  if (!text) return '';
+  if (rejectLatinLabel && hasLatinLetters(text)) return '';
+  return text;
+};
+
+export const pickEquipmentAffixLabel = (
+  affix: EquipmentAffixTextInput,
+  options: PickEquipmentAffixLabelOptions = {},
+): string => {
+  const rejectLatinLabel = options.rejectLatinLabel === true;
+  const attrKey = normalizeText(affix.attr_key);
+
+  if (attrKey) {
+    const mapped = options.keyLabelMap?.[attrKey];
+    if (typeof mapped === 'string') {
+      const text = tryPickLabel(mapped, rejectLatinLabel);
+      if (text) return text;
+    }
+  }
+
+  if (attrKey && options.keyTranslator) {
+    const translated = options.keyTranslator(attrKey);
+    if (typeof translated === 'string') {
+      const text = tryPickLabel(translated, rejectLatinLabel);
+      if (text) return text;
+    }
+  }
+
+  const nameText = tryPickLabel(normalizeText(affix.name), rejectLatinLabel);
+  if (nameText) return nameText;
+
+  const keyText = tryPickLabel(attrKey, rejectLatinLabel);
+  if (keyText) return keyText;
+
+  return normalizeText(options.fallbackLabel);
+};
+
+export const buildEquipmentAffixDisplayText = (
+  affix: EquipmentAffixTextInput,
+  options: BuildEquipmentAffixDisplayTextOptions,
+): EquipmentAffixDisplayText | null => {
+  const label = pickEquipmentAffixLabel(affix, options);
+  if (!label) return null;
+
+  const tierText = affix.tier ? `T${affix.tier}` : 'T-';
+  const prefixText = affix.is_legendary
+    ? options.legendaryPrefix
+    : options.normalPrefix;
+  const titleText = `${prefixText} ${tierText}：${label}`;
+
+  let valueText = '';
+  const attrKey = normalizeText(affix.attr_key);
+  if (affix.apply_type !== 'special' && typeof affix.value === 'number') {
+    const isPercent =
+      affix.apply_type === 'percent' ||
+      (attrKey ? options.percentKeys.has(attrKey) : false);
+    valueText = isPercent
+      ? options.formatSignedPermyriadPercent(affix.value)
+      : options.formatSignedNumber(affix.value);
+  }
+
+  const fullText = valueText ? `${titleText} ${valueText}` : titleText;
+  return {
+    label,
+    prefixText,
+    tierText,
+    titleText,
+    valueText,
+    fullText,
+  };
+};
