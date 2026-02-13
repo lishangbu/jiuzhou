@@ -1,6 +1,6 @@
-import { query } from '../config/database.js';
 import type { PoolClient } from 'pg';
 import { createItem } from './itemService.js';
+import { getDialogueDefinitions } from './staticConfigLoader.js';
 
 export type DialogueNodeType = 'narration' | 'npc' | 'player' | 'choice' | 'system' | 'action';
 
@@ -52,16 +52,13 @@ const asObject = (v: unknown): Record<string, unknown> =>
 export const loadDialogue = async (dialogueId: string): Promise<DialogueDef | null> => {
   const id = typeof dialogueId === 'string' ? dialogueId.trim() : '';
   if (!id) return null;
-  const res = await query(`SELECT id, name, nodes, enabled FROM dialogue_def WHERE id = $1 AND enabled = true LIMIT 1`, [
-    id,
-  ]);
-  if (!res.rows?.[0]) return null;
-  const row = res.rows[0] as { id: string; name: string; nodes: unknown; enabled: boolean };
+  const row = getDialogueDefinitions().find((entry) => entry.id === id && entry.enabled !== false);
+  if (!row) return null;
   return {
     id: row.id,
     name: row.name,
-    nodes: asArray<DialogueNode>(row.nodes),
-    enabled: row.enabled === true,
+    nodes: asArray<DialogueNode>(row.nodes ?? []),
+    enabled: row.enabled !== false,
   };
 };
 

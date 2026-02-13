@@ -5,6 +5,7 @@ import path from 'path';
 import { updateSectionProgress } from './mainQuestService.js';
 import { updateAchievementProgress } from './achievementService.js';
 import { invalidateCharacterComputedCache } from './characterComputedService.js';
+import { getDungeonDefinitions } from './staticConfigLoader.js';
 
 export type RealmRequirementStatus = 'done' | 'todo' | 'unknown';
 
@@ -244,13 +245,14 @@ const getDungeonDefMap = async (
   client: PoolClient,
   dungeonIds: string[]
 ): Promise<Record<string, { name: string }>> => {
+  void client;
   const ids = Array.from(new Set(dungeonIds.map((s) => String(s || '').trim()).filter((s) => !!s)));
   if (ids.length === 0) return {};
-  const res = await client.query(`SELECT id, name FROM dungeon_def WHERE id = ANY($1::text[])`, [ids]);
   const out: Record<string, { name: string }> = {};
-  for (const r of res.rows as any[]) {
-    if (!r?.id) continue;
-    out[String(r.id)] = { name: String(r.name || r.id) };
+  for (const entry of getDungeonDefinitions()) {
+    if (entry.enabled === false) continue;
+    if (!ids.includes(entry.id)) continue;
+    out[String(entry.id)] = { name: String(entry.name || entry.id) };
   }
   return out;
 };

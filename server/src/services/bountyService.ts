@@ -1,5 +1,6 @@
 import { pool } from '../config/database.js';
 import crypto from 'crypto';
+import { getBountyDefinitions } from './staticConfigLoader.js';
 
 export type BountySourceType = 'daily' | 'player';
 export type BountyClaimPolicy = 'unique' | 'limited' | 'unlimited';
@@ -135,15 +136,20 @@ export const ensureDailyBountyInstances = async (desiredCount: number = 6): Prom
       return;
     }
 
-    const defRes = await client.query(
-      `
-        SELECT id, pool, task_id, title, description, claim_policy, max_claims, weight
-        FROM bounty_def
-        WHERE enabled = true AND pool = 'daily'
-        ORDER BY weight DESC, id ASC
-      `,
-    );
-    const defs = (defRes.rows ?? []) as BountyDefRow[];
+    const defs = getBountyDefinitions()
+      .filter((entry) => entry.enabled !== false)
+      .filter((entry) => (entry.pool ?? 'daily') === 'daily')
+      .map((entry) => ({
+        id: entry.id,
+        pool: entry.pool ?? 'daily',
+        task_id: entry.task_id,
+        title: entry.title,
+        description: typeof entry.description === 'string' ? entry.description : null,
+        claim_policy: entry.claim_policy ?? 'limited',
+        max_claims: Number.isFinite(Number(entry.max_claims)) ? Number(entry.max_claims) : 0,
+        weight: Number.isFinite(Number(entry.weight)) ? Number(entry.weight) : 1,
+      }))
+      .sort((left, right) => right.weight - left.weight || left.id.localeCompare(right.id));
     const picked = pickWeightedUnique(defs, take);
 
     for (const d of picked) {

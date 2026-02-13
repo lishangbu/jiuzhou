@@ -1,63 +1,9 @@
 import { query } from '../config/database.js';
 
-const dungeonDefTableSQL = `
-CREATE TABLE IF NOT EXISTS dungeon_def (
-  id VARCHAR(64) PRIMARY KEY,
-  name VARCHAR(64) NOT NULL,
-  type VARCHAR(32) NOT NULL,
-  category VARCHAR(32),
-  description TEXT,
-  icon VARCHAR(256),
-  background VARCHAR(256),
-  min_players INTEGER NOT NULL DEFAULT 1,
-  max_players INTEGER NOT NULL DEFAULT 4,
-  min_realm VARCHAR(64),
-  recommended_realm VARCHAR(64),
-  unlock_condition JSONB NOT NULL DEFAULT '{}'::jsonb,
-  daily_limit INTEGER NOT NULL DEFAULT 0,
-  weekly_limit INTEGER NOT NULL DEFAULT 0,
-  stamina_cost INTEGER NOT NULL DEFAULT 0,
-  time_limit_sec INTEGER NOT NULL DEFAULT 0,
-  revive_limit INTEGER NOT NULL DEFAULT 3,
-  tags JSONB NOT NULL DEFAULT '[]'::jsonb,
-  sort_weight INTEGER NOT NULL DEFAULT 0,
-  enabled BOOLEAN NOT NULL DEFAULT TRUE,
-  version INTEGER NOT NULL DEFAULT 1,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-COMMENT ON TABLE dungeon_def IS '副本秘境定义表';
-COMMENT ON COLUMN dungeon_def.id IS '秘境ID';
-COMMENT ON COLUMN dungeon_def.name IS '秘境名称';
-COMMENT ON COLUMN dungeon_def.type IS '类型（material/equipment/trial/challenge/event）';
-COMMENT ON COLUMN dungeon_def.category IS '分类（五行/流派/境界等）';
-COMMENT ON COLUMN dungeon_def.description IS '秘境描述';
-COMMENT ON COLUMN dungeon_def.icon IS '图标';
-COMMENT ON COLUMN dungeon_def.background IS '背景图';
-COMMENT ON COLUMN dungeon_def.min_players IS '最少人数';
-COMMENT ON COLUMN dungeon_def.max_players IS '最多人数';
-COMMENT ON COLUMN dungeon_def.min_realm IS '最低境界要求';
-COMMENT ON COLUMN dungeon_def.recommended_realm IS '推荐境界';
-COMMENT ON COLUMN dungeon_def.unlock_condition IS '解锁条件';
-COMMENT ON COLUMN dungeon_def.daily_limit IS '每日次数限制（0=不限）';
-COMMENT ON COLUMN dungeon_def.weekly_limit IS '每周次数限制（0=不限）';
-COMMENT ON COLUMN dungeon_def.stamina_cost IS '体力消耗';
-COMMENT ON COLUMN dungeon_def.time_limit_sec IS '时间限制（秒，0=不限）';
-COMMENT ON COLUMN dungeon_def.revive_limit IS '复活次数限制';
-COMMENT ON COLUMN dungeon_def.tags IS '标签';
-COMMENT ON COLUMN dungeon_def.sort_weight IS '排序权重';
-COMMENT ON COLUMN dungeon_def.enabled IS '是否启用';
-COMMENT ON COLUMN dungeon_def.version IS '版本';
-COMMENT ON COLUMN dungeon_def.created_at IS '创建时间';
-
-CREATE INDEX IF NOT EXISTS idx_dungeon_def_enabled_sort ON dungeon_def(enabled, sort_weight DESC);
-CREATE INDEX IF NOT EXISTS idx_dungeon_def_type ON dungeon_def(type);
-`;
-
 const dungeonDifficultyTableSQL = `
 CREATE TABLE IF NOT EXISTS dungeon_difficulty (
   id VARCHAR(64) PRIMARY KEY,
-  dungeon_id VARCHAR(64) NOT NULL REFERENCES dungeon_def(id) ON DELETE CASCADE,
+  dungeon_id VARCHAR(64) NOT NULL,
   name VARCHAR(32) NOT NULL,
   difficulty_rank INTEGER NOT NULL,
   monster_level_add INTEGER NOT NULL DEFAULT 0,
@@ -146,7 +92,7 @@ CREATE INDEX IF NOT EXISTS idx_dungeon_wave_stage ON dungeon_wave(stage_id, wave
 const dungeonInstanceTableSQL = `
 CREATE TABLE IF NOT EXISTS dungeon_instance (
   id VARCHAR(64) PRIMARY KEY,
-  dungeon_id VARCHAR(64) NOT NULL REFERENCES dungeon_def(id) ON DELETE RESTRICT,
+  dungeon_id VARCHAR(64) NOT NULL,
   difficulty_id VARCHAR(64) NOT NULL REFERENCES dungeon_difficulty(id) ON DELETE RESTRICT,
   creator_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
   team_id VARCHAR(64) REFERENCES teams(id) ON DELETE SET NULL,
@@ -192,7 +138,7 @@ const dungeonRecordTableSQL = `
 CREATE TABLE IF NOT EXISTS dungeon_record (
   id BIGSERIAL PRIMARY KEY,
   character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
-  dungeon_id VARCHAR(64) NOT NULL REFERENCES dungeon_def(id) ON DELETE RESTRICT,
+  dungeon_id VARCHAR(64) NOT NULL,
   difficulty_id VARCHAR(64) NOT NULL REFERENCES dungeon_difficulty(id) ON DELETE RESTRICT,
   instance_id VARCHAR(64) REFERENCES dungeon_instance(id) ON DELETE SET NULL,
   result VARCHAR(32) NOT NULL,
@@ -232,7 +178,7 @@ const dungeonEntryCountTableSQL = `
 CREATE TABLE IF NOT EXISTS dungeon_entry_count (
   id BIGSERIAL PRIMARY KEY,
   character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
-  dungeon_id VARCHAR(64) NOT NULL REFERENCES dungeon_def(id) ON DELETE CASCADE,
+  dungeon_id VARCHAR(64) NOT NULL,
   daily_count INTEGER NOT NULL DEFAULT 0,
   weekly_count INTEGER NOT NULL DEFAULT 0,
   total_count INTEGER NOT NULL DEFAULT 0,
@@ -257,8 +203,7 @@ CREATE INDEX IF NOT EXISTS idx_dungeon_entry_count_dungeon ON dungeon_entry_coun
 
 export const initDungeonTables = async (): Promise<void> => {
   try {
-    await query(dungeonDefTableSQL);
-    console.log('  → 副本秘境定义表检测完成');
+    console.log('  → 副本秘境定义改为静态JSON加载，跳过建表');
 
     await query(dungeonDifficultyTableSQL);
     console.log('  → 副本秘境难度表检测完成');
@@ -277,6 +222,11 @@ export const initDungeonTables = async (): Promise<void> => {
 
     await query(dungeonEntryCountTableSQL);
     console.log('  → 副本秘境次数表检测完成');
+
+    await query('ALTER TABLE dungeon_difficulty DROP CONSTRAINT IF EXISTS dungeon_difficulty_dungeon_id_fkey');
+    await query('ALTER TABLE dungeon_instance DROP CONSTRAINT IF EXISTS dungeon_instance_dungeon_id_fkey');
+    await query('ALTER TABLE dungeon_record DROP CONSTRAINT IF EXISTS dungeon_record_dungeon_id_fkey');
+    await query('ALTER TABLE dungeon_entry_count DROP CONSTRAINT IF EXISTS dungeon_entry_count_dungeon_id_fkey');
 
     console.log('✓ 副本秘境系统表检测完成');
   } catch (error) {

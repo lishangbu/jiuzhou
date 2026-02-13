@@ -76,22 +76,6 @@ COMMENT ON COLUMN main_quest_section.is_chapter_final IS '是否章节终章';
 CREATE INDEX IF NOT EXISTS idx_main_quest_section_chapter ON main_quest_section(chapter_id, section_num);
 `;
 
-const dialogueDefTableSQL = `
-CREATE TABLE IF NOT EXISTS dialogue_def (
-  id VARCHAR(64) PRIMARY KEY,
-  name VARCHAR(64) NOT NULL,
-  nodes JSONB NOT NULL DEFAULT '[]',
-  enabled BOOLEAN DEFAULT TRUE,
-  version INT DEFAULT 1,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-COMMENT ON TABLE dialogue_def IS '对话定义表';
-COMMENT ON COLUMN dialogue_def.id IS '对话ID';
-COMMENT ON COLUMN dialogue_def.name IS '对话名称';
-COMMENT ON COLUMN dialogue_def.nodes IS '对话节点列表';
-`;
-
 const characterMainQuestProgressTableSQL = `
 CREATE TABLE IF NOT EXISTS character_main_quest_progress (
   character_id INT PRIMARY KEY REFERENCES characters(id) ON DELETE CASCADE,
@@ -121,7 +105,7 @@ COMMENT ON COLUMN character_main_quest_progress.tracked IS '是否追踪主线�
 export const initMainQuestTables = async (): Promise<void> => {
   await query(mainQuestChapterTableSQL);
   await query(mainQuestSectionTableSQL);
-  await query(dialogueDefTableSQL);
+  console.log('  → 对话定义改为静态JSON加载，跳过建表');
   await query(characterMainQuestProgressTableSQL);
 
   await query(`

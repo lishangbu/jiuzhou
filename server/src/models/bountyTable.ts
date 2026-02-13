@@ -1,43 +1,10 @@
 import { query } from '../config/database.js';
 
-const bountyDefTableSQL = `
-CREATE TABLE IF NOT EXISTS bounty_def (
-  id VARCHAR(64) PRIMARY KEY,
-  pool VARCHAR(32) NOT NULL DEFAULT 'daily',
-  task_id VARCHAR(64) NOT NULL REFERENCES task_def(id) ON DELETE CASCADE,
-  title VARCHAR(128) NOT NULL,
-  description TEXT,
-  claim_policy VARCHAR(16) NOT NULL DEFAULT 'limited',
-  max_claims INTEGER NOT NULL DEFAULT 0,
-  weight INTEGER NOT NULL DEFAULT 1,
-  enabled BOOLEAN NOT NULL DEFAULT true,
-  version INTEGER NOT NULL DEFAULT 1,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-COMMENT ON TABLE bounty_def IS '悬赏定义表（用于每日随机刷新等，静态配置）';
-COMMENT ON COLUMN bounty_def.id IS '悬赏定义ID';
-COMMENT ON COLUMN bounty_def.pool IS '悬赏池（daily每日刷新等）';
-COMMENT ON COLUMN bounty_def.task_id IS '关联任务ID（task_def.id）';
-COMMENT ON COLUMN bounty_def.title IS '悬赏标题';
-COMMENT ON COLUMN bounty_def.description IS '悬赏描述';
-COMMENT ON COLUMN bounty_def.claim_policy IS '接取规则（unique唯一/limited限次/unlimited不限）';
-COMMENT ON COLUMN bounty_def.max_claims IS '总接取次数上限（limited时使用，0表示不限制）';
-COMMENT ON COLUMN bounty_def.weight IS '抽取权重（越大越容易被抽到）';
-COMMENT ON COLUMN bounty_def.enabled IS '是否启用';
-COMMENT ON COLUMN bounty_def.version IS '配置版本';
-COMMENT ON COLUMN bounty_def.created_at IS '创建时间';
-COMMENT ON COLUMN bounty_def.updated_at IS '更新时间';
-
-CREATE INDEX IF NOT EXISTS idx_bounty_def_pool_enabled ON bounty_def(pool, enabled, weight DESC, id ASC);
-`;
-
 const bountyInstanceTableSQL = `
 CREATE TABLE IF NOT EXISTS bounty_instance (
   id BIGSERIAL PRIMARY KEY,
   source_type VARCHAR(16) NOT NULL DEFAULT 'daily',
-  bounty_def_id VARCHAR(64) REFERENCES bounty_def(id) ON DELETE SET NULL,
+  bounty_def_id VARCHAR(64),
   task_id VARCHAR(64) NOT NULL REFERENCES task_def(id) ON DELETE CASCADE,
   title VARCHAR(128) NOT NULL,
   description TEXT,
@@ -113,9 +80,9 @@ CREATE INDEX IF NOT EXISTS idx_bounty_claim_instance ON bounty_claim(bounty_inst
 `;
 
 export const initBountyTables = async (): Promise<void> => {
-  await query(bountyDefTableSQL);
   await query(bountyInstanceTableSQL);
   await query(bountyClaimTableSQL);
+  await query('ALTER TABLE bounty_instance DROP CONSTRAINT IF EXISTS bounty_instance_bounty_def_id_fkey');
   console.log('✓ 悬赏系统表检测完成');
 };
 

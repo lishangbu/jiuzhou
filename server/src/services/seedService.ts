@@ -1958,25 +1958,8 @@ export const loadMainQuestSeeds = async (): Promise<{ chapters: number; sections
     if (!dialogueData?.dialogues) continue;
 
     for (const dialogue of dialogueData.dialogues) {
-      try {
-        const sql = `
-          INSERT INTO dialogue_def (id, name, nodes, enabled)
-          VALUES ($1, $2, $3, $4)
-          ON CONFLICT (id) DO UPDATE SET
-            name = EXCLUDED.name,
-            nodes = EXCLUDED.nodes,
-            enabled = EXCLUDED.enabled
-        `;
-        await query(sql, [
-          dialogue.id,
-          dialogue.name,
-          JSON.stringify(dialogue.nodes),
-          dialogue.enabled !== false
-        ]);
-        dialoguesCount++;
-      } catch (error) {
-        console.error(`插入对话定义失败 ${dialogue.id}:`, error);
-      }
+      if (!dialogue?.id || !dialogue?.name) continue;
+      dialoguesCount += 1;
     }
   }
 
@@ -2023,8 +2006,7 @@ export const loadAllSeeds = async (): Promise<void> => {
   // 11. 加载任务定义
   const taskCount = await loadTaskDefSeeds();
   console.log(`  任务定义: ${taskCount} 条`);
-  const bountyDefCount = await loadBountyDefSeeds();
-  console.log(`  悬赏定义: ${bountyDefCount} 条`);
+  console.log('  悬赏定义: 使用静态JSON加载（跳过入库）');
 
   // 11.1 成就系统定义改为静态 JSON 直读，不再写入数据库
   console.log('  成就定义: 使用静态JSON加载（跳过入库）');
@@ -2037,8 +2019,7 @@ export const loadAllSeeds = async (): Promise<void> => {
   console.log('  战令任务: 使用静态JSON加载（跳过入库）');
 
   // 13. 加载秘境定义
-  const dungeonCount = await loadDungeonSeeds();
-  console.log(`  秘境定义: ${dungeonCount} 组`);
+  console.log('  秘境定义: 使用静态JSON加载（跳过入库）');
 
   // 14. 加载功法定义
   const techCount = await loadTechniqueDefSeeds();
@@ -2054,7 +2035,7 @@ export const loadAllSeeds = async (): Promise<void> => {
 
   // 17. 加载主线任务章节和对话
   const mainQuestCount = await loadMainQuestSeeds();
-  console.log(`  主线任务: ${mainQuestCount.chapters} 章, ${mainQuestCount.sections} 节, ${mainQuestCount.dialogues} 对话`);
+  console.log(`  主线任务: ${mainQuestCount.chapters} 章, ${mainQuestCount.sections} 节（对话${mainQuestCount.dialogues}条使用静态JSON）`);
 
   console.log('✓ 种子数据加载完成');
 };

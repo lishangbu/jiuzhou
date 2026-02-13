@@ -1,4 +1,4 @@
-import { getMonsterDefinitions } from './staticConfigLoader.js';
+import { getDungeonDefinitions, getMonsterDefinitions } from './staticConfigLoader.js';
 import { pool, query } from '../config/database.js';
 import crypto from 'crypto';
 import { getBattleState, startDungeonPVEBattle } from './battleService.js';
@@ -120,6 +120,43 @@ const DUNGEON_TYPE_LABEL: Record<DungeonType, string> = {
   event: '活动秘境',
 };
 
+const getEnabledDungeonDefs = (): DungeonDefDto[] => {
+  const list: DungeonDefDto[] = [];
+  for (const entry of getDungeonDefinitions()) {
+    if (entry.enabled === false) continue;
+    const type = toDungeonType(entry.type);
+    if (!type) continue;
+    list.push({
+      id: String(entry.id),
+      name: String(entry.name),
+      type,
+      category: typeof entry.category === 'string' ? entry.category : null,
+      description: typeof entry.description === 'string' ? entry.description : null,
+      icon: typeof entry.icon === 'string' ? entry.icon : null,
+      background: typeof entry.background === 'string' ? entry.background : null,
+      min_players: asNumber(entry.min_players, 1),
+      max_players: asNumber(entry.max_players, 4),
+      min_realm: typeof entry.min_realm === 'string' ? entry.min_realm : null,
+      recommended_realm: typeof entry.recommended_realm === 'string' ? entry.recommended_realm : null,
+      unlock_condition: entry.unlock_condition ?? {},
+      daily_limit: asNumber(entry.daily_limit, 0),
+      weekly_limit: asNumber(entry.weekly_limit, 0),
+      stamina_cost: asNumber(entry.stamina_cost, 0),
+      time_limit_sec: asNumber(entry.time_limit_sec, 0),
+      revive_limit: asNumber(entry.revive_limit, 0),
+      tags: entry.tags ?? [],
+      sort_weight: asNumber(entry.sort_weight, 0),
+      enabled: true,
+      version: asNumber(entry.version, 1),
+    });
+  }
+  return list;
+};
+
+const getDungeonDefById = (dungeonId: string): DungeonDefDto | null => {
+  return getEnabledDungeonDefs().find((entry) => entry.id === dungeonId) ?? null;
+};
+
 const toDungeonType = (v: unknown): DungeonType | null => {
   if (v === 'material' || v === 'equipment' || v === 'trial' || v === 'challenge' || v === 'event') return v;
   return null;
@@ -224,21 +261,14 @@ const getDungeonEntryRemaining = async (
 };
 
 export const getDungeonCategories = async (): Promise<DungeonCategoryDto[]> => {
-  const result = await query(
-    `
-      SELECT type, COUNT(1)::int AS count
-      FROM dungeon_def
-      WHERE enabled = true
-      GROUP BY type
-      ORDER BY COUNT(1) DESC, type ASC
-    `
-  );
-
+  const defs = getEnabledDungeonDefs();
+  const counter = new Map<DungeonType, number>();
+  for (const def of defs) {
+    counter.set(def.type, (counter.get(def.type) ?? 0) + 1);
+  }
   const categories: DungeonCategoryDto[] = [];
-  for (const r of result.rows as Array<{ type: unknown; count: unknown }>) {
-    const type = toDungeonType(r.type);
-    if (!type) continue;
-    categories.push({ type, label: DUNGEON_TYPE_LABEL[type], count: asNumber(r.count, 0) });
+  for (const [type, count] of counter.entries()) {
+    categories.push({ type, label: DUNGEON_TYPE_LABEL[type], count });
   }
 
   for (const t of Object.keys(DUNGEON_TYPE_LABEL) as DungeonType[]) {
@@ -269,28 +299,32 @@ export const getDungeonWeeklyTargets = async (
 
     const countRes = await query(
       `
-        SELECT
-          COUNT(1)::int AS total,
-          COUNT(1) FILTER (WHERE dd.type = 'trial')::int AS trial,
-          COUNT(1) FILTER (WHERE dd.type = 'material')::int AS material,
-          COUNT(1) FILTER (WHERE dd.type = 'equipment')::int AS equipment,
-          COUNT(1) FILTER (WHERE COALESCE(dr.is_first_clear, false) = true)::int AS first_clear
-        FROM dungeon_record dr
-        JOIN dungeon_def dd ON dd.id = dr.dungeon_id
-        WHERE dr.character_id = $1
-          AND dr.result = 'cleared'
-          AND dr.completed_at >= date_trunc('week', NOW())
-          AND dr.completed_at < date_trunc('week', NOW()) + interval '7 day'
+        SELECT dungeon_id, is_first_clear
+        FROM dungeon_record
+        WHERE character_id = $1
+          AND result = 'cleared'
+          AND completed_at >= date_trunc('week', NOW())
+          AND completed_at < date_trunc('week', NOW()) + interval '7 day'
       `,
       [characterId]
     );
 
-    const row = (countRes.rows?.[0] ?? {}) as Record<string, unknown>;
-    const total = asNumber(row.total, 0);
-    const trial = asNumber(row.trial, 0);
-    const material = asNumber(row.material, 0);
-    const equipment = asNumber(row.equipment, 0);
-    const firstClear = asNumber(row.first_clear, 0);
+    const dungeonTypeById = new Map(getEnabledDungeonDefs().map((entry) => [entry.id, entry.type] as const));
+    let total = 0;
+    let trial = 0;
+    let material = 0;
+    let equipment = 0;
+    let firstClear = 0;
+
+    for (const row of countRes.rows as Array<Record<string, unknown>>) {
+      total += 1;
+      if (row.is_first_clear === true) firstClear += 1;
+      const dungeonId = typeof row.dungeon_id === 'string' ? row.dungeon_id : '';
+      const type = dungeonTypeById.get(dungeonId);
+      if (type === 'trial') trial += 1;
+      if (type === 'material') material += 1;
+      if (type === 'equipment') equipment += 1;
+    }
 
     const toProgress = (current: number, target: number): number => {
       if (target <= 0) return 100;
@@ -381,65 +415,23 @@ export const getDungeonList = async (params: {
   q?: string;
   realm?: string;
 }): Promise<DungeonDefDto[]> => {
-  const where: string[] = ['enabled = true'];
-  const args: unknown[] = [];
-
-  if (params.type) {
-    args.push(params.type);
-    where.push(`type = $${args.length}`);
-  }
-
-  if (params.q) {
-    args.push(`%${params.q}%`);
-    where.push(`(name ILIKE $${args.length} OR COALESCE(category,'') ILIKE $${args.length})`);
-  }
-
-  const result = await query(
-    `
-      SELECT
-        id, name, type, category, description, icon, background,
-        min_players, max_players, min_realm, recommended_realm, unlock_condition,
-        daily_limit, weekly_limit, stamina_cost, time_limit_sec, revive_limit,
-        tags, sort_weight, enabled, version
-      FROM dungeon_def
-      WHERE ${where.join(' AND ')}
-      ORDER BY sort_weight DESC, id ASC
-    `,
-    args
-  );
-
+  const keyword = typeof params.q === 'string' ? params.q.trim().toLowerCase() : '';
   const list: DungeonDefDto[] = [];
-  for (const r of result.rows as Array<Record<string, unknown>>) {
-    const type = toDungeonType(r.type);
-    if (!type) continue;
-    const minRealm = typeof r.min_realm === 'string' ? r.min_realm : null;
+  for (const entry of getEnabledDungeonDefs()) {
+    if (params.type && entry.type !== params.type) continue;
+    if (keyword) {
+      const name = entry.name.toLowerCase();
+      const category = (entry.category ?? '').toLowerCase();
+      if (!name.includes(keyword) && !category.includes(keyword)) continue;
+    }
+    const minRealm = entry.min_realm;
     if (params.realm && minRealm && !isRealmSufficient(params.realm, minRealm)) continue;
     list.push({
-      id: String(r.id),
-      name: String(r.name),
-      type,
-      category: typeof r.category === 'string' ? r.category : null,
-      description: typeof r.description === 'string' ? r.description : null,
-      icon: typeof r.icon === 'string' ? r.icon : null,
-      background: typeof r.background === 'string' ? r.background : null,
-      min_players: asNumber(r.min_players, 1),
-      max_players: asNumber(r.max_players, 4),
+      ...entry,
       min_realm: minRealm,
-      recommended_realm: typeof r.recommended_realm === 'string' ? r.recommended_realm : null,
-      unlock_condition: r.unlock_condition ?? {},
-      daily_limit: asNumber(r.daily_limit, 0),
-      weekly_limit: asNumber(r.weekly_limit, 0),
-      stamina_cost: asNumber(r.stamina_cost, 0),
-      time_limit_sec: asNumber(r.time_limit_sec, 0),
-      revive_limit: asNumber(r.revive_limit, 0),
-      tags: r.tags ?? [],
-      sort_weight: asNumber(r.sort_weight, 0),
-      enabled: Boolean(r.enabled),
-      version: asNumber(r.version, 1),
     });
   }
-
-  return list;
+  return list.sort((left, right) => right.sort_weight - left.sort_weight || left.id.localeCompare(right.id));
 };
 
 export const getDungeonPreview = async (
@@ -488,48 +480,8 @@ export const getDungeonPreview = async (
   monsters: MonsterLiteRow[];
   drops: Array<{ id: string; name: string; quality: string | null; icon: string | null; from: string }>;
 } | null> => {
-  const defRes = await query(
-    `
-      SELECT
-        id, name, type, category, description, icon, background,
-        min_players, max_players, min_realm, recommended_realm, unlock_condition,
-        daily_limit, weekly_limit, stamina_cost, time_limit_sec, revive_limit,
-        tags, sort_weight, enabled, version
-      FROM dungeon_def
-      WHERE id = $1 AND enabled = true
-      LIMIT 1
-    `,
-    [dungeonId]
-  );
-
-  const defRow = (defRes.rows[0] ?? null) as Record<string, unknown> | null;
-  if (!defRow) return null;
-  const type = toDungeonType(defRow.type);
-  if (!type) return null;
-
-  const dungeon: DungeonDefDto = {
-    id: String(defRow.id),
-    name: String(defRow.name),
-    type,
-    category: typeof defRow.category === 'string' ? defRow.category : null,
-    description: typeof defRow.description === 'string' ? defRow.description : null,
-    icon: typeof defRow.icon === 'string' ? defRow.icon : null,
-    background: typeof defRow.background === 'string' ? defRow.background : null,
-    min_players: asNumber(defRow.min_players, 1),
-    max_players: asNumber(defRow.max_players, 4),
-    min_realm: typeof defRow.min_realm === 'string' ? defRow.min_realm : null,
-    recommended_realm: typeof defRow.recommended_realm === 'string' ? defRow.recommended_realm : null,
-    unlock_condition: defRow.unlock_condition ?? {},
-    daily_limit: asNumber(defRow.daily_limit, 0),
-    weekly_limit: asNumber(defRow.weekly_limit, 0),
-    stamina_cost: asNumber(defRow.stamina_cost, 0),
-    time_limit_sec: asNumber(defRow.time_limit_sec, 0),
-    revive_limit: asNumber(defRow.revive_limit, 0),
-    tags: defRow.tags ?? [],
-    sort_weight: asNumber(defRow.sort_weight, 0),
-    enabled: Boolean(defRow.enabled),
-    version: asNumber(defRow.version, 1),
-  };
+  const dungeon = getDungeonDefById(dungeonId);
+  if (!dungeon) return null;
 
   const entry =
     typeof userId === 'number' && Number.isFinite(userId)
@@ -1367,19 +1319,16 @@ export const startDungeonInstance = async (
       return { success: false, message: '只有创建者可以开始秘境' };
     }
 
-    const dungeonDefRes = await client.query(
-      `SELECT id, daily_limit, weekly_limit, min_players, max_players, stamina_cost FROM dungeon_def WHERE id = $1 LIMIT 1`,
-      [inst.dungeon_id]
-    );
-    if (dungeonDefRes.rows.length === 0) {
+    const dungeonDef = getDungeonDefById(inst.dungeon_id);
+    if (!dungeonDef) {
       await client.query('ROLLBACK');
       return { success: false, message: '秘境不存在' };
     }
-    const dailyLimit = asNumber(dungeonDefRes.rows[0]?.daily_limit, 0);
-    const weeklyLimit = asNumber(dungeonDefRes.rows[0]?.weekly_limit, 0);
-    const minPlayers = asNumber(dungeonDefRes.rows[0]?.min_players, 1);
-    const maxPlayers = asNumber(dungeonDefRes.rows[0]?.max_players, 4);
-    const staminaCost = asNumber(dungeonDefRes.rows[0]?.stamina_cost, 0);
+    const dailyLimit = dungeonDef.daily_limit;
+    const weeklyLimit = dungeonDef.weekly_limit;
+    const minPlayers = dungeonDef.min_players;
+    const maxPlayers = dungeonDef.max_players;
+    const staminaCost = dungeonDef.stamina_cost;
 
     const participants = parseParticipants(inst.participants);
     if (participants.length < minPlayers) {

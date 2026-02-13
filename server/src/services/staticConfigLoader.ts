@@ -241,6 +241,58 @@ type MapDefFile = { maps: MapDefConfig[] };
 type MonsterDefFile = { monsters: MonsterDefConfig[] };
 type SpawnRuleFile = { rules: SpawnRuleConfig[] };
 
+export type BountyDefConfig = {
+  id: string;
+  pool?: string;
+  task_id: string;
+  title: string;
+  description?: string | null;
+  claim_policy?: string;
+  max_claims?: number;
+  weight?: number;
+  enabled?: boolean;
+  version?: number;
+};
+
+export type DungeonDefConfig = {
+  id: string;
+  name: string;
+  type: string;
+  category?: string | null;
+  description?: string | null;
+  icon?: string | null;
+  background?: string | null;
+  min_players?: number;
+  max_players?: number;
+  min_realm?: string | null;
+  recommended_realm?: string | null;
+  unlock_condition?: unknown;
+  daily_limit?: number;
+  weekly_limit?: number;
+  stamina_cost?: number;
+  time_limit_sec?: number;
+  revive_limit?: number;
+  tags?: unknown;
+  sort_weight?: number;
+  enabled?: boolean;
+  version?: number;
+};
+
+export type DialogueDefConfig = {
+  id: string;
+  name: string;
+  nodes?: unknown[];
+  enabled?: boolean;
+};
+
+type BountyDefFile = { bounties: BountyDefConfig[] };
+type DungeonSeedFile = {
+  dungeons?: Array<{
+    def?: DungeonDefConfig;
+  }>;
+};
+type DialogueFile = { dialogues: DialogueDefConfig[] };
+
 let battlePassCache: BattlePassStaticConfig | null | undefined;
 let monthCardCache: MonthCardDef[] | null | undefined;
 let achievementDefCache: AchievementDefConfig[] | null | undefined;
@@ -251,6 +303,9 @@ let talkTreeDefCache: TalkTreeDefConfig[] | null | undefined;
 let mapDefCache: MapDefConfig[] | null | undefined;
 let monsterDefCache: MonsterDefConfig[] | null | undefined;
 let spawnRuleCache: SpawnRuleConfig[] | null | undefined;
+let bountyDefCache: BountyDefConfig[] | null | undefined;
+let dungeonDefCache: DungeonDefConfig[] | null | undefined;
+let dialogueDefCache: DialogueDefConfig[] | null | undefined;
 
 export const getBattlePassStaticConfig = (): BattlePassStaticConfig | null => {
   if (battlePassCache !== undefined) return battlePassCache;
@@ -358,5 +413,57 @@ export const getSpawnRuleDefinitions = (): SpawnRuleConfig[] => {
   const file = readJsonFile<SpawnRuleFile>('spawn_rule.json');
   spawnRuleCache = Array.isArray(file?.rules) ? file.rules : [];
   return spawnRuleCache;
+};
+
+export const getBountyDefinitions = (): BountyDefConfig[] => {
+  if (bountyDefCache !== undefined) return bountyDefCache ?? [];
+  const file = readJsonFile<BountyDefFile>('bounty_def.json');
+  bountyDefCache = Array.isArray(file?.bounties) ? file.bounties : [];
+  return bountyDefCache;
+};
+
+export const getDungeonDefinitions = (): DungeonDefConfig[] => {
+  if (dungeonDefCache !== undefined) return dungeonDefCache ?? [];
+
+  const files = fs.existsSync(SEEDS_DIR)
+    ? fs
+        .readdirSync(SEEDS_DIR)
+        .filter((filename) => /^dungeon_.*\.json$/i.test(filename))
+        .sort((left, right) => left.localeCompare(right))
+    : [];
+
+  const dungeons: DungeonDefConfig[] = [];
+  for (const filename of files) {
+    const file = readJsonFile<DungeonSeedFile>(filename);
+    const list = Array.isArray(file?.dungeons) ? file.dungeons : [];
+    for (const entry of list) {
+      if (!entry?.def?.id) continue;
+      dungeons.push(entry.def);
+    }
+  }
+
+  dungeonDefCache = dungeons;
+  return dungeonDefCache;
+};
+
+export const getDialogueDefinitions = (): DialogueDefConfig[] => {
+  if (dialogueDefCache !== undefined) return dialogueDefCache ?? [];
+
+  const files = fs.existsSync(SEEDS_DIR)
+    ? fs
+        .readdirSync(SEEDS_DIR)
+        .filter((filename) => /^dialogue_main_chapter\d+\.json$/i.test(filename))
+        .sort((left, right) => left.localeCompare(right))
+    : [];
+
+  const dialogues: DialogueDefConfig[] = [];
+  for (const filename of files) {
+    const file = readJsonFile<DialogueFile>(filename);
+    if (!Array.isArray(file?.dialogues)) continue;
+    dialogues.push(...file.dialogues);
+  }
+
+  dialogueDefCache = dialogues;
+  return dialogueDefCache;
 };
 
