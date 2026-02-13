@@ -4,6 +4,7 @@ import coin01 from '../../../../assets/images/ui/sh_icon_0006_jinbi_02.png';
 import { SERVER_BASE, getInventoryInfo, getInventoryItems, moveInventoryItem, type InventoryItemDto, type ItemDefLite } from '../../../../services/api';
 import { useIsMobile } from '../../shared/responsive';
 import { buildEquipmentAffixDisplayText, type EquipmentAffixTextInput } from '../../shared/equipmentAffixText';
+import { formatSignedNumber, formatSignedPercent } from '../../shared/formatAttr';
 import './index.scss';
 
 type SlotSide = 'bag' | 'warehouse';
@@ -236,18 +237,6 @@ const PERCENT_ATTR_KEYS = new Set<string>([
   'tu_kangxing',
 ]);
 
-const formatSignedNumber = (value: number): string => {
-  const sign = value > 0 ? '+' : '';
-  return `${sign}${value}`;
-};
-
-const formatSignedPercent = (value: number): string => {
-  const percent = value * 100;
-  const fixed = Math.abs(percent - Math.round(percent)) < 1e-9 ? percent.toFixed(0) : percent.toFixed(2);
-  const trimmed = fixed.replace(/\.?0+$/, '') || '0';
-  const sign = value > 0 ? '+' : '';
-  return `${sign}${trimmed}%`;
-};
 
 type EquipmentAffix = EquipmentAffixTextInput;
 

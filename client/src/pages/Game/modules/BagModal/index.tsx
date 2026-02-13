@@ -33,9 +33,6 @@ import {
   collectBatchDisassembleCandidates,
   collectGemCandidates,
   formatEquipmentAffixLine,
-  formatPercent,
-  formatSignedNumber,
-  formatSignedPercent,
   getEnhanceSuccessRatePercent,
   getEquipSlotLabel,
   getRefineSuccessRatePercent,
@@ -55,6 +52,7 @@ import type { BagAction, BagCategory, BagItem, BagQuality, BagSort, BatchMode } 
 import DisassembleModal from './DisassembleModal';
 import CraftModal from './CraftModal';
 import GemSynthesisModal from './GemSynthesisModal';
+import { formatPercent, formatSignedNumber, formatSignedPercent } from '../../shared/formatAttr';
 import { buildAutoDisassembleSubCategoryOptions } from '../../shared/autoDisassembleFilters';
 import { useIsMobile } from '../../shared/responsive';
 import './index.scss';
@@ -1285,7 +1283,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
                   <span className="bag-growth-level">+{enhanceState.curLv}</span>
                   <span className="bag-growth-arrow">→</span>
                   <span className="bag-growth-level bag-growth-level--target">+{enhanceState.targetLv}</span>
-                  <span className="bag-growth-rate">{formatPercent(enhanceState.successRate)}%</span>
+                  <span className="bag-growth-rate">{formatPercent(enhanceState.successRate)}</span>
                 </div>
                 {enhanceState.downgradeOnFail && <div className="bag-growth-tip-warn">失败掉级</div>}
               </div>
@@ -1368,7 +1366,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
                   <span className="bag-growth-level">+{refineState.curLv}</span>
                   <span className="bag-growth-arrow">→</span>
                   <span className="bag-growth-level bag-growth-level--target">+{refineState.targetLv}</span>
-                  <span className="bag-growth-rate">{formatPercent(refineState.successRate)}%</span>
+                  <span className="bag-growth-rate">{formatPercent(refineState.successRate)}</span>
                 </div>
               </div>
 

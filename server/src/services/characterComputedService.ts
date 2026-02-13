@@ -245,7 +245,7 @@ const VALID_TITLE_EFFECT_KEYS = new Set<CharacterAttrKey>([
   'lingqi_huifu',
 ]);
 
-const DEFAULT_ATTRS: CharacterComputedStats = {
+const DEFAULT_ATTRS: CharacterComputedStats = Object.freeze({
   max_qixue: 100,
   max_lingqi: 0,
   wugong: 5,
@@ -274,7 +274,7 @@ const DEFAULT_ATTRS: CharacterComputedStats = {
   lingqi_huifu: 0,
   sudu: 1,
   fuyuan: 1,
-};
+});
 
 let cachedRealmConfig: RealmBreakthroughConfigFile | null = null;
 
@@ -667,8 +667,9 @@ const computeStaticAttrs = async (base: CharacterBaseRow): Promise<CharacterComp
   stats.wugong += base.qi * 2;
   stats.fagong += base.qi * 2;
 
-  stats.mingzhong = roundRatio(stats.mingzhong + base.shen * 0.002);
-  stats.baoji = roundRatio(stats.baoji + base.shen * 0.001);
+  // 显式使用 DEFAULT_ATTRS 基础值，不依赖 emptyStats() 展开结果
+  stats.mingzhong = roundRatio(DEFAULT_ATTRS.mingzhong + base.shen * 0.002);
+  stats.baoji = roundRatio(DEFAULT_ATTRS.baoji + base.shen * 0.001);
 
   await applyRealmRewardsToStats(base, stats);
 

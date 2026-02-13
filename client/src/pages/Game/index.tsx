@@ -2,6 +2,7 @@ import { App, Badge, Button, Drawer, Modal, Tag, Tabs, Tooltip } from 'antd';
 import { MailOutlined, SettingOutlined, LogoutOutlined, CalendarOutlined } from '@ant-design/icons';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type FC } from 'react';
 import PlayerInfo from './modules/PlayerInfo';
+import { formatSignedNumber, formatSignedPercent } from './shared/formatAttr';
 import GameMap from './modules/GameMap';
 import ChatPanel, { type ChatPanelHandle } from './modules/ChatPanel';
 import FunctionMenu from './modules/FunctionMenu';
@@ -207,19 +208,6 @@ const percentAttrKeys = new Set<string>([
   'huo_kangxing',
   'tu_kangxing',
 ]);
-
-const formatSignedNumber = (value: number): string => {
-  const sign = value > 0 ? '+' : '';
-  return `${sign}${value}`;
-};
-
-const formatSignedPercent = (value: number): string => {
-  const percent = value * 100;
-  const fixed = Math.abs(percent - Math.round(percent)) < 1e-9 ? percent.toFixed(0) : percent.toFixed(2);
-  const trimmed = fixed.replace(/\.?0+$/, '') || '0';
-  const sign = value > 0 ? '+' : '';
-  return `${sign}${trimmed}%`;
-};
 
 const coerceAttrRecord = (value: unknown): Record<string, number> => {
   if (!value) return {};

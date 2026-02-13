@@ -40,9 +40,6 @@ import {
   categoryLabels,
   collectBatchDisassembleCandidates,
   formatEquipmentAffixLine,
-  formatPercent,
-  formatSignedNumber,
-  formatSignedPercent,
   getEnhanceSuccessRatePercent,
   getRefineSuccessRatePercent,
   isDisassemblableBagItem,
@@ -55,6 +52,7 @@ import {
   qualityRank,
 } from './bagShared';
 import type { BagAction, BagCategory, BagItem, BagSort } from './bagShared';
+import { formatPercent, formatSignedNumber, formatSignedPercent } from '../../shared/formatAttr';
 import DisassembleModal from './DisassembleModal';
 import CraftModal from './CraftModal';
 import GemSynthesisModal from './GemSynthesisModal';
@@ -589,7 +587,7 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
                 <span style={{ margin: '0 8px', color: 'var(--text-secondary)' }}>→</span>
                 <span style={{ fontSize: 22, fontWeight: 900, color: 'var(--primary-color)' }}>+{st.targetLv}</span>
                 <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-secondary)' }}>
-                  成功率 {formatPercent(st.successRate)}%
+                  成功率 {formatPercent(st.successRate)}
                   {mode === 'enhance' && enhanceState?.downgradeOnFail && (
                     <span style={{ marginLeft: 8, color: 'var(--danger-color)' }}>失败掉级</span>
                   )}

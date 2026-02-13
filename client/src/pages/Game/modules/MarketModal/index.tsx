@@ -2,6 +2,7 @@ import { App, Button, Input, Modal, Pagination, Segmented, Select, Table, Tag, T
 import { SearchOutlined } from '@ant-design/icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import coin01 from '../../../../assets/images/ui/sh_icon_0006_jinbi_02.png';
+import { formatSignedNumber, formatSignedPercent } from '../../shared/formatAttr';
 import {
   buyMarketListing,
   cancelMarketListing,
@@ -194,19 +195,6 @@ const PERCENT_ATTR_KEYS = new Set<string>([
   'huo_kangxing',
   'tu_kangxing',
 ]);
-
-const formatSignedNumber = (value: number): string => {
-  const sign = value > 0 ? '+' : '';
-  return `${sign}${value}`;
-};
-
-const formatSignedPercent = (value: number): string => {
-  const percent = value * 100;
-  const fixed = Math.abs(percent - Math.round(percent)) < 1e-9 ? percent.toFixed(0) : percent.toFixed(2);
-  const trimmed = fixed.replace(/\.?0+$/, '') || '0';
-  const sign = value > 0 ? '+' : '';
-  return `${sign}${trimmed}%`;
-};
 
 type EquipmentAffix = EquipmentAffixTextInput;
 

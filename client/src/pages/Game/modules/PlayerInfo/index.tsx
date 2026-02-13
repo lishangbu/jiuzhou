@@ -1,9 +1,10 @@
 import { App, Button, Progress, Upload } from 'antd';
 import type { UploadProps } from 'antd';
 import { UserOutlined, LoadingOutlined } from '@ant-design/icons';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { gameSocket, type CharacterData } from '../../../../services/gameSocket';
 import { SERVER_BASE, getRealmOverview, uploadAvatar, addAttributePoint, removeAttributePoint, type RealmOverviewDto } from '../../../../services/api';
+import { formatPercent, formatRecovery } from '../../shared/formatAttr';
 import './index.scss';
 
 const staminaMaxFromEnv = Number(import.meta.env.VITE_STAMINA_MAX);
@@ -69,18 +70,6 @@ const PlayerInfo: React.FC = () => {
   }, [character?.realm]);
 
   const clampPercent = (value: number) => Math.max(0, Math.min(100, value));
-
-  const formatPercent = useCallback((value: number) => {
-    const percent = value * 100;
-    const fixed = Math.abs(percent - Math.round(percent)) < 1e-9 ? percent.toFixed(0) : percent.toFixed(2);
-    const trimmed = fixed.replace(/\.?0+$/, '') || '0';
-    return `${trimmed}%`;
-  }, []);
-
-  const formatRecovery = useCallback((value: number) => {
-    const fixed = Math.abs(value - Math.round(value)) < 1e-9 ? value.toFixed(0) : value.toFixed(2);
-    return fixed.replace(/\.?0+$/, '') || '0';
-  }, []);
 
   const expCost = useMemo(() => {
     const costs = realmOverview?.costs ?? [];
@@ -197,7 +186,7 @@ const PlayerInfo: React.FC = () => {
   const expPercent = clampPercent(
     expNeed && expNeed > 0 ? (expCurrent / expNeed) * 100 : realmOverview?.nextRealm ? 0 : 100,
   );
-  const expText = `${expPercent.toFixed(2).replace(/\.?0+$/, '')}%`;
+  const expText = `${expPercent.toFixed(2).replace(/(\.\d*[1-9])0+$|\.0+$/, '$1')}%`;
   const expDetailText = expNeed && expNeed > 0 ? `${expCurrent.toLocaleString()}/${expNeed.toLocaleString()}` : expCurrent.toLocaleString();
 
   const attackTypeText = character.attributeType === 'physical' ? '物理' : '法术';

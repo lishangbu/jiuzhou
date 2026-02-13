@@ -11,6 +11,7 @@ import type {
 } from "../../../../services/api";
 import { getEquipRealmRankForReroll as getEquipRealmRankForRerollShared } from "../../shared/realm";
 import { buildEquipmentAffixDisplayText } from "../../shared/equipmentAffixText";
+import { formatSignedNumber, formatSignedPercent, formatPercent } from "../../shared/formatAttr";
 
 /* ───────── 类型 ───────── */
 
@@ -386,32 +387,7 @@ export const coerceAffixes = (value: unknown): EquipmentAffix[] => {
     .filter((v): v is EquipmentAffix => !!v);
 };
 
-/* ───────── 格式化 ───────── */
-
-export const formatSignedNumber = (value: number): string => {
-  const sign = value > 0 ? "+" : "";
-  return `${sign}${value}`;
-};
-
-export const formatSignedPercent = (value: number): string => {
-  const percent = value * 100;
-  const fixed =
-    Math.abs(percent - Math.round(percent)) < 1e-9
-      ? percent.toFixed(0)
-      : percent.toFixed(2);
-  const trimmed = fixed.replace(/\.?0+$/, "") || "0";
-  const sign = value > 0 ? "+" : "";
-  return `${sign}${trimmed}%`;
-};
-
-export const formatPercent = (value: number): string => {
-  const percent = value * 100;
-  const fixed =
-    Math.abs(percent - Math.round(percent)) < 1e-9
-      ? percent.toFixed(0)
-      : percent.toFixed(2);
-  return fixed.replace(/\.?0+$/, "") || "0";
-};
+/* ───────── 格式化（统一从 shared/formatAttr 导入，见文件顶部 import + re-export）───────── */
 
 /* ───────── 词条洗炼 ───────── */
 
@@ -1144,7 +1120,7 @@ const formatSetEffectLine = (raw: unknown): string | null => {
   const parts: string[] = [];
   if (trigger !== "equip") parts.push(`触发：${triggerLabel[trigger] ?? trigger}`);
   parts.push(main);
-  if (chance !== null) parts.push(`概率 ${formatPercent(chance)}%`);
+  if (chance !== null) parts.push(`概率 ${formatPercent(chance)}`);
   if (durationRound !== null && durationRound > 0) {
     parts.push(`持续 ${Math.floor(durationRound)} 回合`);
   }

@@ -1,4 +1,5 @@
 import { App, Button, Modal, Progress, Segmented, Tag } from 'antd';
+import { formatSignedNumber, formatSignedPercent } from '../../shared/formatAttr';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   claimAchievementPointsReward,
@@ -201,21 +202,6 @@ const titlePercentEffectKeys = new Set<string>([
 
 const normalizeEffectKey = (key: string): string => {
   return key.trim().replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`);
-};
-
-const formatSignedNumber = (value: number): string => {
-  const fixed = Math.abs(value - Math.round(value)) < 1e-9 ? value.toFixed(0) : value.toFixed(2);
-  const trimmed = fixed.replace(/\.?0+$/, '') || '0';
-  const sign = value > 0 ? '+' : '';
-  return `${sign}${trimmed}`;
-};
-
-const formatSignedPercent = (value: number): string => {
-  const percent = value * 100;
-  const fixed = Math.abs(percent - Math.round(percent)) < 1e-9 ? percent.toFixed(0) : percent.toFixed(2);
-  const trimmed = fixed.replace(/\.?0+$/, '') || '0';
-  const sign = value > 0 ? '+' : '';
-  return `${sign}${trimmed}%`;
 };
 
 const formatEffectValue = (key: string, value: number): string | null => {

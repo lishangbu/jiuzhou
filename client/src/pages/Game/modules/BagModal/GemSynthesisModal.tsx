@@ -1,4 +1,5 @@
 import { App, Button, Empty, InputNumber, Modal, Segmented, Select, Spin, Tag } from 'antd';
+import { formatPercent } from '../../shared/formatAttr';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   getInventoryGemSynthesisRecipes,
@@ -25,12 +26,6 @@ const clampSynthesizeTimes = (value: number, maxValue: number): number => {
   const safeMax = Math.max(1, Math.floor(maxValue || 1));
   if (!Number.isFinite(value)) return 1;
   return Math.min(safeMax, Math.max(1, Math.floor(value)));
-};
-
-const formatPercent = (ratio: number): string => {
-  const percent = Math.max(0, Number(ratio) || 0) * 100;
-  const fixed = Math.abs(percent - Math.round(percent)) < 1e-9 ? percent.toFixed(0) : percent.toFixed(2);
-  return fixed.replace(/\.?0+$/, '') || '0';
 };
 
 const GemSynthesisModal: React.FC<GemSynthesisModalProps> = ({ open, onClose, onSuccess }) => {
@@ -281,7 +276,7 @@ const GemSynthesisModal: React.FC<GemSynthesisModalProps> = ({ open, onClose, on
                       <div className="bag-gem-item-title">{recipe.name}</div>
                       <div className="bag-gem-item-meta">
                         <span>{recipe.fromLevel}级 → {recipe.toLevel}级</span>
-                        <span>成功率 {formatPercent(recipe.successRate)}%</span>
+                        <span>成功率 {formatPercent(recipe.successRate)}</span>
                       </div>
                       <div className="bag-gem-item-meta">
                         <span>可合成 {recipe.maxSynthesizeTimes} 次</span>
@@ -299,7 +294,7 @@ const GemSynthesisModal: React.FC<GemSynthesisModalProps> = ({ open, onClose, on
                       <Tag color="default">类型：{gemTypeLabel[selectedRecipe.gemType]}</Tag>
                       <Tag color="blue">产出：{selectedRecipe.output.name} ×{selectedRecipe.output.qty}</Tag>
                       <Tag color={selectedRecipe.successRate >= 1 ? 'green' : 'orange'}>
-                        成功率：{formatPercent(selectedRecipe.successRate)}%
+                        成功率：{formatPercent(selectedRecipe.successRate)}
                       </Tag>
                     </div>
 

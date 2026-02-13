@@ -1,4 +1,5 @@
 import { Button, Input, Modal, Select, Table, Tabs, Tag } from 'antd';
+import { formatPercent } from '../../shared/formatAttr';
 import { LeftOutlined, SearchOutlined } from '@ant-design/icons';
 import { useEffect, useMemo, useState } from 'react';
 import map01 from '../../../../assets/images/map/cp_icon_map01.png';
@@ -51,11 +52,7 @@ type DungeonDifficultyOption = {
 
 const formatDropProbPercent = (value: number | null | undefined): string => {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
-  const normalized = Math.max(0, Math.min(1, value));
-  const percent = normalized * 100;
-  const fixed = Math.abs(percent - Math.round(percent)) < 1e-9 ? percent.toFixed(0) : percent.toFixed(2);
-  const trimmed = fixed.replace(/\.?0+$/, '') || '0';
-  return `${trimmed}%`;
+  return formatPercent(Math.max(0, Math.min(1, value)));
 };
 
 const categoryLabels: Record<MapCategory, string> = {
