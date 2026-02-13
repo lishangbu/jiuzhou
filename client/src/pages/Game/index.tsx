@@ -672,7 +672,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const [trackedRoomIds, setTrackedRoomIds] = useState<string[]>([]);
   const isMobile = useIsMobile();
   const [topTab, setTopTab] = useState<'map' | 'room'>('map');
-  const [mobileBattleChatOpen, setMobileBattleChatOpen] = useState(false);
+  const [mobileChatDrawerOpen, setMobileChatDrawerOpen] = useState(false);
   const [playerInfoOpen, setPlayerInfoOpen] = useState(false);
   const [mapModalOpen, setMapModalOpen] = useState(false);
   const [mapModalCategory, setMapModalCategory] = useState<'world' | 'dungeon' | 'event'>('world');
@@ -765,7 +765,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const isMobileBattleMode = isMobile && viewMode === 'battle';
 
   useEffect(() => {
-    if (!isMobileBattleMode) setMobileBattleChatOpen(false);
+    setMobileChatDrawerOpen(false);
   }, [isMobileBattleMode]);
 
   const stopGatherLoop = useCallback(() => {
@@ -1800,7 +1800,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
               </div>
             )}
           </div>
-          <div className={`game-chat-area${isMobileBattleMode ? ' is-mobile-battle' : ''}${isMobileBattleMode && mobileBattleChatOpen ? ' is-open' : ''}`}>
+          <div className={`game-chat-area${isMobile ? ' is-mobile-drawer' : ''}${isMobile && mobileChatDrawerOpen ? ' is-open' : ''}`}>
             <div className="game-chat-left">
               <ChatPanel ref={chatPanelRef} onSelectPlayer={setInfoTarget} isMobile={isMobile} />
             </div>
@@ -1812,21 +1812,12 @@ const Game: FC<GameProps> = ({ onLogout }) => {
               />
             </div>
           </div>
-          {isMobileBattleMode ? (
-            <>
-              <Button
-                type="primary"
-                className="game-mobile-battle-chat-toggle"
-                onClick={() => setMobileBattleChatOpen((prev) => !prev)}
-              >
-                {mobileBattleChatOpen ? '收起战况' : '战况'}
-              </Button>
-              <div
-                className={`game-mobile-battle-chat-mask${mobileBattleChatOpen ? ' is-open' : ''}`}
-                onClick={() => setMobileBattleChatOpen(false)}
-                aria-hidden
-              />
-            </>
+          {isMobile ? (
+            <div
+              className={`game-mobile-chat-mask${mobileChatDrawerOpen ? ' is-open' : ''}`}
+              onClick={() => setMobileChatDrawerOpen(false)}
+              aria-hidden
+            />
           ) : null}
         </main>
 
@@ -1861,6 +1852,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                   setAchievementModalOpen(true);
                   void refreshAchievementIndicator();
                 }
+                if (key === 'battle-report') setMobileChatDrawerOpen(true);
                 if (key === 'character') setPlayerInfoOpen(true);
               }}
             />

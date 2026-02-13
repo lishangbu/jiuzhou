@@ -655,12 +655,12 @@
   }
 
   .game-chat-area {
-    height: clamp(220px, 34dvh, 360px);
+    height: 0;
     min-height: 0;
-    display: block;
+    display: none;
     min-width: 0;
     max-width: 100%;
-    overflow-x: hidden;
+    overflow: hidden;
   }
 
   .game-map-area.is-mobile-battle {
@@ -682,7 +682,8 @@
     border-top: 1px solid var(--border-color-soft);
   }
 
-  .game-chat-area.is-mobile-battle {
+  .game-chat-area.is-mobile-drawer {
+    display: block;
     position: fixed;
     left: 0;
     right: 0;
@@ -700,35 +701,22 @@
     transition: transform 0.2s ease, opacity 0.2s ease;
   }
 
-  .game-chat-area.is-mobile-battle.is-open {
+  .game-chat-area.is-mobile-drawer.is-open {
     transform: translateY(0);
     opacity: 1;
     pointer-events: auto;
   }
 
-  .game-chat-area.is-mobile-battle .game-chat-left {
+  .game-chat-area.is-mobile-drawer .game-chat-left {
     height: 100%;
   }
 
-  .game-chat-area.is-mobile-battle .chat-panel {
+  .game-chat-area.is-mobile-drawer .chat-panel {
     height: 100%;
     padding: 0 10px 10px;
   }
 
-  .game-mobile-battle-chat-toggle {
-    position: fixed;
-    right: 12px;
-    bottom: calc(64px + env(safe-area-inset-bottom, 0px) + 12px);
-    z-index: 131;
-    height: 38px;
-    padding: 0 16px;
-    border-radius: 999px;
-    font-size: 14px;
-    font-weight: 700;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
-  }
-
-  .game-mobile-battle-chat-mask {
+  .game-mobile-chat-mask {
     position: fixed;
     left: 0;
     right: 0;
@@ -741,7 +729,7 @@
     transition: opacity 0.2s ease;
   }
 
-  .game-mobile-battle-chat-mask.is-open {
+  .game-mobile-chat-mask.is-open {
     opacity: 1;
     pointer-events: auto;
   }

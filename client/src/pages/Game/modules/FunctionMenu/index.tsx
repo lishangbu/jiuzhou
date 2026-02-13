@@ -4,6 +4,7 @@ import {
   CompassOutlined,
   TeamOutlined,
   ShopOutlined,
+  MessageOutlined,
   EnvironmentOutlined,
   UserOutlined,
   InboxOutlined,
@@ -66,6 +67,7 @@ const FunctionMenu: React.FC<FunctionMenuProps> = ({ onAction, indicators }) => 
       { key: 'achievement', icon: <CrownOutlined />, label: '成就' },
     ];
     if (isMobile) {
+      items.unshift({ key: 'battle-report', icon: <MessageOutlined />, label: '战况' });
       items.push({ key: 'character', icon: <UserOutlined />, label: '角色' });
     }
     return items;
