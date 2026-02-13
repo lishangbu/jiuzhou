@@ -30,9 +30,23 @@ import {
   type SocketedGemEntry,
 } from './equipmentGrowthRules.js';
 import {
+  buildAffixRerollCostPlan,
+  normalizeAffixLockIndexes,
+  validateAffixLockIndexes,
+} from './equipmentAffixRerollRules.js';
+import {
+  getEquipRealmRankForReroll,
+  getQualityMultiplierForReroll,
+  loadAffixPoolForRerollTx,
+  parseGeneratedAffixesForReroll,
+  rerollEquipmentAffixesWithLocks,
+  resolveQualityForReroll,
+} from './equipmentAffixRerollService.js';
+import {
   resolveDisassembleRewardItemDefIdByQuality,
   resolveTechniqueBookDisassembleRewardByQuality,
 } from './equipmentDisassembleRules.js';
+import type { GeneratedAffix } from './equipmentService.js';
 
 // 背包位置类型
 export type InventoryLocation = 'bag' | 'warehouse' | 'equipped';
@@ -570,6 +584,101 @@ const getRefineItemStateTx = async (
       locked: Boolean(row.locked),
       refineLevel: clampInt(Number(row.refine_level) || 0, 0, REFINE_MAX_LEVEL),
       itemLevel: Math.max(0, Math.floor(Number(row.level) || 0)),
+    },
+  };
+};
+
+const getRerollItemStateTx = async (
+  client: PoolClient,
+  characterId: number,
+  itemInstanceId: number
+): Promise<{
+  success: boolean;
+  message: string;
+  item?: {
+    id: number;
+    qty: number;
+    location: InventoryLocation | string;
+    locked: boolean;
+    affixPoolId: string;
+    affixes: GeneratedAffix[];
+    resolvedQuality: string | null;
+    resolvedQualityRank: number;
+    defQuality: string | null;
+    defQualityRank: number;
+    equipReqRealm: string | null;
+  };
+}> => {
+  const itemResult = await client.query(
+    `
+      SELECT
+        ii.id,
+        ii.qty,
+        ii.location,
+        ii.locked,
+        ii.affixes,
+        id.category,
+        id.affix_pool_id,
+        id.quality AS def_quality,
+        id.quality_rank AS def_quality_rank,
+        COALESCE(ii.quality, id.quality) AS resolved_quality,
+        COALESCE(ii.quality_rank, id.quality_rank) AS resolved_quality_rank,
+        id.equip_req_realm
+      FROM item_instance ii
+      JOIN item_def id ON id.id = ii.item_def_id
+      WHERE ii.id = $1 AND ii.owner_character_id = $2
+      FOR UPDATE
+      LIMIT 1
+    `,
+    [itemInstanceId, characterId]
+  );
+
+  if (itemResult.rows.length === 0) return { success: false, message: '物品不存在' };
+
+  const row = itemResult.rows[0] as {
+    id: number;
+    qty: number;
+    location: InventoryLocation | string;
+    locked: boolean;
+    affixes: unknown;
+    category: string;
+    affix_pool_id: string | null;
+    def_quality: string | null;
+    def_quality_rank: number | null;
+    resolved_quality: string | null;
+    resolved_quality_rank: number | null;
+    equip_req_realm: string | null;
+  };
+
+  if (row.category !== 'equipment') return { success: false, message: '该物品不可洗炼' };
+  if (row.locked) return { success: false, message: '物品已锁定' };
+  if (String(row.location) === 'auction') return { success: false, message: '交易中的装备不可洗炼' };
+  if (!['bag', 'warehouse', 'equipped'].includes(String(row.location))) {
+    return { success: false, message: '该物品当前位置不可洗炼' };
+  }
+  if ((Number(row.qty) || 0) !== 1) return { success: false, message: '装备数量异常' };
+
+  const affixPoolId = String(row.affix_pool_id || '').trim();
+  if (!affixPoolId) return { success: false, message: '该装备没有可用词条池' };
+
+  const affixes = parseGeneratedAffixesForReroll(row.affixes);
+  if (affixes.length <= 0) return { success: false, message: '该装备没有可洗炼词条' };
+
+  return {
+    success: true,
+    message: 'ok',
+    item: {
+      id: Number(row.id),
+      qty: Number(row.qty) || 1,
+      location: row.location,
+      locked: Boolean(row.locked),
+      affixPoolId,
+      affixes,
+      resolvedQuality: typeof row.resolved_quality === 'string' ? row.resolved_quality : null,
+      resolvedQualityRank: Math.max(1, Math.floor(Number(row.resolved_quality_rank) || 1)),
+      defQuality: typeof row.def_quality === 'string' ? row.def_quality : null,
+      defQualityRank: Math.max(1, Math.floor(Number(row.def_quality_rank) || 1)),
+      equipReqRealm: typeof row.equip_req_realm === 'string' ? row.equip_req_realm : null,
     },
   };
 };
@@ -2187,6 +2296,159 @@ export const refineEquipment = async (
   }
 };
 
+export const rerollEquipmentAffixes = async (
+  characterId: number,
+  userId: number,
+  itemInstanceId: number,
+  lockIndexes: number[] = []
+): Promise<{
+  success: boolean;
+  message: string;
+  data?: {
+    affixes: GeneratedAffix[];
+    lockIndexes: number[];
+    costs: {
+      silver: number;
+      spiritStones: number;
+      rerollScroll: { itemDefId: string; qty: number };
+    };
+    character?: unknown;
+  };
+}> => {
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+    await lockCharacterInventoryMutexTx(client, characterId);
+
+    const itemState = await getRerollItemStateTx(client, characterId, itemInstanceId);
+    if (!itemState.success || !itemState.item) {
+      await client.query('ROLLBACK');
+      return { success: false, message: itemState.message };
+    }
+    const item = itemState.item;
+
+    const normalizedLockIndexes = normalizeAffixLockIndexes(lockIndexes);
+    const lockValidation = validateAffixLockIndexes(item.affixes.length, normalizedLockIndexes);
+    if (!lockValidation.success) {
+      await client.query('ROLLBACK');
+      return { success: false, message: lockValidation.message };
+    }
+
+    const beforeDiffRes = await diffEquipmentAttrIfEquippedTx(client, characterId, itemInstanceId, item.location);
+    if (!beforeDiffRes.success) {
+      await client.query('ROLLBACK');
+      return { success: false, message: beforeDiffRes.message };
+    }
+
+    const affixPool = await loadAffixPoolForRerollTx(client, item.affixPoolId);
+    if (!affixPool) {
+      await client.query('ROLLBACK');
+      return { success: false, message: '该装备没有可用词条池' };
+    }
+
+    const quality = resolveQualityForReroll(
+      item.resolvedQuality,
+      item.resolvedQualityRank,
+      item.defQuality,
+      item.defQualityRank
+    );
+    const realmRank = getEquipRealmRankForReroll(item.equipReqRealm);
+    const costPlan = buildAffixRerollCostPlan(item.equipReqRealm, lockValidation.normalizedLockIndexes.length);
+    const resolvedQualityMultiplier = getQualityMultiplierForReroll(item.resolvedQualityRank);
+    const defQualityMultiplier = getQualityMultiplierForReroll(item.defQualityRank);
+    const attrFactor =
+      Number.isFinite(defQualityMultiplier) && defQualityMultiplier > 0
+        ? resolvedQualityMultiplier / defQualityMultiplier
+        : 1;
+
+    const rerollRes = rerollEquipmentAffixesWithLocks({
+      currentAffixes: item.affixes,
+      lockIndexes: lockValidation.normalizedLockIndexes,
+      pool: affixPool,
+      quality,
+      realmRank,
+      attrFactor,
+    });
+    if (!rerollRes.success || !rerollRes.affixes) {
+      await client.query('ROLLBACK');
+      return { success: false, message: rerollRes.message };
+    }
+
+    const rerolledAffixes = rerollRes.affixes;
+    if (rerolledAffixes.length !== item.affixes.length) {
+      await client.query('ROLLBACK');
+      return { success: false, message: '当前锁定组合无法完成洗炼，请减少锁定词条' };
+    }
+
+    if (costPlan.rerollScrollQty > 0) {
+      const rerollScrollRes = await consumeMaterialByDefIdTx(
+        client,
+        characterId,
+        costPlan.rerollScrollItemDefId,
+        costPlan.rerollScrollQty
+      );
+      if (!rerollScrollRes.success) {
+        await client.query('ROLLBACK');
+        return { success: false, message: rerollScrollRes.message };
+      }
+    }
+
+    const currencyRes = await consumeCharacterCurrenciesTx(client, characterId, {
+      silver: costPlan.silverCost,
+      spiritStones: costPlan.spiritStoneCost,
+    });
+    if (!currencyRes.success) {
+      await client.query('ROLLBACK');
+      return { success: false, message: currencyRes.message };
+    }
+
+    await client.query(
+      'UPDATE item_instance SET affixes = $1::jsonb, updated_at = NOW() WHERE id = $2 AND owner_character_id = $3',
+      [JSON.stringify(rerolledAffixes), itemInstanceId, characterId]
+    );
+
+    const applyDiffRes = await applyEquipmentDiffIfEquippedTx(
+      client,
+      characterId,
+      itemInstanceId,
+      item.location,
+      beforeDiffRes.before
+    );
+    if (!applyDiffRes.success) {
+      await client.query('ROLLBACK');
+      return { success: false, message: applyDiffRes.message };
+    }
+
+    const character = await getCharacterSnapshotTx(client, characterId, userId);
+
+    await client.query('COMMIT');
+    return {
+      success: true,
+      message: '洗炼成功',
+      data: {
+        affixes: rerolledAffixes,
+        lockIndexes: lockValidation.normalizedLockIndexes,
+        costs: {
+          silver: costPlan.silverCost,
+          spiritStones: costPlan.spiritStoneCost,
+          rerollScroll: {
+            itemDefId: costPlan.rerollScrollItemDefId,
+            qty: costPlan.rerollScrollQty,
+          },
+        },
+        character: character ?? null,
+      },
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('洗炼装备词条失败:', error);
+    return { success: false, message: '洗炼装备词条失败' };
+  } finally {
+    client.release();
+  }
+};
+
 export const socketEquipment = async (
   characterId: number,
   userId: number,
@@ -2931,6 +3193,7 @@ export default {
   unequipItem,
   enhanceEquipment,
   refineEquipment,
+  rerollEquipmentAffixes,
   socketEquipment,
   disassembleEquipment,
   disassembleEquipmentBatch,

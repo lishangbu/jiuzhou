@@ -33,6 +33,7 @@ export interface ItemDefLite {
   equip_slot: string | null;
   use_type: string | null;
   use_req_realm?: string | null;
+  equip_req_realm?: string | null;
   use_req_level?: number | null;
   use_limit_daily?: number | null;
   use_limit_total?: number | null;
@@ -201,6 +202,48 @@ export const refineInventoryItem = (
   body: InventoryRefineRequest
 ): Promise<InventoryRefineResponse> => {
   return api.post('/inventory/refine', body);
+};
+
+export interface InventoryRerolledAffixDto {
+  key: string;
+  name: string;
+  attr_key: string;
+  apply_type: 'flat' | 'percent' | 'special';
+  tier: number;
+  value: number;
+  is_legendary?: boolean;
+  description?: string;
+  trigger?: 'on_turn_start' | 'on_skill' | 'on_hit' | 'on_crit' | 'on_be_hit' | 'on_heal';
+  target?: 'self' | 'enemy';
+  effect_type?: 'buff' | 'debuff' | 'damage' | 'heal' | 'resource';
+  duration_round?: number;
+  params?: Record<string, string | number | boolean>;
+}
+
+export interface InventoryRerollRequest {
+  itemId: number;
+  lockIndexes?: number[];
+}
+
+export interface InventoryRerollResponse {
+  success: boolean;
+  message: string;
+  data?: {
+    affixes: InventoryRerolledAffixDto[];
+    lockIndexes: number[];
+    costs: {
+      silver: number;
+      spiritStones: number;
+      rerollScroll: { itemDefId: string; qty: number };
+    };
+    character: unknown | null;
+  } | null;
+}
+
+export const rerollInventoryAffixes = (
+  body: InventoryRerollRequest
+): Promise<InventoryRerollResponse> => {
+  return api.post('/inventory/reroll-affixes', body);
 };
 
 export interface SocketedGemEffectDto {

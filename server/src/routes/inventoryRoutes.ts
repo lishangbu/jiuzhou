@@ -65,6 +65,17 @@ const parseOptionalNonNegativeInt = (value: unknown): number | undefined => {
   return parsed;
 };
 
+const parseNonNegativeIntArray = (value: unknown): number[] | null => {
+  if (!Array.isArray(value)) return null;
+  const out: number[] = [];
+  for (const raw of value) {
+    const parsed = Number(raw);
+    if (!Number.isInteger(parsed) || parsed < 0) return null;
+    out.push(parsed);
+  }
+  return out;
+};
+
 // 获取角色ID的辅助函数
 const getCharacterId = async (userId: number): Promise<number | null> => {
   const result = await query(
@@ -127,7 +138,7 @@ router.get('/items', async (req: Request, res: Response) => {
         `SELECT 
            d.id, d.name, d.icon, d.quality, d.quality_rank, d.category, d.sub_category, d.stack_max,
            d.description, d.long_desc, d.tags, d.effect_defs, d.base_attrs, d.equip_slot, d.use_type,
-           d.use_req_realm, d.use_req_level, d.use_limit_daily, d.use_limit_total,
+           d.use_req_realm, d.equip_req_realm, d.use_req_level, d.use_limit_daily, d.use_limit_total,
            d.socket_max, d.gem_slot_types, d.level,
            d.set_id, s.name AS set_name
          FROM item_def d
@@ -728,6 +739,68 @@ router.post('/refine', async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('精炼装备失败:', error);
+    return res.status(500).json({ success: false, message: '服务器错误' });
+  }
+});
+
+// ============================================
+// 装备词条洗炼
+// POST /api/inventory/reroll-affixes
+// Body: { itemId: number, lockIndexes?: number[] }
+// ============================================
+router.post('/reroll-affixes', async (req: Request, res: Response) => {
+  try {
+    const userId = (req as AuthedRequest).userId;
+    const characterId = await getCharacterId(userId);
+
+    if (!characterId) {
+      return res.status(404).json({ success: false, message: '角色不存在' });
+    }
+
+    const { itemId, lockIndexes } = req.body as {
+      itemId?: unknown;
+      lockIndexes?: unknown;
+    };
+    if (itemId === undefined || itemId === null) {
+      return res.status(400).json({ success: false, message: '参数不完整' });
+    }
+
+    const parsedItemId = Number(itemId);
+    if (!Number.isInteger(parsedItemId) || parsedItemId <= 0) {
+      return res.status(400).json({ success: false, message: 'itemId参数错误' });
+    }
+
+    let parsedLockIndexes: number[] = [];
+    if (lockIndexes !== undefined) {
+      const normalized = parseNonNegativeIntArray(lockIndexes);
+      if (!normalized) {
+        return res.status(400).json({ success: false, message: 'lockIndexes参数错误' });
+      }
+      parsedLockIndexes = normalized;
+    }
+
+    const result = await inventoryService.rerollEquipmentAffixes(
+      characterId,
+      userId,
+      parsedItemId,
+      parsedLockIndexes
+    );
+
+    if (result.success) {
+      try {
+        const gameServer = getGameServer();
+        await gameServer.pushCharacterUpdate(userId);
+      } catch {
+      }
+    }
+
+    return res.json({
+      success: result.success,
+      message: result.message,
+      data: result.data ?? null,
+    });
+  } catch (error) {
+    console.error('洗炼装备词条失败:', error);
     return res.status(500).json({ success: false, message: '服务器错误' });
   }
 });

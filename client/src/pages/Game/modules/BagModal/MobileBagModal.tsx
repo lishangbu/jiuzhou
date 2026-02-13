@@ -20,6 +20,7 @@ import {
   getInventoryItems,
   inventoryUseItem,
   refineInventoryItem,
+  rerollInventoryAffixes,
   removeInventoryItemsBatch,
   sortInventory,
   unequipInventoryItem,
@@ -28,6 +29,7 @@ import type { InventoryInfoData } from '../../../../services/api';
 import {
   attrLabel,
   attrOrder,
+  buildAffixRerollCostPlan,
   buildBagItem,
   buildEnhanceCostPlan,
   buildEquipmentLines,
@@ -36,12 +38,14 @@ import {
   calcUseEffectDelta,
   categoryLabels,
   collectBatchDisassembleEquipmentCandidates,
+  formatEquipmentAffixLine,
   formatPermyriadPercent,
   formatSignedNumber,
   formatSignedPermyriadPercent,
   getEnhanceSuccessRatePermyriad,
   getRefineSuccessRatePermyriad,
   isDisassemblableBagItem,
+  normalizeAffixLockIndexes,
   permyriadPercentKeys,
   pickNumber,
   qualityClass,
@@ -346,8 +350,9 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
   onDone,
 }) => {
   const { message } = App.useApp();
-  const [mode, setMode] = useState<'enhance' | 'refine'>('enhance');
+  const [mode, setMode] = useState<'enhance' | 'refine' | 'reroll'>('enhance');
   const [submitting, setSubmitting] = useState(false);
+  const [rerollLockIndexes, setRerollLockIndexes] = useState<number[]>([]);
 
   const materialCounts = useMemo(() => {
     const out: Record<string, number> = {};
@@ -357,6 +362,11 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
     }
     return out;
   }, [allItems]);
+
+  useEffect(() => {
+    const affixCount = item.equip?.affixes.length ?? 0;
+    setRerollLockIndexes((prev) => normalizeAffixLockIndexes(prev, affixCount));
+  }, [item.id, item.equip?.affixes.length]);
 
   const enhanceState = useMemo(() => {
     if (!item.equip) return null;
@@ -405,6 +415,40 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
     };
   }, [item, materialCounts]);
 
+  const rerollState = useMemo(() => {
+    if (!item.equip) return null;
+    const affixes = item.equip.affixes;
+    if (!Array.isArray(affixes) || affixes.length <= 0) {
+      return {
+        affixes: [] as typeof item.equip.affixes,
+        maxLockCount: 0,
+        lockIndexes: [] as number[],
+        lockIndexSet: new Set<number>(),
+        rerollScrollQty: 0,
+        rerollScrollOwned: 0,
+        spiritStoneCost: 0,
+        silverCost: 0,
+      };
+    }
+
+    const maxLockCount = Math.max(0, affixes.length - 1);
+    const normalizedLocks = normalizeAffixLockIndexes(rerollLockIndexes, affixes.length);
+    const lockIndexes = normalizedLocks.slice(0, maxLockCount);
+    const lockIndexSet = new Set(lockIndexes);
+    const costPlan = buildAffixRerollCostPlan(item.equip.equipReqRealm, lockIndexes.length);
+
+    return {
+      affixes,
+      maxLockCount,
+      lockIndexes,
+      lockIndexSet,
+      rerollScrollQty: costPlan.rerollScrollQty,
+      rerollScrollOwned: materialCounts[costPlan.rerollScrollItemDefId] ?? 0,
+      spiritStoneCost: costPlan.spiritStoneCost,
+      silverCost: costPlan.silverCost,
+    };
+  }, [item, materialCounts, rerollLockIndexes]);
+
   const handleEnhance = useCallback(async () => {
     setSubmitting(true);
     try {
@@ -441,7 +485,65 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
     }
   }, [item.id, message, onDone]);
 
-  const st = mode === 'enhance' ? enhanceState : refineState;
+  const handleToggleRerollLock = useCallback((index: number) => {
+    if (!rerollState) return;
+    if (submitting) return;
+    if (index < 0 || index >= rerollState.affixes.length) return;
+
+    if (rerollState.lockIndexSet.has(index)) {
+      setRerollLockIndexes((prev) =>
+        normalizeAffixLockIndexes(
+          prev.filter((lockIndex) => lockIndex !== index),
+          rerollState.affixes.length
+        )
+      );
+      return;
+    }
+
+    if (rerollState.lockIndexes.length >= rerollState.maxLockCount) {
+      message.warning(`最多锁定${rerollState.maxLockCount}条词条`);
+      return;
+    }
+
+    setRerollLockIndexes((prev) =>
+      normalizeAffixLockIndexes([...prev, index], rerollState.affixes.length)
+    );
+  }, [message, rerollState, submitting]);
+
+  const handleReroll = useCallback(async () => {
+    if (!rerollState || rerollState.affixes.length <= 0) return;
+    const lockIndexes = normalizeAffixLockIndexes(
+      rerollState.lockIndexes,
+      rerollState.affixes.length
+    ).slice(0, rerollState.maxLockCount);
+
+    setSubmitting(true);
+    try {
+      const res = await rerollInventoryAffixes({
+        itemId: item.id,
+        lockIndexes,
+      });
+      if (!res.success) {
+        message.error(res.message || '洗炼失败');
+        return;
+      }
+      message.success(res.message || '洗炼成功');
+      setRerollLockIndexes(
+        normalizeAffixLockIndexes(
+          res.data?.lockIndexes ?? lockIndexes,
+          rerollState.affixes.length
+        )
+      );
+      await onDone();
+      window.dispatchEvent(new Event('inventory:changed'));
+    } catch (e) {
+      message.error((e as { message?: string }).message || '洗炼失败');
+    } finally {
+      setSubmitting(false);
+    }
+  }, [item.id, message, onDone, rerollState]);
+
+  const st = mode === 'enhance' ? enhanceState : mode === 'refine' ? refineState : null;
   const curAttrs = item.equip?.baseAttrs ?? {};
 
   const sorted = (rec: Record<string, number>) =>
@@ -455,20 +557,20 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
 
         {/* 模式切换 */}
         <div style={{ display: 'flex', gap: 0, padding: '0 16px 8px' }}>
-          {(['enhance', 'refine'] as const).map((m) => (
+          {(['enhance', 'refine', 'reroll'] as const).map((m) => (
             <button
               key={m}
               className={`mbag-cat-btn${mode === m ? ' is-active' : ''}`}
               style={{ padding: '8px 20px' }}
               onClick={() => setMode(m)}
             >
-              {m === 'enhance' ? '强化' : '精炼'}
+              {m === 'enhance' ? '强化' : m === 'refine' ? '精炼' : '洗炼'}
             </button>
           ))}
         </div>
 
         <div className="mbag-sheet-body">
-          {st ? (
+          {mode !== 'reroll' && st ? (
             <>
               {/* 等级预览 */}
               <div className="mbag-sheet-section" style={{ textAlign: 'center' }}>
@@ -524,11 +626,61 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
                 </div>
               </div>
             </>
-          ) : (
+          ) : null}
+
+          {mode === 'reroll' && rerollState && rerollState.affixes.length > 0 ? (
+            <>
+              <div className="mbag-sheet-section" style={{ textAlign: 'center' }}>
+                <span style={{ fontSize: 22, fontWeight: 900 }}>{rerollState.affixes.length}</span>
+                <span style={{ marginLeft: 6, color: 'var(--text-secondary)', fontSize: 13 }}>条词条</span>
+                <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-secondary)' }}>
+                  已锁定 {rerollState.lockIndexes.length}/{rerollState.maxLockCount}
+                </div>
+              </div>
+
+              <div className="mbag-sheet-section">
+                <div className="mbag-sheet-section-title">消耗</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  <CostChip label="洗炼符" cost={rerollState.rerollScrollQty} owned={rerollState.rerollScrollOwned} />
+                  <CostChip label="灵石" cost={rerollState.spiritStoneCost} owned={playerSpiritStones} />
+                  <CostChip label="银两" cost={rerollState.silverCost} owned={playerSilver} />
+                </div>
+              </div>
+
+              <div className="mbag-sheet-section">
+                <div className="mbag-sheet-section-title">词条锁定</div>
+                <div className="mbag-sheet-effect-list">
+                  {rerollState.affixes.map((affix, index) => {
+                    const locked = rerollState.lockIndexSet.has(index);
+                    return (
+                      <button
+                        key={`${index}-${affix.key ?? 'affix'}`}
+                        className={`mbag-sheet-reroll-lock${locked ? ' is-locked' : ''}`}
+                        disabled={submitting || item.locked}
+                        onClick={() => handleToggleRerollLock(index)}
+                      >
+                        <span className="mbag-sheet-reroll-lock-index">#{index + 1}</span>
+                        <span className="mbag-sheet-reroll-lock-text">{formatEquipmentAffixLine(affix)}</span>
+                        <span className="mbag-sheet-reroll-lock-tag">{locked ? '已锁定' : '点击锁定'}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          ) : null}
+
+          {mode === 'reroll' && (!rerollState || rerollState.affixes.length <= 0) ? (
+            <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 20 }}>
+              该装备没有可洗炼词条
+            </div>
+          ) : null}
+
+          {mode !== 'reroll' && !st ? (
             <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 20 }}>
               无法{mode === 'enhance' ? '强化' : '精炼'}
             </div>
-          )}
+          ) : null}
         </div>
 
         <div className="mbag-sheet-actions">
@@ -536,7 +688,7 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
           <button
             className="mbag-sheet-act-btn is-primary"
             disabled={
-              submitting || !st || item.locked ||
+              submitting || item.locked ||
               (mode === 'enhance' && enhanceState
                 ? enhanceState.curLv >= 15 || enhanceState.owned < 1 ||
                   playerSilver < enhanceState.silverCost || playerSpiritStones < enhanceState.spiritStoneCost
@@ -544,11 +696,23 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
               (mode === 'refine' && refineState
                 ? refineState.curLv >= 10 || refineState.owned < refineState.materialQty ||
                   playerSilver < refineState.silverCost || playerSpiritStones < refineState.spiritStoneCost
-                : false)
+                : false) ||
+              (mode === 'reroll' && rerollState
+                ? rerollState.affixes.length <= 0 ||
+                  rerollState.rerollScrollOwned < rerollState.rerollScrollQty ||
+                  playerSpiritStones < rerollState.spiritStoneCost ||
+                  playerSilver < rerollState.silverCost
+                : mode === 'reroll')
             }
-            onClick={() => void (mode === 'enhance' ? handleEnhance() : handleRefine())}
+            onClick={() => void (
+              mode === 'enhance'
+                ? handleEnhance()
+                : mode === 'refine'
+                  ? handleRefine()
+                  : handleReroll()
+            )}
           >
-            {submitting ? '处理中...' : mode === 'enhance' ? '强化' : '精炼'}
+            {submitting ? '处理中...' : mode === 'enhance' ? '强化' : mode === 'refine' ? '精炼' : '洗炼'}
           </button>
         </div>
       </div>

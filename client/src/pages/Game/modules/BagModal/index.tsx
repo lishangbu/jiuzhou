@@ -10,6 +10,7 @@ import {
   getInventoryInfo,
   getInventoryItems,
   refineInventoryItem,
+  rerollInventoryAffixes,
   removeInventoryItemsBatch,
   socketInventoryGem,
   sortInventory,
@@ -20,6 +21,7 @@ import type { InventoryInfoData } from '../../../../services/api';
 import {
   attrLabel,
   attrOrder,
+  buildAffixRerollCostPlan,
   buildBagItem,
   buildEnhanceCostPlan,
   buildEquipmentLines,
@@ -29,6 +31,7 @@ import {
   categoryLabels,
   collectBatchDisassembleEquipmentCandidates,
   collectGemCandidates,
+  formatEquipmentAffixLine,
   formatPermyriadPercent,
   formatSignedNumber,
   formatSignedPermyriadPercent,
@@ -38,6 +41,7 @@ import {
   isDisassemblableBagItem,
   isGemTypeAllowedInSlot,
   normalizeGemType,
+  normalizeAffixLockIndexes,
   permyriadPercentKeys,
   pickNumber,
   qualityClass,
@@ -72,9 +76,11 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
   const [disassembleOpen, setDisassembleOpen] = useState(false);
   const [enhanceOpen, setEnhanceOpen] = useState(false);
   const [enhanceSubmitting, setEnhanceSubmitting] = useState(false);
-  const [growthMode, setGrowthMode] = useState<'enhance' | 'refine' | 'socket'>('enhance');
+  const [growthMode, setGrowthMode] = useState<'enhance' | 'refine' | 'socket' | 'reroll'>('enhance');
   const [refineSubmitting, setRefineSubmitting] = useState(false);
   const [socketSubmitting, setSocketSubmitting] = useState(false);
+  const [rerollSubmitting, setRerollSubmitting] = useState(false);
+  const [rerollLockIndexes, setRerollLockIndexes] = useState<number[]>([]);
   const [socketSlot, setSocketSlot] = useState<number | undefined>(undefined);
   const [selectedGemItemId, setSelectedGemItemId] = useState<number | undefined>(undefined);
   const [batchOpen, setBatchOpen] = useState(false);
@@ -210,6 +216,15 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
     () => (safeActiveId === null ? null : filtered.find((i) => i.id === safeActiveId) ?? null),
     [filtered, safeActiveId]
   );
+  useEffect(() => {
+    if (!enhanceOpen) {
+      setRerollLockIndexes([]);
+      return;
+    }
+    const affixCount = activeItem?.equip?.affixes.length ?? 0;
+    setRerollLockIndexes((prev) => normalizeAffixLockIndexes(prev, affixCount));
+  }, [activeItem?.id, activeItem?.equip?.affixes.length, enhanceOpen]);
+
   const useQtyMax = useMemo(() => {
     if (!activeItem || activeItem.category !== 'consumable') return 1;
     return Math.max(1, Math.floor(activeItem.qty));
@@ -505,6 +520,40 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
     };
   }, [activeItem, items, selectedGemItemId, socketSlot]);
 
+  const rerollState = useMemo(() => {
+    if (!activeItem?.equip || activeItem.category !== 'equipment') return null;
+    const affixes = activeItem.equip.affixes;
+    if (!Array.isArray(affixes) || affixes.length <= 0) {
+      return {
+        affixes: [],
+        maxLockCount: 0,
+        lockIndexes: [] as number[],
+        lockIndexSet: new Set<number>(),
+        rerollScrollQty: 0,
+        rerollScrollOwned: 0,
+        spiritStoneCost: 0,
+        silverCost: 0,
+      };
+    }
+
+    const maxLockCount = Math.max(0, affixes.length - 1);
+    const normalizedLocks = normalizeAffixLockIndexes(rerollLockIndexes, affixes.length);
+    const lockIndexes = normalizedLocks.slice(0, maxLockCount);
+    const lockIndexSet = new Set(lockIndexes);
+    const costPlan = buildAffixRerollCostPlan(activeItem.equip.equipReqRealm, lockIndexes.length);
+
+    return {
+      affixes,
+      maxLockCount,
+      lockIndexes,
+      lockIndexSet,
+      rerollScrollQty: costPlan.rerollScrollQty,
+      rerollScrollOwned: materialCounts[costPlan.rerollScrollItemDefId] ?? 0,
+      spiritStoneCost: costPlan.spiritStoneCost,
+      silverCost: costPlan.silverCost,
+    };
+  }, [activeItem, materialCounts, rerollLockIndexes]);
+
   const handleEnhance = useCallback(async () => {
     if (!activeItem) return;
     if (activeItem.category !== 'equipment') return;
@@ -580,6 +629,66 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
       setSocketSubmitting(false);
     }
   }, [activeItem, message, refresh, socketState]);
+
+  const handleToggleRerollLock = useCallback((index: number) => {
+    if (!rerollState) return;
+    if (rerollSubmitting) return;
+    if (index < 0 || index >= rerollState.affixes.length) return;
+
+    if (rerollState.lockIndexSet.has(index)) {
+      setRerollLockIndexes((prev) =>
+        normalizeAffixLockIndexes(
+          prev.filter((lockIndex) => lockIndex !== index),
+          rerollState.affixes.length
+        )
+      );
+      return;
+    }
+
+    if (rerollState.lockIndexes.length >= rerollState.maxLockCount) {
+      message.warning(`最多锁定${rerollState.maxLockCount}条词条`);
+      return;
+    }
+
+    setRerollLockIndexes((prev) =>
+      normalizeAffixLockIndexes([...prev, index], rerollState.affixes.length)
+    );
+  }, [message, rerollState, rerollSubmitting]);
+
+  const handleReroll = useCallback(async () => {
+    if (!activeItem?.equip || activeItem.category !== 'equipment') return;
+    if (!rerollState || rerollState.affixes.length <= 0) return;
+    const lockIndexes = normalizeAffixLockIndexes(
+      rerollState.lockIndexes,
+      rerollState.affixes.length
+    ).slice(0, rerollState.maxLockCount);
+
+    setRerollSubmitting(true);
+    try {
+      const res = await rerollInventoryAffixes({
+        itemId: activeItem.id,
+        lockIndexes,
+      });
+      if (!res.success) {
+        message.error(res.message || '洗炼失败');
+        return;
+      }
+      message.success(res.message || '洗炼成功');
+      setRerollLockIndexes(
+        normalizeAffixLockIndexes(
+          res.data?.lockIndexes ?? lockIndexes,
+          rerollState.affixes.length
+        )
+      );
+      await refresh();
+      window.dispatchEvent(new Event('inventory:changed'));
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      message.error(err.message || '洗炼失败');
+    } finally {
+      setRerollSubmitting(false);
+    }
+  }, [activeItem, message, refresh, rerollState]);
 
   const bagOnlyItems = useMemo(() => items.filter((i) => i.location === 'bag'), [items]);
 
@@ -1123,7 +1232,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
       <Modal
         open={enhanceOpen}
         onCancel={() => {
-          if (enhanceSubmitting || refineSubmitting || socketSubmitting) return;
+          if (enhanceSubmitting || refineSubmitting || socketSubmitting || rerollSubmitting) return;
           setEnhanceOpen(false);
         }}
         footer={null}
@@ -1131,17 +1240,18 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
         destroyOnHidden
         title="装备成长"
         className="bag-enhance-modal"
-        maskClosable={!(enhanceSubmitting || refineSubmitting || socketSubmitting)}
+        maskClosable={!(enhanceSubmitting || refineSubmitting || socketSubmitting || rerollSubmitting)}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <Tabs
             size="small"
             activeKey={growthMode}
-            onChange={(k) => setGrowthMode(k as 'enhance' | 'refine' | 'socket')}
+            onChange={(k) => setGrowthMode(k as 'enhance' | 'refine' | 'socket' | 'reroll')}
             items={[
               { key: 'enhance', label: '强化' },
               { key: 'refine', label: '精炼' },
               { key: 'socket', label: '镶嵌' },
+              { key: 'reroll', label: '洗炼' },
             ]}
           />
 
@@ -1385,6 +1495,82 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
             </>
           ) : (
             <div className="bag-enhance-hint">请选择可镶嵌的装备</div>
+          ))}
+
+          {growthMode === 'reroll' && (rerollState ? (
+            rerollState.affixes.length > 0 ? (
+              <>
+                <div className="bag-growth-summary-card">
+                  <div className="bag-growth-summary-main">
+                    <span className="bag-growth-level">{rerollState.affixes.length}</span>
+                    <span className="bag-growth-arrow">条词条</span>
+                  </div>
+                  <div className="bag-growth-tip-muted">
+                    已锁定 {rerollState.lockIndexes.length}/{rerollState.maxLockCount}
+                  </div>
+                </div>
+
+                <div className="bag-growth-cost-card">
+                  <div className="bag-growth-cost-title">消耗</div>
+                  <div className="bag-growth-cost-list">
+                    <div className={'bag-growth-cost-chip' + (rerollState.rerollScrollOwned < rerollState.rerollScrollQty ? ' is-insufficient' : '')}>
+                      <span className="bag-growth-cost-name">洗炼符</span>
+                      <span className="bag-growth-cost-val">×{rerollState.rerollScrollQty}</span>
+                      <span className="bag-growth-cost-own">/{rerollState.rerollScrollOwned}</span>
+                    </div>
+                    <div className={'bag-growth-cost-chip' + (playerSpiritStones < rerollState.spiritStoneCost ? ' is-insufficient' : '')}>
+                      <span className="bag-growth-cost-name">灵石</span>
+                      <span className="bag-growth-cost-val">{rerollState.spiritStoneCost.toLocaleString()}</span>
+                      <span className="bag-growth-cost-own">/{playerSpiritStones.toLocaleString()}</span>
+                    </div>
+                    <div className={'bag-growth-cost-chip' + (playerSilver < rerollState.silverCost ? ' is-insufficient' : '')}>
+                      <span className="bag-growth-cost-name">银两</span>
+                      <span className="bag-growth-cost-val">{rerollState.silverCost.toLocaleString()}</span>
+                      <span className="bag-growth-cost-own">/{playerSilver.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bag-reroll-affix-list">
+                  {rerollState.affixes.map((affix, index) => {
+                    const locked = rerollState.lockIndexSet.has(index);
+                    return (
+                      <button
+                        key={`${index}-${affix.key ?? 'affix'}`}
+                        type="button"
+                        className={'bag-reroll-affix-btn' + (locked ? ' is-locked' : '')}
+                        onClick={() => handleToggleRerollLock(index)}
+                        disabled={rerollSubmitting || !!activeItem?.locked}
+                      >
+                        <span className="bag-reroll-affix-index">#{index + 1}</span>
+                        <span className="bag-reroll-affix-text">{formatEquipmentAffixLine(affix)}</span>
+                        <span className="bag-reroll-affix-lock">{locked ? '已锁定' : '点击锁定'}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <Button
+                  block
+                  type="primary"
+                  disabled={
+                    rerollSubmitting ||
+                    !!activeItem?.locked ||
+                    rerollState.rerollScrollOwned < rerollState.rerollScrollQty ||
+                    playerSpiritStones < rerollState.spiritStoneCost ||
+                    playerSilver < rerollState.silverCost
+                  }
+                  onClick={() => void handleReroll()}
+                  loading={rerollSubmitting}
+                >
+                  {activeItem?.locked ? '物品已锁定' : '洗炼'}
+                </Button>
+              </>
+            ) : (
+              <div className="bag-enhance-hint">该装备没有可洗炼词条</div>
+            )
+          ) : (
+            <div className="bag-enhance-hint">请选择可洗炼的装备</div>
           ))}
         </div>
       </Modal>

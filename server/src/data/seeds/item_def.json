@@ -1210,7 +1210,7 @@
     {
       "id": "scroll-003",
       "code": "xi_lian_fu",
-      "name": "洗练符",
+      "name": "洗炼符",
       "category": "consumable",
       "sub_category": "scroll",
       "quality": "玄",
@@ -1227,7 +1227,7 @@
       "description": "重新随机装备词条",
       "tags": [
         "符箓",
-        "洗练"
+        "洗炼"
       ],
       "use_type": "target",
       "effect_defs": [
@@ -1258,11 +1258,11 @@
       "sell_price_silver": 80,
       "sell_price_spirit_stones": 3,
       "icon": "/assets/ui/sh_icon_0006_jinbi_02.png",
-      "description": "锁定装备一条词条不被洗练",
+      "description": "锁定装备一条词条不被洗炼",
       "tags": [
         "符箓",
         "封印",
-        "洗练"
+        "洗炼"
       ],
       "use_type": "target",
       "effect_defs": [

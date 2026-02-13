@@ -111,6 +111,7 @@ export type BagItem = {
     gemSlotTypes: unknown;
     socketedGems: SocketedGemEntry[];
     itemLevel: number;
+    equipReqRealm: string | null;
   } | null;
 };
 
@@ -402,6 +403,162 @@ export const formatSignedPermyriadPercent = (value: number): string => {
 
 export const formatPermyriadPercent = (value: number): string => {
   return (value / 100).toFixed(2).replace(/\.00$/, "");
+};
+
+/* ───────── 词条洗炼 ───────── */
+
+export const REROLL_SCROLL_ITEM_DEF_ID = "scroll-003";
+const SILVER_GROWTH_BASE = 1.6;
+
+export interface AffixRerollCostPlan {
+  baseSilver: number;
+  silverCost: number;
+  multiplier: number;
+  lockCount: number;
+  rerollScrollItemDefId: string;
+  rerollScrollQty: number;
+  spiritStoneCost: number;
+}
+
+const EQUIP_REALM_ORDER = [
+  "凡人",
+  "炼精化炁·养气期",
+  "炼精化炁·通脉期",
+  "炼精化炁·凝炁期",
+  "炼炁化神·炼己期",
+  "炼炁化神·采药期",
+  "炼炁化神·结胎期",
+  "炼神返虚·养神期",
+  "炼神返虚·还虚期",
+  "炼神返虚·合道期",
+  "炼虚合道·证道期",
+  "炼虚合道·历劫期",
+  "炼虚合道·成圣期",
+] as const;
+
+type EquipRealm = (typeof EQUIP_REALM_ORDER)[number];
+
+const EQUIP_REALM_MAJOR_TO_FIRST: Record<string, EquipRealm> = {
+  凡人: "凡人",
+  炼精化炁: "炼精化炁·养气期",
+  炼炁化神: "炼炁化神·炼己期",
+  炼神返虚: "炼神返虚·养神期",
+  炼虚合道: "炼虚合道·证道期",
+};
+
+const EQUIP_REALM_SUB_TO_FULL: Record<string, EquipRealm> = {
+  养气期: "炼精化炁·养气期",
+  通脉期: "炼精化炁·通脉期",
+  凝炁期: "炼精化炁·凝炁期",
+  炼己期: "炼炁化神·炼己期",
+  采药期: "炼炁化神·采药期",
+  结胎期: "炼炁化神·结胎期",
+  养神期: "炼神返虚·养神期",
+  还虚期: "炼神返虚·还虚期",
+  合道期: "炼神返虚·合道期",
+  证道期: "炼虚合道·证道期",
+  历劫期: "炼虚合道·历劫期",
+  成圣期: "炼虚合道·成圣期",
+};
+
+const isEquipRealm = (value: string): value is EquipRealm => {
+  return (EQUIP_REALM_ORDER as readonly string[]).includes(value);
+};
+
+const normalizeEquipRealm = (realmRaw: unknown): EquipRealm => {
+  const raw = typeof realmRaw === "string" ? realmRaw.trim() : "";
+  if (!raw) return "凡人";
+  if (isEquipRealm(raw)) return raw;
+
+  const mappedMajor = EQUIP_REALM_MAJOR_TO_FIRST[raw];
+  if (mappedMajor) return mappedMajor;
+
+  const mappedSub = EQUIP_REALM_SUB_TO_FULL[raw];
+  if (mappedSub) return mappedSub;
+
+  const split = raw.split("·");
+  if (split.length >= 2) {
+    const full = `${split[0]}·${split[1]}`;
+    if (isEquipRealm(full)) return full;
+    const splitSub = split[1] ?? "";
+    const subMapped = EQUIP_REALM_SUB_TO_FULL[splitSub];
+    if (subMapped) return subMapped;
+  }
+  return "凡人";
+};
+
+export const getEquipRealmRankForReroll = (realmRaw: unknown): number => {
+  const normalized = normalizeEquipRealm(realmRaw);
+  const index = EQUIP_REALM_ORDER.indexOf(normalized);
+  return index >= 0 ? index + 1 : 1;
+};
+
+export const normalizeAffixLockIndexes = (
+  lockIndexes: number[] | null | undefined,
+  affixCount?: number,
+): number[] => {
+  if (!Array.isArray(lockIndexes)) return [];
+  const seen = new Set<number>();
+  const out: number[] = [];
+  for (const raw of lockIndexes) {
+    const idx = Number(raw);
+    if (!Number.isInteger(idx) || idx < 0) continue;
+    if (typeof affixCount === "number" && idx >= affixCount) continue;
+    if (seen.has(idx)) continue;
+    seen.add(idx);
+    out.push(idx);
+  }
+  return out.sort((a, b) => a - b);
+};
+
+export const buildAffixRerollCostPlan = (
+  realmRaw: unknown,
+  lockCountRaw: number,
+): AffixRerollCostPlan => {
+  const realmRank = Math.max(1, Math.min(99, getEquipRealmRankForReroll(realmRaw)));
+  const lockCount = Math.max(0, Math.min(30, Math.floor(Number(lockCountRaw) || 0)));
+  const lockMultiplier = Math.pow(2, lockCount);
+  const multiplier = Math.pow(SILVER_GROWTH_BASE, lockCount);
+  const baseSilver = Math.max(1000, Math.floor(realmRank * realmRank * 400));
+  const silverCost = Math.max(0, Math.floor(baseSilver * multiplier));
+  const spiritStoneCost =
+    lockCount > 0 ? Math.max(0, Math.floor((lockMultiplier - 1) * realmRank * 2)) : 0;
+  return {
+    baseSilver,
+    silverCost,
+    multiplier,
+    lockCount,
+    rerollScrollItemDefId: REROLL_SCROLL_ITEM_DEF_ID,
+    rerollScrollQty: lockCount + 1,
+    spiritStoneCost,
+  };
+};
+
+export const formatEquipmentAffixLine = (affix: EquipmentAffix): string => {
+  const tierText = affix.tier ? `T${affix.tier}` : "T-";
+  const prefix = affix.is_legendary ? "传奇词条" : "词条";
+  const key = affix.attr_key;
+  const label = (key ? attrLabel[key] : undefined) ?? affix.name ?? key ?? "未知";
+
+  if (affix.apply_type === "special") {
+    return affix.description
+      ? `${prefix} ${tierText}：${label}（${affix.description}）`
+      : `${prefix} ${tierText}：${label}`;
+  }
+
+  if (typeof affix.value === "number") {
+    const isPercent =
+      affix.apply_type === "percent" ||
+      (key ? permyriadPercentKeys.has(key) : false);
+    const valText = isPercent
+      ? formatSignedPermyriadPercent(affix.value)
+      : formatSignedNumber(affix.value);
+    return `${prefix} ${tierText}：${label} ${valText}`;
+  }
+
+  return affix.description
+    ? `${prefix} ${tierText}：${label}（${affix.description}）`
+    : `${prefix} ${tierText}：${label}`;
 };
 
 const toFiniteNumber = (value: unknown): number | null => {
@@ -803,29 +960,7 @@ export const buildEquipmentLines = (item: BagItem | null): string[] => {
     (a, b) => (b.tier ?? 0) - (a.tier ?? 0),
   );
   for (const a of sortedAffixes) {
-    const tierText = a.tier ? `T${a.tier}` : "T-";
-    const prefix = a.is_legendary ? "传奇词条" : "词条";
-    const key = a.attr_key;
-    const label = (key ? attrLabel[key] : undefined) ?? a.name ?? key ?? "未知";
-    if (a.apply_type === "special") {
-      if (a.description)
-        lines.push(`${prefix} ${tierText}：${label}（${a.description}）`);
-      else lines.push(`${prefix} ${tierText}：${label}`);
-      continue;
-    }
-    if (typeof a.value === "number") {
-      const isPercent =
-        a.apply_type === "percent" ||
-        (key ? permyriadPercentKeys.has(key) : false);
-      const valText = isPercent
-        ? formatSignedPermyriadPercent(a.value)
-        : formatSignedNumber(a.value);
-      lines.push(`${prefix} ${tierText}：${label} ${valText}`);
-      continue;
-    }
-    if (a.description)
-      lines.push(`${prefix} ${tierText}：${label}（${a.description}）`);
-    else lines.push(`${prefix} ${tierText}：${label}`);
+    lines.push(formatEquipmentAffixLine(a));
   }
   return lines;
 };
@@ -1191,6 +1326,8 @@ export const buildBagItem = (it: InventoryItemDto): BagItem | null => {
           gemSlotTypes: def.gem_slot_types,
           socketedGems: parseSocketedGems(it.socketed_gems),
           itemLevel: Math.max(0, Math.floor(Number(def.level) || 0)),
+          equipReqRealm:
+            typeof def.equip_req_realm === "string" ? def.equip_req_realm : null,
         }
       : null,
   };
