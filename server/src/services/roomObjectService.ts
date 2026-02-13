@@ -6,6 +6,7 @@ import { addItemToInventoryTx } from './inventoryService.js';
 import { lockCharacterInventoryMutexTx } from './inventoryMutex.js';
 import { recordGatherResourceEvent } from './taskService.js';
 import { getNpcDefinitions, getMonsterDefinitions, getSpawnRuleDefinitions } from './staticConfigLoader.js';
+import { getTaskDefinitionsByIds, getTaskDefinitionsByNpcIds } from './taskDefinitionService.js';
 
 export type MapObjectDto =
   | {
@@ -291,25 +292,27 @@ const loadNpcTaskMarkers = async (characterId: number, npcIds: string[]): Promis
     return new Map();
   }
 
-  const taskRes = await query(
+  const taskDefs = await getTaskDefinitionsByNpcIds(npcIds);
+  if (taskDefs.length === 0) return new Map();
+  const taskIds = taskDefs.map((entry) => entry.id);
+  const progressRes = await query(
     `
-      SELECT
-        d.id AS task_id,
-        d.giver_npc_id,
-        d.prereq_task_ids,
-        d.objectives,
-        p.status AS progress_status,
-        p.progress
-      FROM task_def d
-      LEFT JOIN character_task_progress p
-        ON p.task_id = d.id
-       AND p.character_id = $1
-      WHERE d.enabled = true
-        AND d.giver_npc_id = ANY($2::varchar[])
-      ORDER BY d.sort_weight DESC, d.id ASC
+      SELECT task_id, status AS progress_status, progress
+      FROM character_task_progress
+      WHERE character_id = $1
+        AND task_id = ANY($2::varchar[])
     `,
-    [characterId, npcIds],
+    [characterId, taskIds],
   );
+  const progressByTaskId = new Map<string, { progress_status?: unknown; progress?: unknown }>();
+  for (const row of progressRes.rows as Array<Record<string, unknown>>) {
+    const taskId = asNonEmptyString(row.task_id);
+    if (!taskId) continue;
+    progressByTaskId.set(taskId, {
+      progress_status: row.progress_status,
+      progress: row.progress,
+    });
+  }
 
   const setMarker = (markerByNpcId: Map<string, TaskMarker>, npcId: string, marker: TaskMarker): void => {
     const current = markerByNpcId.get(npcId);
@@ -321,14 +324,17 @@ const loadNpcTaskMarkers = async (characterId: number, npcIds: string[]): Promis
     if (!current) markerByNpcId.set(npcId, '!');
   };
 
-  const rows = taskRes.rows as Array<{
-    task_id?: unknown;
-    giver_npc_id?: unknown;
-    prereq_task_ids?: unknown;
-    objectives?: unknown;
-    progress_status?: unknown;
-    progress?: unknown;
-  }>;
+  const rows = taskDefs.map((taskDef) => {
+    const progress = progressByTaskId.get(taskDef.id);
+    return {
+      task_id: taskDef.id,
+      giver_npc_id: taskDef.giver_npc_id,
+      prereq_task_ids: taskDef.prereq_task_ids,
+      objectives: taskDef.objectives,
+      progress_status: progress?.progress_status,
+      progress: progress?.progress,
+    };
+  });
 
   const prerequisiteTaskIds = new Set<string>();
   for (const row of rows) {
@@ -434,18 +440,26 @@ export const getRoomObjects = async (mapId: string, roomId: string, excludeUserI
     try {
       const activeRes = await query(
         `
-          SELECT d.objectives, p.progress
+          SELECT p.task_id, p.progress
           FROM character_task_progress p
-          JOIN task_def d ON d.id = p.task_id
           WHERE p.character_id = $1
-            AND d.enabled = true
             AND COALESCE(p.status, 'ongoing') <> 'claimed'
         `,
         [characterId],
       );
 
+      const taskDefMap = await getTaskDefinitionsByIds(
+        (activeRes.rows as Array<Record<string, unknown>>)
+          .map((row) => asNonEmptyString(row.task_id))
+          .filter((taskId): taskId is string => Boolean(taskId)),
+      );
+
       for (const row of activeRes.rows ?? []) {
-        const objectives = parseObjectives(row?.objectives);
+        const taskId = asNonEmptyString((row as Record<string, unknown>).task_id);
+        if (!taskId) continue;
+        const taskDef = taskDefMap.get(taskId);
+        if (!taskDef) continue;
+        const objectives = parseObjectives(taskDef.objectives);
         const progressRecord = parseProgressRecord(row?.progress);
         for (const o of objectives) {
           const oid = asNonEmptyString(o?.id);
@@ -476,19 +490,27 @@ export const getRoomObjects = async (mapId: string, roomId: string, excludeUserI
     try {
       const trackedTaskRes = await query(
         `
-          SELECT d.objectives, p.progress
+          SELECT p.task_id, p.progress
           FROM character_task_progress p
-          JOIN task_def d ON d.id = p.task_id
           WHERE p.character_id = $1
-            AND d.enabled = true
             AND p.tracked = true
             AND COALESCE(p.status, 'ongoing') <> 'claimed'
         `,
         [characterId],
       );
 
+      const taskDefMap = await getTaskDefinitionsByIds(
+        (trackedTaskRes.rows as Array<Record<string, unknown>>)
+          .map((row) => asNonEmptyString(row.task_id))
+          .filter((taskId): taskId is string => Boolean(taskId)),
+      );
+
       for (const row of trackedTaskRes.rows ?? []) {
-        const objectives = parseObjectives(row?.objectives);
+        const taskId = asNonEmptyString((row as Record<string, unknown>).task_id);
+        if (!taskId) continue;
+        const taskDef = taskDefMap.get(taskId);
+        if (!taskDef) continue;
+        const objectives = parseObjectives(taskDef.objectives);
         const progressRecord = parseProgressRecord(row?.progress);
         for (const o of objectives) {
           const oid = asNonEmptyString(o?.id);

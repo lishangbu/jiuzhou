@@ -4,6 +4,12 @@ import type { PoolClient } from 'pg';
 import { updateSectionProgress } from './mainQuestService.js';
 import { updateAchievementProgress } from './achievementService.js';
 import { getNpcDefinitions, getTalkTreeDefinitions } from './staticConfigLoader.js';
+import {
+  getStaticTaskDefinitions,
+  getTaskDefinitionById,
+  getTaskDefinitionsByIds,
+  getTaskDefinitionsByNpcIds,
+} from './taskDefinitionService.js';
 
 export type TaskCategory = 'main' | 'side' | 'daily' | 'event';
 
@@ -138,25 +144,57 @@ const resetRecurringTaskProgressIfNeeded = async (
   const cid = Number(characterId);
   if (!Number.isFinite(cid) || cid <= 0) return;
   const runner = dbClient ?? { query };
+  const progressRes = await runner.query(
+    `
+      SELECT task_id, accepted_at
+      FROM character_task_progress
+      WHERE character_id = $1
+    `,
+    [cid],
+  );
+
+  const taskIds = (progressRes.rows as Array<Record<string, unknown>>)
+    .map((row) => asNonEmptyString(row.task_id))
+    .filter((taskId): taskId is string => Boolean(taskId));
+  if (taskIds.length === 0) return;
+
+  const taskDefMap = await getTaskDefinitionsByIds(taskIds, dbClient);
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const dayOfWeek = (now.getDay() + 6) % 7;
+  const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek).getTime();
+  const needResetTaskIds: string[] = [];
+
+  for (const row of progressRes.rows as Array<Record<string, unknown>>) {
+    const taskId = asNonEmptyString(row.task_id);
+    if (!taskId) continue;
+    const taskDef = taskDefMap.get(taskId);
+    if (!taskDef || !taskDef.enabled) continue;
+    if (taskDef.category !== 'daily' && taskDef.category !== 'event') continue;
+
+    const acceptedAtRaw = row.accepted_at;
+    const acceptedAt = acceptedAtRaw instanceof Date ? acceptedAtRaw.getTime() : Date.parse(String(acceptedAtRaw ?? ''));
+    if (!Number.isFinite(acceptedAt)) continue;
+
+    if (taskDef.category === 'daily' && acceptedAt < todayStart) needResetTaskIds.push(taskId);
+    if (taskDef.category === 'event' && acceptedAt < weekStart) needResetTaskIds.push(taskId);
+  }
+
+  if (needResetTaskIds.length === 0) return;
+
   await runner.query(
     `
-      UPDATE character_task_progress p
+      UPDATE character_task_progress
       SET status = 'ongoing',
           progress = '{}'::jsonb,
           accepted_at = NOW(),
           completed_at = NULL,
           claimed_at = NULL,
           updated_at = NOW()
-      FROM task_def d
-      WHERE d.id = p.task_id
-        AND d.enabled = true
-        AND p.character_id = $1
-        AND (
-          (d.category = 'daily' AND p.accepted_at < date_trunc('day', NOW()))
-          OR (d.category = 'event' AND p.accepted_at < date_trunc('week', NOW()))
-        )
+      WHERE character_id = $1
+        AND task_id = ANY($2::varchar[])
     `,
-    [cid],
+    [cid, needResetTaskIds],
   );
 };
 
@@ -169,53 +207,56 @@ export const getTaskOverview = async (
   await resetRecurringTaskProgressIfNeeded(cid);
 
   const resolvedCategory = normalizeTaskCategory(category);
-  const params: unknown[] = [cid];
-  let where = 'd.enabled = true';
-  if (resolvedCategory) {
-    params.push(resolvedCategory);
-    where += ` AND d.category = $${params.length}`;
+  const defs = getStaticTaskDefinitions().filter((entry) => {
+    if (!entry.enabled) return false;
+    if (resolvedCategory && entry.category !== resolvedCategory) return false;
+    return true;
+  });
+
+  const taskIds = defs.map((entry) => entry.id);
+  const progressRes =
+    taskIds.length === 0
+      ? { rows: [] as Array<Record<string, unknown>> }
+      : await query(
+          `
+            SELECT task_id, status AS progress_status, tracked, progress
+            FROM character_task_progress
+            WHERE character_id = $1
+              AND task_id = ANY($2::varchar[])
+          `,
+          [cid, taskIds],
+        );
+
+  const progressByTaskId = new Map<string, { progress_status: unknown; tracked: unknown; progress: unknown }>();
+  for (const row of progressRes.rows as Array<Record<string, unknown>>) {
+    const taskId = asNonEmptyString(row.task_id);
+    if (!taskId) continue;
+    progressByTaskId.set(taskId, {
+      progress_status: row.progress_status,
+      tracked: row.tracked,
+      progress: row.progress,
+    });
   }
 
-  const res = await query(
-    `
-      SELECT
-        d.id,
-        d.category,
-        d.title,
-        d.realm,
-        d.map_id,
-        d.room_id,
-        COALESCE(d.description, '') AS description,
-        d.objectives,
-        d.rewards,
-        d.sort_weight,
-        COALESCE(p.status, 'ongoing') AS progress_status,
-        COALESCE(p.tracked, false) AS tracked,
-        COALESCE(p.progress, '{}'::jsonb) AS progress
-      FROM task_def d
-      LEFT JOIN character_task_progress p
-        ON p.task_id = d.id
-       AND p.character_id = $1
-      WHERE ${where}
-      ORDER BY d.category ASC, d.sort_weight DESC, d.id ASC
-    `,
-    params
-  );
-
-  const rows = (res.rows ?? []) as Array<{
-    id: unknown;
-    category: unknown;
-    title: unknown;
-    realm: unknown;
-    map_id: unknown;
-    room_id: unknown;
-    description: unknown;
-    objectives: unknown;
-    rewards: unknown;
-    progress_status: unknown;
-    tracked: unknown;
-    progress: unknown;
-  }>;
+  const rows = defs
+    .sort((left, right) => left.category.localeCompare(right.category) || right.sort_weight - left.sort_weight || left.id.localeCompare(right.id))
+    .map((def) => {
+      const progress = progressByTaskId.get(def.id);
+      return {
+        id: def.id,
+        category: def.category,
+        title: def.title,
+        realm: def.realm,
+        map_id: def.map_id,
+        room_id: def.room_id,
+        description: def.description,
+        objectives: def.objectives,
+        rewards: def.rewards,
+        progress_status: progress?.progress_status,
+        tracked: progress?.tracked,
+        progress: progress?.progress,
+      };
+    });
 
   const itemRewardIds = new Set<string>();
   for (const r of rows) {
@@ -330,17 +371,11 @@ export const getBountyTaskOverview = async (characterId: number): Promise<{ task
         END AS expires_at,
         i.spirit_stones_reward,
         i.silver_reward,
-        d.realm,
-        d.map_id,
-        d.room_id,
-        d.objectives,
-        d.rewards,
         COALESCE(p.status, 'ongoing') AS progress_status,
         COALESCE(p.tracked, false) AS tracked,
         COALESCE(p.progress, '{}'::jsonb) AS progress
       FROM bounty_claim c
       JOIN bounty_instance i ON i.id = c.bounty_instance_id
-      JOIN task_def d ON d.id = i.task_id AND d.enabled = true
       LEFT JOIN character_task_progress p
         ON p.task_id = i.task_id
        AND p.character_id = $1
@@ -370,19 +405,24 @@ export const getBountyTaskOverview = async (characterId: number): Promise<{ task
     expires_at: unknown;
     spirit_stones_reward: unknown;
     silver_reward: unknown;
-    realm: unknown;
-    map_id: unknown;
-    room_id: unknown;
-    objectives: unknown;
-    rewards: unknown;
     progress_status: unknown;
     tracked: unknown;
     progress: unknown;
   }>;
 
+  const taskDefMap = await getTaskDefinitionsByIds(
+    rows
+      .map((row) => asNonEmptyString(row.task_id))
+      .filter((taskId): taskId is string => Boolean(taskId)),
+  );
+
   const itemRewardIds = new Set<string>();
   for (const r of rows) {
-    const rewards = parseRewards(r.rewards);
+    const taskId = asNonEmptyString(r.task_id);
+    if (!taskId) continue;
+    const taskDef = taskDefMap.get(taskId);
+    if (!taskDef) continue;
+    const rewards = parseRewards(taskDef.rewards);
     for (const rw of rewards) {
       if (asNonEmptyString(rw?.type) !== 'item') continue;
       const itemDefId = asNonEmptyString(rw?.item_def_id);
@@ -415,14 +455,16 @@ export const getBountyTaskOverview = async (characterId: number): Promise<{ task
       const remainingSeconds = computeRemainingSeconds(expiresAt);
 
       const title = String(r.bounty_title ?? taskId);
-      const realm = asNonEmptyString(r.realm) ?? '凡人';
-      const mapId = asNonEmptyString(r.map_id);
-      const roomId = asNonEmptyString(r.room_id);
+      const taskDef = taskDefMap.get(taskId);
+      if (!taskDef) return null;
+      const realm = taskDef.realm ?? '凡人';
+      const mapId = taskDef.map_id;
+      const roomId = taskDef.room_id;
       const description = String(r.bounty_description ?? '');
       const tracked = r.tracked === true;
       const status = mapProgressStatusToUiStatus(r.progress_status);
 
-      const objectives = parseObjectives(r.objectives)
+      const objectives = parseObjectives(taskDef.objectives)
         .map((o) => {
           const oid = asNonEmptyString(o?.id) ?? '';
           const text = String(o?.text ?? '');
@@ -441,7 +483,7 @@ export const getBountyTaskOverview = async (characterId: number): Promise<{ task
       if (extraSilver > 0) rewardOut.push({ type: 'silver', name: '银两', amount: extraSilver });
       if (extraSpirit > 0) rewardOut.push({ type: 'spirit_stones', name: '灵石', amount: extraSpirit });
 
-      const taskRewards = parseRewards(r.rewards)
+      const taskRewards = parseRewards(taskDef.rewards)
         .map((rw): TaskRewardDto | null => {
           const type = asNonEmptyString(rw?.type) ?? '';
           if (type === 'silver') return { type: 'silver', name: '银两', amount: asFiniteNonNegativeInt(rw?.amount, 0) };
@@ -500,8 +542,8 @@ export const setTaskTracked = async (
   const tid = asNonEmptyString(taskId);
   if (!tid) return { success: false, message: '任务ID不能为空' };
 
-  const existsRes = await query(`SELECT 1 FROM task_def WHERE id = $1 AND enabled = true LIMIT 1`, [tid]);
-  if ((existsRes.rows ?? []).length === 0) return { success: false, message: '任务不存在' };
+  const taskDef = await getTaskDefinitionById(tid);
+  if (!taskDef) return { success: false, message: '任务不存在' };
 
   const res = await query(
     `
@@ -654,13 +696,13 @@ export const claimTaskReward = async (
       return { success: false, message: '任务不可领取' };
     }
 
-    const defRes = await client.query(`SELECT rewards FROM task_def WHERE id = $1 AND enabled = true LIMIT 1`, [tid]);
-    if ((defRes.rows ?? []).length === 0) {
+    const taskDef = await getTaskDefinitionById(tid, client);
+    if (!taskDef) {
       await client.query('ROLLBACK');
       return { success: false, message: '任务不存在' };
     }
 
-    const rewards = parseRewards(defRes.rows[0]?.rewards);
+    const rewards = parseRewards(taskDef.rewards);
     const applyResult = await applyTaskRewardsTx(client, uid, cid, rewards);
     if (!applyResult.success) {
       await client.query('ROLLBACK');
@@ -828,15 +870,12 @@ export const acceptTaskFromNpc = async (
   if (!nid) return { success: false, message: 'NPC不存在' };
   await resetRecurringTaskProgressIfNeeded(cid);
 
-  const defRes = await query(
-    `SELECT id, category, giver_npc_id, prereq_task_ids FROM task_def WHERE id = $1 AND enabled = true LIMIT 1`,
-    [tid],
-  );
-  if ((defRes.rows ?? []).length === 0) return { success: false, message: '任务不存在' };
-  const taskCategory = normalizeTaskCategory(defRes.rows[0]?.category) ?? 'main';
-  const giverNpcId = asNonEmptyString(defRes.rows[0]?.giver_npc_id);
+  const taskDef = await getTaskDefinitionById(tid);
+  if (!taskDef) return { success: false, message: '任务不存在' };
+  const taskCategory = normalizeTaskCategory(taskDef.category) ?? 'main';
+  const giverNpcId = asNonEmptyString(taskDef.giver_npc_id);
   if (!giverNpcId || giverNpcId !== nid) return { success: false, message: '该NPC无法发放此任务' };
-  const prereqTaskIds = asStringArray(defRes.rows[0]?.prereq_task_ids);
+  const prereqTaskIds = asStringArray(taskDef.prereq_task_ids);
   const prereqOk = await checkPrereqSatisfied(cid, prereqTaskIds);
   if (!prereqOk) return { success: false, message: '前置任务未完成' };
 
@@ -886,28 +925,26 @@ export const submitTask = async (
 
   const res = await query(
     `
-      SELECT
-        p.status,
-        p.progress,
-        d.objectives,
-        d.giver_npc_id
-      FROM character_task_progress p
-      JOIN task_def d ON d.id = p.task_id
-      WHERE p.character_id = $1 AND p.task_id = $2 AND d.enabled = true
+      SELECT status, progress
+      FROM character_task_progress
+      WHERE character_id = $1 AND task_id = $2
       LIMIT 1
     `,
     [cid, tid],
   );
   if ((res.rows ?? []).length === 0) return { success: false, message: '任务未接取' };
 
-  const row = res.rows[0] as { status?: unknown; progress?: unknown; objectives?: unknown; giver_npc_id?: unknown };
-  const giverNpcId = asNonEmptyString(row?.giver_npc_id);
+  const taskDef = await getTaskDefinitionById(tid);
+  if (!taskDef) return { success: false, message: '任务不存在' };
+
+  const row = res.rows[0] as { status?: unknown; progress?: unknown };
+  const giverNpcId = asNonEmptyString(taskDef.giver_npc_id);
   if (!giverNpcId || giverNpcId !== nid) return { success: false, message: '该任务无法在此提交' };
   const status = asTaskProgressStatusDb(row?.status);
   if (status === 'claimed') return { success: false, message: '任务已完成' };
   if (status === 'claimable') return { success: true, message: 'ok', data: { taskId: tid } };
 
-  const objectives = parseObjectives(row?.objectives);
+  const objectives = parseObjectives(taskDef.objectives);
   const progressRecord = parseProgressRecord(row?.progress);
   const allDone = computeAllObjectivesDone(objectives, progressRecord);
   if (!allDone) return { success: false, message: '任务未完成' };
@@ -932,50 +969,48 @@ const applyTaskEvent = async (
   const cid = Number(characterId);
   if (!Number.isFinite(cid) || cid <= 0) return;
 
-  await query(
-    `
-      INSERT INTO character_task_progress (character_id, task_id, status, progress, tracked, accepted_at, completed_at, claimed_at, updated_at)
-      SELECT $1, d.id, 'ongoing', '{}'::jsonb, true, NOW(), NULL, NULL, NOW()
-      FROM task_def d
-      WHERE d.enabled = true
-        AND d.category = 'event'
-        AND NOT EXISTS (
-          SELECT 1
-          FROM character_task_progress p
-          WHERE p.character_id = $1 AND p.task_id = d.id
-        )
-      ON CONFLICT (character_id, task_id) DO NOTHING
-    `,
-    [cid],
-  );
+  const eventTaskDefs = getStaticTaskDefinitions().filter((def) => def.enabled && def.category === 'event');
+  for (const eventTaskDef of eventTaskDefs) {
+    await query(
+      `
+        INSERT INTO character_task_progress (character_id, task_id, status, progress, tracked, accepted_at, completed_at, claimed_at, updated_at)
+        VALUES ($1, $2, 'ongoing', '{}'::jsonb, true, NOW(), NULL, NULL, NOW())
+        ON CONFLICT (character_id, task_id) DO NOTHING
+      `,
+      [cid, eventTaskDef.id],
+    );
+  }
 
   const res = await query(
     `
       SELECT
         p.task_id,
         p.status,
-        p.progress,
-        d.objectives,
-        d.giver_npc_id,
-        d.category
+        p.progress
       FROM character_task_progress p
-      JOIN task_def d ON d.id = p.task_id
       WHERE p.character_id = $1
-        AND d.enabled = true
         AND COALESCE(p.status, 'ongoing') <> 'claimed'
     `,
     [cid],
   );
 
+  const taskDefMap = await getTaskDefinitionsByIds(
+    (res.rows as Array<Record<string, unknown>>)
+      .map((row) => asNonEmptyString(row.task_id))
+      .filter((taskId): taskId is string => Boolean(taskId)),
+  );
+
   for (const row of res.rows ?? []) {
     const taskId = asNonEmptyString(row?.task_id);
     if (!taskId) continue;
+    const taskDef = taskDefMap.get(taskId);
+    if (!taskDef) continue;
     const status = asTaskProgressStatusDb(row?.status);
     if (status === 'claimed') continue;
 
-    const objectives = parseObjectives(row?.objectives);
+    const objectives = parseObjectives(taskDef.objectives);
     const progressRecord = parseProgressRecord(row?.progress);
-    const category = normalizeTaskCategory(row?.category) ?? 'main';
+    const category = normalizeTaskCategory(taskDef.category) ?? 'main';
 
     let changed = false;
     for (const o of objectives) {
@@ -992,7 +1027,7 @@ const applyTaskEvent = async (
       }
     }
 
-    const giverNpcId = asNonEmptyString(row?.giver_npc_id);
+    const giverNpcId = asNonEmptyString(taskDef.giver_npc_id);
     const allDone = computeAllObjectivesDone(objectives, progressRecord);
 
     let nextStatus: TaskProgressStatusDb = status;
@@ -1258,40 +1293,42 @@ export const npcTalk = async (
     lines.push(`${npcName}看着你，没有多说什么。`);
   }
 
-  const taskRes = await query(
-    `
-      SELECT
-        d.id,
-        d.title,
-        d.category,
-        d.prereq_task_ids,
-        d.objectives,
-        p.status,
-        p.progress
-      FROM task_def d
-      LEFT JOIN character_task_progress p
-        ON p.task_id = d.id
-       AND p.character_id = $2
-      WHERE d.enabled = true AND d.giver_npc_id = $1
-      ORDER BY d.sort_weight DESC, d.id ASC
-    `,
-    [nid, cid],
-  );
+  const taskDefs = await getTaskDefinitionsByNpcIds([nid]);
+  const taskIds = taskDefs.map((entry) => entry.id);
+  const progressRes =
+    taskIds.length === 0
+      ? { rows: [] as Array<Record<string, unknown>> }
+      : await query(
+          `
+            SELECT task_id, status, progress
+            FROM character_task_progress
+            WHERE character_id = $1
+              AND task_id = ANY($2::varchar[])
+          `,
+          [cid, taskIds],
+        );
+  const progressByTaskId = new Map<string, { status?: unknown; progress?: unknown }>();
+  for (const row of progressRes.rows as Array<Record<string, unknown>>) {
+    const taskId = asNonEmptyString(row.task_id);
+    if (!taskId) continue;
+    progressByTaskId.set(taskId, { status: row.status, progress: row.progress });
+  }
 
   const tasks: NpcTalkTaskOption[] = [];
-  for (const r of taskRes.rows ?? []) {
-    const tid = asNonEmptyString(r?.id);
+  for (const def of taskDefs) {
+    const tid = asNonEmptyString(def.id);
     if (!tid) continue;
-    const title = String(r?.title ?? tid);
-    const category = normalizeTaskCategory(r?.category) ?? 'main';
-    const status = asTaskProgressStatusDb(r?.status);
+    const title = String(def.title ?? tid);
+    const category = normalizeTaskCategory(def.category) ?? 'main';
+    const progress = progressByTaskId.get(tid);
+    const status = asTaskProgressStatusDb(progress?.status);
 
-    const objectives = parseObjectives(r?.objectives);
-    const progressRecord = parseProgressRecord(r?.progress);
+    const objectives = parseObjectives(def.objectives);
+    const progressRecord = parseProgressRecord(progress?.progress);
     const allDone = computeAllObjectivesDone(objectives, progressRecord);
 
-    if (!r?.status) {
-      const prereqTaskIds = asStringArray(r?.prereq_task_ids);
+    if (!progress?.status) {
+      const prereqTaskIds = asStringArray(def.prereq_task_ids);
       const prereqOk = await checkPrereqSatisfied(cid, prereqTaskIds);
       tasks.push({ taskId: tid, title, category, status: prereqOk ? 'available' : 'locked' });
       continue;

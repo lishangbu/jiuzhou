@@ -341,8 +341,39 @@ export type SkillDefConfig = {
   enabled?: boolean;
 };
 
+export type TaskDefConfig = {
+  id: string;
+  category: string;
+  title: string;
+  realm: string;
+  description?: string;
+  giver_npc_id?: string;
+  map_id?: string;
+  room_id?: string;
+  objectives?: Array<{
+    id: string;
+    type: string;
+    text: string;
+    target: number;
+    params?: Record<string, unknown>;
+  }>;
+  rewards?: Array<{
+    type: string;
+    item_def_id?: string;
+    qty?: number;
+    qty_min?: number;
+    qty_max?: number;
+    amount?: number;
+  }>;
+  prereq_task_ids?: string[];
+  enabled?: boolean;
+  sort_weight?: number;
+  version?: number;
+};
+
 type TechniqueDefFile = { techniques: TechniqueDefConfig[] };
 type SkillDefFile = { skills: SkillDefConfig[] };
+type TaskDefFile = { tasks: TaskDefConfig[] };
 
 let battlePassCache: BattlePassStaticConfig | null | undefined;
 let monthCardCache: MonthCardDef[] | null | undefined;
@@ -359,6 +390,7 @@ let dungeonDefCache: DungeonDefConfig[] | null | undefined;
 let dialogueDefCache: DialogueDefConfig[] | null | undefined;
 let techniqueDefCache: TechniqueDefConfig[] | null | undefined;
 let skillDefCache: SkillDefConfig[] | null | undefined;
+let taskDefCache: TaskDefConfig[] | null | undefined;
 
 export const getBattlePassStaticConfig = (): BattlePassStaticConfig | null => {
   if (battlePassCache !== undefined) return battlePassCache;
@@ -532,5 +564,12 @@ export const getSkillDefinitions = (): SkillDefConfig[] => {
   const file = readJsonFile<SkillDefFile>('skill_def.json');
   skillDefCache = Array.isArray(file?.skills) ? file.skills : [];
   return skillDefCache;
+};
+
+export const getTaskDefinitions = (): TaskDefConfig[] => {
+  if (taskDefCache !== undefined) return taskDefCache ?? [];
+  const file = readJsonFile<TaskDefFile>('task_def.json');
+  taskDefCache = Array.isArray(file?.tasks) ? file.tasks : [];
+  return taskDefCache;
 };
 

@@ -1,6 +1,7 @@
 import { pool } from '../config/database.js';
 import crypto from 'crypto';
 import { getBountyDefinitions } from './staticConfigLoader.js';
+import { getTaskDefinitionById } from './taskDefinitionService.js';
 
 export type BountySourceType = 'daily' | 'player';
 export type BountyClaimPolicy = 'unique' | 'limited' | 'unlimited';
@@ -366,12 +367,12 @@ export const claimBounty = async (
       [bid],
     );
 
-    const taskMetaRes = await client.query(`SELECT objectives FROM task_def WHERE id = $1 AND enabled = true LIMIT 1`, [taskId]);
-    if ((taskMetaRes.rows ?? []).length === 0) {
+    const taskDef = await getTaskDefinitionById(taskId, client);
+    if (!taskDef) {
       await client.query('ROLLBACK');
       return { success: false, message: '任务不存在' };
     }
-    const objectives = Array.isArray(taskMetaRes.rows[0]?.objectives) ? (taskMetaRes.rows[0].objectives as any[]) : [];
+    const objectives = Array.isArray(taskDef.objectives) ? (taskDef.objectives as any[]) : [];
     const hasSubmitObjective = objectives.some((o) => (o && typeof o === 'object' ? String((o as any).type ?? '').trim() : '') === 'submit_items');
     const initialStatus = hasSubmitObjective ? 'turnin' : 'ongoing';
 
@@ -526,8 +527,8 @@ export const publishBounty = async (
         [taskId, title, desc || null, JSON.stringify(taskObjectives)],
       );
     } else {
-      const existsRes = await client.query(`SELECT 1 FROM task_def WHERE id = $1 AND enabled = true LIMIT 1`, [taskId]);
-      if ((existsRes.rows ?? []).length === 0) {
+      const existsTaskDef = await getTaskDefinitionById(taskId, client);
+      if (!existsTaskDef) {
         await client.query('ROLLBACK');
         return { success: false, message: '任务不存在' };
       }
@@ -706,8 +707,8 @@ export const submitBountyMaterials = async (
       return { success: false, message: '任务已完成' };
     }
 
-    const taskRes = await client.query(`SELECT objectives FROM task_def WHERE id = $1 AND enabled = true LIMIT 1`, [tid]);
-    const objectives = Array.isArray(taskRes.rows?.[0]?.objectives) ? (taskRes.rows[0].objectives as any[]) : [];
+    const taskDef = await getTaskDefinitionById(tid, client);
+    const objectives = Array.isArray(taskDef?.objectives) ? (taskDef.objectives as any[]) : [];
     const submitObj = objectives.find((o) => (o && typeof o === 'object' ? String((o as any).type ?? '').trim() : '') === 'submit_items');
     const submitObjId = submitObj && typeof submitObj === 'object' ? asNonEmptyString((submitObj as any).id) : null;
     const submitTarget = submitObj && typeof submitObj === 'object' ? Math.max(1, asFiniteNonNegativeInt((submitObj as any).target, 1)) : 1;
