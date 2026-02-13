@@ -102,6 +102,27 @@
   gap: 8px;
 }
 
+.setting-rule-tip {
+  display: block;
+  padding: 0 2px;
+}
+
+.setting-rule-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--panel-bg-soft);
+}
+
+.setting-rule-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .setting-cdk-mobile {
   width: 100%;
 }
@@ -164,6 +185,10 @@
   }
 
   .setting-row {
+    padding: 10px;
+  }
+
+  .setting-rule-card {
     padding: 10px;
   }
 }

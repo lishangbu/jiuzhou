@@ -45,13 +45,15 @@ test('命中自动分解时应删除原装备并发放分解材料', async () =>
     autoDisassembleSetting: {
       enabled: true,
       maxQualityRank: 2,
-      rules: {
-        categories: ['equipment'],
-        subCategories: [],
-        excludedSubCategories: [],
-        includeNameKeywords: [],
-        excludeNameKeywords: [],
-      },
+      rules: [
+        {
+          categories: ['equipment'],
+          subCategories: [],
+          excludedSubCategories: [],
+          includeNameKeywords: [],
+          excludeNameKeywords: [],
+        },
+      ],
     },
     sourceObtainedFrom: 'dungeon_clear_reward',
     createItem: fn,
@@ -95,13 +97,15 @@ test('分解材料入包失败且背包满时应走邮件补发', async () => {
     autoDisassembleSetting: {
       enabled: true,
       maxQualityRank: 2,
-      rules: {
-        categories: ['equipment'],
-        subCategories: [],
-        excludedSubCategories: [],
-        includeNameKeywords: [],
-        excludeNameKeywords: [],
-      },
+      rules: [
+        {
+          categories: ['equipment'],
+          subCategories: [],
+          excludedSubCategories: [],
+          includeNameKeywords: [],
+          excludeNameKeywords: [],
+        },
+      ],
     },
     sourceObtainedFrom: 'dungeon_clear_reward',
     createItem: fn,
@@ -136,13 +140,15 @@ test('未开启自动分解时应保持原奖励逻辑', async () => {
     autoDisassembleSetting: {
       enabled: false,
       maxQualityRank: 4,
-      rules: {
-        categories: ['equipment'],
-        subCategories: [],
-        excludedSubCategories: [],
-        includeNameKeywords: [],
-        excludeNameKeywords: [],
-      },
+      rules: [
+        {
+          categories: ['equipment'],
+          subCategories: [],
+          excludedSubCategories: [],
+          includeNameKeywords: [],
+          excludeNameKeywords: [],
+        },
+      ],
     },
     sourceObtainedFrom: 'dungeon_clear_reward',
     createItem: fn,
@@ -177,13 +183,15 @@ test('品质超过阈值时应保留原装备', async () => {
     autoDisassembleSetting: {
       enabled: true,
       maxQualityRank: 2,
-      rules: {
-        categories: ['equipment'],
-        subCategories: [],
-        excludedSubCategories: [],
-        includeNameKeywords: [],
-        excludeNameKeywords: [],
-      },
+      rules: [
+        {
+          categories: ['equipment'],
+          subCategories: [],
+          excludedSubCategories: [],
+          includeNameKeywords: [],
+          excludeNameKeywords: [],
+        },
+      ],
     },
     sourceObtainedFrom: 'dungeon_clear_reward',
     createItem: fn,
@@ -217,13 +225,15 @@ test('原装备入包失败且背包满时应补发原装备邮件', async () =>
     autoDisassembleSetting: {
       enabled: true,
       maxQualityRank: 4,
-      rules: {
-        categories: ['equipment'],
-        subCategories: [],
-        excludedSubCategories: [],
-        includeNameKeywords: [],
-        excludeNameKeywords: [],
-      },
+      rules: [
+        {
+          categories: ['equipment'],
+          subCategories: [],
+          excludedSubCategories: [],
+          includeNameKeywords: [],
+          excludeNameKeywords: [],
+        },
+      ],
     },
     sourceObtainedFrom: 'dungeon_clear_reward',
     sourceEquipOptions: { yellow: 70, purple: 30 },
@@ -265,13 +275,15 @@ test('非装备命中规则时应按默认公式转化银两并删除原物品',
     autoDisassembleSetting: {
       enabled: true,
       maxQualityRank: 3,
-      rules: {
-        categories: ['material'],
-        subCategories: [],
-        excludedSubCategories: [],
-        includeNameKeywords: [],
-        excludeNameKeywords: [],
-      },
+      rules: [
+        {
+          categories: ['material'],
+          subCategories: [],
+          excludedSubCategories: [],
+          includeNameKeywords: [],
+          excludeNameKeywords: [],
+        },
+      ],
     },
     sourceObtainedFrom: 'battle_drop',
     createItem: fn,

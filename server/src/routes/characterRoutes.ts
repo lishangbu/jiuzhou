@@ -148,8 +148,14 @@ router.post('/updateAutoDisassemble', authMiddleware, async (req: Request, res: 
     if (parsedRank !== undefined && (!Number.isInteger(parsedRank) || parsedRank < 1 || parsedRank > 4)) {
       return res.status(400).json({ success: false, message: 'maxQualityRank参数错误' });
     }
-    if (parsedRules !== undefined && (parsedRules === null || typeof parsedRules !== 'object' || Array.isArray(parsedRules))) {
-      return res.status(400).json({ success: false, message: 'rules参数错误' });
+    if (parsedRules !== undefined && !Array.isArray(parsedRules)) {
+      return res.status(400).json({ success: false, message: 'rules参数错误，需为数组' });
+    }
+    if (
+      Array.isArray(parsedRules) &&
+      parsedRules.some((rule) => rule === null || typeof rule !== 'object' || Array.isArray(rule))
+    ) {
+      return res.status(400).json({ success: false, message: 'rules参数错误，规则项需为对象' });
     }
 
     const result = await updateCharacterAutoDisassembleSettings(userId, enabled, parsedRank, parsedRules);

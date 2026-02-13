@@ -1,7 +1,18 @@
 import { App, Button, Input, Menu, Modal, Select, Space, Switch, Typography } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
-import { getCharacterInfo, updateCharacterAutoDisassemble, type AutoDisassembleRulesDto } from '../../../../services/api';
+import {
+  getCharacterInfo,
+  updateCharacterAutoDisassemble,
+  type AutoDisassembleRuleDto,
+  type AutoDisassembleRulesDto,
+} from '../../../../services/api';
 import { emitThemeModeChange, getStoredThemeMode, persistThemeMode, type ThemeMode } from '../../../../constants/theme';
+import {
+  AUTO_DISASSEMBLE_CATEGORY_OPTIONS,
+  AUTO_DISASSEMBLE_SUB_CATEGORY_OPTIONS,
+  normalizeAutoDisassembleCategoryList,
+  normalizeAutoDisassembleSubCategoryList,
+} from '../../shared/autoDisassembleFilters';
 import { useIsMobile } from '../../shared/responsive';
 import './index.scss';
 
@@ -12,7 +23,49 @@ interface SettingModalProps {
   onClose: () => void;
 }
 
+interface AutoDisassembleRuleDraft {
+  id: number;
+  categories: string[];
+  subCategories: string[];
+  excludedSubCategories: string[];
+  includeNameKeywordsText: string;
+  excludeNameKeywordsText: string;
+}
+
+interface AutoDisassembleRuleDraftContent {
+  categories: string[];
+  subCategories: string[];
+  excludedSubCategories: string[];
+  includeNameKeywordsText: string;
+  excludeNameKeywordsText: string;
+}
+
 const CDK_STORAGE_KEY = 'cdk_redeemed_v1';
+
+const createDefaultAutoDisassembleRuleDraftContent = (): AutoDisassembleRuleDraftContent => {
+  return {
+    categories: ['equipment'],
+    subCategories: [],
+    excludedSubCategories: [],
+    includeNameKeywordsText: '',
+    excludeNameKeywordsText: '',
+  };
+};
+
+const createAutoDisassembleRuleDraft = (
+  id: number,
+  content?: AutoDisassembleRuleDraftContent
+): AutoDisassembleRuleDraft => {
+  const safeContent = content ?? createDefaultAutoDisassembleRuleDraftContent();
+  return {
+    id,
+    categories: [...safeContent.categories],
+    subCategories: [...safeContent.subCategories],
+    excludedSubCategories: [...safeContent.excludedSubCategories],
+    includeNameKeywordsText: safeContent.includeNameKeywordsText,
+    excludeNameKeywordsText: safeContent.excludeNameKeywordsText,
+  };
+};
 
 const loadRedeemedCdks = () => {
   const raw = localStorage.getItem(CDK_STORAGE_KEY);
@@ -36,62 +89,6 @@ const clampQualityRank = (value: unknown): number => {
   return Math.max(1, Math.min(4, n));
 };
 
-/**
- * 子类选项（中文显示，值保持服务端约定的英文编码）。
- * 说明：
- * - label 仅用于界面展示，避免玩家看到英文内部码。
- * - value 会原样提交到服务端 rules.subCategories / rules.excludedSubCategories。
- */
-const AUTO_DISASSEMBLE_SUB_CATEGORY_OPTIONS: Array<{ label: string; value: string }> = [
-  { label: '配饰', value: 'accessory' },
-  { label: '护甲', value: 'armor' },
-  { label: '战令道具', value: 'battle_pass' },
-  { label: '骨材', value: 'bone' },
-  { label: '宝箱', value: 'box' },
-  { label: '突破道具', value: 'breakthrough' },
-  { label: '采集物', value: 'collect' },
-  { label: '蛋类', value: 'egg' },
-  { label: '强化道具', value: 'enhance' },
-  { label: '精华', value: 'essence' },
-  { label: '锻造材料', value: 'forge' },
-  { label: '功能道具', value: 'function' },
-  { label: '宝石', value: 'gem' },
-  { label: '灵草', value: 'herb' },
-  { label: '钥匙', value: 'key' },
-  { label: '皮革', value: 'leather' },
-  { label: '月卡道具', value: 'month_card' },
-  { label: '杂项道具', value: 'object' },
-  { label: '矿石', value: 'ore' },
-  { label: '丹药', value: 'pill' },
-  { label: '遗物', value: 'relic' },
-  { label: '卷轴', value: 'scroll' },
-  { label: '功法', value: 'technique' },
-  { label: '功法书', value: 'technique_book' },
-  { label: '代币', value: 'token' },
-  { label: '木材', value: 'wood' },
-];
-
-const AUTO_DISASSEMBLE_SUB_CATEGORY_VALUE_SET = new Set(
-  AUTO_DISASSEMBLE_SUB_CATEGORY_OPTIONS.map((option) => option.value)
-);
-
-const normalizeStringList = (raw: unknown): string[] => {
-  if (!Array.isArray(raw)) return [];
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const row of raw) {
-    const value = String(row ?? '').trim().toLowerCase();
-    if (!value || seen.has(value)) continue;
-    seen.add(value);
-    out.push(value);
-  }
-  return out;
-};
-
-const normalizeSubCategoryList = (raw: unknown): string[] => {
-  return normalizeStringList(raw).filter((value) => AUTO_DISASSEMBLE_SUB_CATEGORY_VALUE_SET.has(value));
-};
-
 const parseCommaList = (raw: string, toLower: boolean = false): string[] => {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -112,6 +109,47 @@ const stringifyList = (raw: unknown): string => {
     .join(', ');
 };
 
+const normalizeAutoDisassembleRuleDraftContent = (raw: unknown): AutoDisassembleRuleDraftContent => {
+  const row = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  const categories = normalizeAutoDisassembleCategoryList(row.categories);
+  return {
+    categories: categories.length > 0 ? categories : ['equipment'],
+    subCategories: normalizeAutoDisassembleSubCategoryList(row.subCategories),
+    excludedSubCategories: normalizeAutoDisassembleSubCategoryList(row.excludedSubCategories),
+    includeNameKeywordsText: stringifyList(row.includeNameKeywords),
+    excludeNameKeywordsText: stringifyList(row.excludeNameKeywords),
+  };
+};
+
+const normalizeAutoDisassembleRuleDraftContentList = (raw: unknown): AutoDisassembleRuleDraftContent[] => {
+  if (!Array.isArray(raw)) return [createDefaultAutoDisassembleRuleDraftContent()];
+  const out: AutoDisassembleRuleDraftContent[] = [];
+  for (const row of raw) {
+    out.push(normalizeAutoDisassembleRuleDraftContent(row));
+    if (out.length >= 20) break;
+  }
+  if (out.length <= 0) {
+    return [createDefaultAutoDisassembleRuleDraftContent()];
+  }
+  return out;
+};
+
+const buildAutoDisassembleRulePayload = (rule: AutoDisassembleRuleDraft): AutoDisassembleRuleDto => {
+  const categories = normalizeAutoDisassembleCategoryList(rule.categories);
+  const subCategories = normalizeAutoDisassembleSubCategoryList(rule.subCategories);
+  const excludedSubCategories = normalizeAutoDisassembleSubCategoryList(rule.excludedSubCategories);
+  const includeNameKeywords = parseCommaList(rule.includeNameKeywordsText, true);
+  const excludeNameKeywords = parseCommaList(rule.excludeNameKeywordsText, true);
+
+  return {
+    ...(categories.length > 0 ? { categories } : {}),
+    ...(subCategories.length > 0 ? { subCategories } : {}),
+    ...(excludedSubCategories.length > 0 ? { excludedSubCategories } : {}),
+    ...(includeNameKeywords.length > 0 ? { includeNameKeywords } : {}),
+    ...(excludeNameKeywords.length > 0 ? { excludeNameKeywords } : {}),
+  };
+};
+
 const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
   const { message } = App.useApp();
   const [activeKey, setActiveKey] = useState<SettingKey>('base');
@@ -120,27 +158,14 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
   const [fastBattle, setFastBattle] = useState(false);
   const [autoDisassembleEnabled, setAutoDisassembleEnabled] = useState(false);
   const [autoDisassembleMaxQualityRank, setAutoDisassembleMaxQualityRank] = useState(1);
-  const [autoDisassembleCategories, setAutoDisassembleCategories] = useState<string[]>(['equipment']);
-  const [autoDisassembleSubCategories, setAutoDisassembleSubCategories] = useState<string[]>([]);
-  const [autoDisassembleExcludedSubCategories, setAutoDisassembleExcludedSubCategories] = useState<string[]>([]);
-  const [autoDisassembleIncludeNameKeywordsText, setAutoDisassembleIncludeNameKeywordsText] = useState('');
-  const [autoDisassembleExcludeNameKeywordsText, setAutoDisassembleExcludeNameKeywordsText] = useState('');
+  const [autoDisassembleRules, setAutoDisassembleRules] = useState<AutoDisassembleRuleDraft[]>([
+    createAutoDisassembleRuleDraft(1),
+  ]);
+  const [, setAutoDisassembleRuleIdSeed] = useState(2);
   const [autoDisassembleSaving, setAutoDisassembleSaving] = useState(false);
   const [autoDisassembleLoading, setAutoDisassembleLoading] = useState(false);
   const [cdk, setCdk] = useState('');
   const isMobile = useIsMobile();
-  const autoDisassembleCategoryOptions = useMemo(
-    () => [
-      { label: '装备', value: 'equipment' },
-      { label: '消耗品', value: 'consumable' },
-      { label: '材料', value: 'material' },
-      { label: '功法书', value: 'skillbook' },
-      { label: '功法', value: 'skill' },
-      { label: '任务道具', value: 'quest' },
-      { label: '其他', value: 'other' },
-    ],
-    []
-  );
 
   const menuItems = useMemo(
     () => [
@@ -187,16 +212,10 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
         const character = res.data.character;
         setAutoDisassembleEnabled(Boolean(character.auto_disassemble_enabled));
         setAutoDisassembleMaxQualityRank(clampQualityRank(character.auto_disassemble_max_quality_rank));
-        const rules = character.auto_disassemble_rules;
-        const categoriesRaw = Array.isArray(rules?.categories) ? rules.categories : ['equipment'];
-        const normalizedCategories = categoriesRaw
-          .map((v) => String(v ?? '').trim().toLowerCase())
-          .filter((v, idx, arr) => v.length > 0 && arr.indexOf(v) === idx);
-        setAutoDisassembleCategories(normalizedCategories.length > 0 ? normalizedCategories : ['equipment']);
-        setAutoDisassembleSubCategories(normalizeSubCategoryList(rules?.subCategories));
-        setAutoDisassembleExcludedSubCategories(normalizeSubCategoryList(rules?.excludedSubCategories));
-        setAutoDisassembleIncludeNameKeywordsText(stringifyList(rules?.includeNameKeywords));
-        setAutoDisassembleExcludeNameKeywordsText(stringifyList(rules?.excludeNameKeywords));
+
+        const rawRules = normalizeAutoDisassembleRuleDraftContentList(character.auto_disassemble_rules);
+        setAutoDisassembleRules(rawRules.map((rule, index) => createAutoDisassembleRuleDraft(index + 1, rule)));
+        setAutoDisassembleRuleIdSeed(rawRules.length + 1);
       } catch {
       } finally {
         if (!cancelled) {
@@ -210,34 +229,12 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
   }, [open]);
 
   const buildAutoDisassembleRulesPayload = (overrides?: {
-    categories?: string[];
-    subCategories?: string[];
-    excludedSubCategories?: string[];
-    includeNameKeywordsText?: string;
-    excludeNameKeywordsText?: string;
+    rules?: AutoDisassembleRuleDraft[];
   }): AutoDisassembleRulesDto => {
-    const categories = (overrides?.categories ?? autoDisassembleCategories)
-      .map((v) => String(v ?? '').trim().toLowerCase())
-      .filter((v, idx, arr) => v.length > 0 && arr.indexOf(v) === idx);
-    const subCategories = normalizeSubCategoryList(overrides?.subCategories ?? autoDisassembleSubCategories);
-    const excludedSubCategories = normalizeSubCategoryList(
-      overrides?.excludedSubCategories ?? autoDisassembleExcludedSubCategories
-    );
-    const includeNameKeywords = parseCommaList(
-      overrides?.includeNameKeywordsText ?? autoDisassembleIncludeNameKeywordsText,
-      true
-    );
-    const excludeNameKeywords = parseCommaList(
-      overrides?.excludeNameKeywordsText ?? autoDisassembleExcludeNameKeywordsText,
-      true
-    );
-    return {
-      ...(categories.length > 0 ? { categories } : {}),
-      ...(subCategories.length > 0 ? { subCategories } : {}),
-      ...(excludedSubCategories.length > 0 ? { excludedSubCategories } : {}),
-      ...(includeNameKeywords.length > 0 ? { includeNameKeywords } : {}),
-      ...(excludeNameKeywords.length > 0 ? { excludeNameKeywords } : {}),
-    };
+    const sourceRules = overrides?.rules ?? autoDisassembleRules;
+    const payload = sourceRules.map((rule) => buildAutoDisassembleRulePayload(rule));
+    if (payload.length > 0) return payload;
+    return [{ categories: ['equipment'] }];
   };
 
   const saveAutoDisassemble = async (
@@ -283,6 +280,37 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
     if (autoDisassembleLoading || autoDisassembleSaving) return;
     const rules = buildAutoDisassembleRulesPayload();
     void saveAutoDisassemble(autoDisassembleEnabled, autoDisassembleMaxQualityRank, rules, () => undefined);
+  };
+
+  const handleAddAutoDisassembleRule = () => {
+    if (autoDisassembleLoading || autoDisassembleSaving) return;
+    setAutoDisassembleRuleIdSeed((seed) => {
+      setAutoDisassembleRules((prev) => [...prev, createAutoDisassembleRuleDraft(seed)]);
+      return seed + 1;
+    });
+  };
+
+  const handleRemoveAutoDisassembleRule = (ruleId: number) => {
+    if (autoDisassembleLoading || autoDisassembleSaving) return;
+    setAutoDisassembleRules((prev) => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((rule) => rule.id !== ruleId);
+    });
+  };
+
+  const handleUpdateAutoDisassembleRule = (
+    ruleId: number,
+    patch: Partial<Omit<AutoDisassembleRuleDraft, 'id'>>,
+  ) => {
+    setAutoDisassembleRules((prev) =>
+      prev.map((rule) => {
+        if (rule.id !== ruleId) return rule;
+        return {
+          ...rule,
+          ...patch,
+        };
+      })
+    );
   };
 
   return (
@@ -366,62 +394,115 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
                   onChange={handleAutoDisassembleQualityChange}
                 />
               </div>
-              <div className="setting-row setting-row-column">
-                <Typography.Text>自动分解品类</Typography.Text>
-                <Select
-                  mode="multiple"
-                  value={autoDisassembleCategories}
-                  disabled={autoDisassembleLoading || autoDisassembleSaving}
-                  options={autoDisassembleCategoryOptions}
-                  onChange={(next) => setAutoDisassembleCategories((next as string[]).map((v) => String(v || '').toLowerCase()))}
-                  style={{ width: '100%' }}
-                  placeholder="未选择时默认仅装备"
-                />
-              </div>
-              <div className="setting-row setting-row-column">
-                <Typography.Text>包含子类</Typography.Text>
-                <Select
-                  mode="multiple"
-                  value={autoDisassembleSubCategories}
-                  disabled={autoDisassembleLoading || autoDisassembleSaving}
-                  options={AUTO_DISASSEMBLE_SUB_CATEGORY_OPTIONS}
-                  onChange={(next) => setAutoDisassembleSubCategories((next as string[]).map((v) => String(v || '').toLowerCase()))}
-                  style={{ width: '100%' }}
-                  placeholder="请选择需要包含的子类"
-                />
-              </div>
-              <div className="setting-row setting-row-column">
-                <Typography.Text>排除子类</Typography.Text>
-                <Select
-                  mode="multiple"
-                  value={autoDisassembleExcludedSubCategories}
-                  disabled={autoDisassembleLoading || autoDisassembleSaving}
-                  options={AUTO_DISASSEMBLE_SUB_CATEGORY_OPTIONS}
-                  onChange={(next) =>
-                    setAutoDisassembleExcludedSubCategories((next as string[]).map((v) => String(v || '').toLowerCase()))
-                  }
-                  style={{ width: '100%' }}
-                  placeholder="请选择需要排除的子类"
-                />
-              </div>
-              <div className="setting-row setting-row-column">
-                <Typography.Text>包含名称关键词（逗号分隔）</Typography.Text>
-                <Input
-                  value={autoDisassembleIncludeNameKeywordsText}
-                  disabled={autoDisassembleLoading || autoDisassembleSaving}
-                  onChange={(e) => setAutoDisassembleIncludeNameKeywordsText(e.target.value)}
-                  placeholder="如：丹, 剑, 残页"
-                />
-              </div>
-              <div className="setting-row setting-row-column">
-                <Typography.Text>排除名称关键词（逗号分隔）</Typography.Text>
-                <Input
-                  value={autoDisassembleExcludeNameKeywordsText}
-                  disabled={autoDisassembleLoading || autoDisassembleSaving}
-                  onChange={(e) => setAutoDisassembleExcludeNameKeywordsText(e.target.value)}
-                  placeholder="如：任务, 钥匙"
-                />
-              </div>
+
+              <Typography.Text type="secondary" className="setting-rule-tip">
+                可新增多条规则。自动分解采用“或（OR）”判断：命中任意一条规则即会分解。
+              </Typography.Text>
+
+              {autoDisassembleRules.map((rule, index) => (
+                <div className="setting-rule-card" key={rule.id}>
+                  <div className="setting-rule-header">
+                    <Typography.Text strong>{`规则 ${index + 1}`}</Typography.Text>
+                    <Button
+                      danger
+                      type="text"
+                      size="small"
+                      disabled={autoDisassembleLoading || autoDisassembleSaving || autoDisassembleRules.length <= 1}
+                      onClick={() => handleRemoveAutoDisassembleRule(rule.id)}
+                    >
+                      删除规则
+                    </Button>
+                  </div>
+
+                  <div className="setting-row setting-row-column">
+                    <Typography.Text>自动分解品类</Typography.Text>
+                    <Select
+                      mode="multiple"
+                      value={rule.categories}
+                      disabled={autoDisassembleLoading || autoDisassembleSaving}
+                      options={AUTO_DISASSEMBLE_CATEGORY_OPTIONS}
+                      onChange={(next) =>
+                        handleUpdateAutoDisassembleRule(rule.id, {
+                          categories: normalizeAutoDisassembleCategoryList(next),
+                        })
+                      }
+                      style={{ width: '100%' }}
+                      placeholder="未选择时默认仅装备"
+                    />
+                  </div>
+
+                  <div className="setting-row setting-row-column">
+                    <Typography.Text>包含子类</Typography.Text>
+                    <Select
+                      mode="multiple"
+                      value={rule.subCategories}
+                      disabled={autoDisassembleLoading || autoDisassembleSaving}
+                      options={AUTO_DISASSEMBLE_SUB_CATEGORY_OPTIONS}
+                      onChange={(next) =>
+                        handleUpdateAutoDisassembleRule(rule.id, {
+                          subCategories: normalizeAutoDisassembleSubCategoryList(next),
+                        })
+                      }
+                      style={{ width: '100%' }}
+                      placeholder="请选择需要包含的子类"
+                    />
+                  </div>
+
+                  <div className="setting-row setting-row-column">
+                    <Typography.Text>排除子类</Typography.Text>
+                    <Select
+                      mode="multiple"
+                      value={rule.excludedSubCategories}
+                      disabled={autoDisassembleLoading || autoDisassembleSaving}
+                      options={AUTO_DISASSEMBLE_SUB_CATEGORY_OPTIONS}
+                      onChange={(next) =>
+                        handleUpdateAutoDisassembleRule(rule.id, {
+                          excludedSubCategories: normalizeAutoDisassembleSubCategoryList(next),
+                        })
+                      }
+                      style={{ width: '100%' }}
+                      placeholder="请选择需要排除的子类"
+                    />
+                  </div>
+
+                  <div className="setting-row setting-row-column">
+                    <Typography.Text>包含名称关键词（逗号分隔）</Typography.Text>
+                    <Input
+                      value={rule.includeNameKeywordsText}
+                      disabled={autoDisassembleLoading || autoDisassembleSaving}
+                      onChange={(e) =>
+                        handleUpdateAutoDisassembleRule(rule.id, {
+                          includeNameKeywordsText: e.target.value,
+                        })
+                      }
+                      placeholder="如：丹, 剑, 残页"
+                    />
+                  </div>
+
+                  <div className="setting-row setting-row-column">
+                    <Typography.Text>排除名称关键词（逗号分隔）</Typography.Text>
+                    <Input
+                      value={rule.excludeNameKeywordsText}
+                      disabled={autoDisassembleLoading || autoDisassembleSaving}
+                      onChange={(e) =>
+                        handleUpdateAutoDisassembleRule(rule.id, {
+                          excludeNameKeywordsText: e.target.value,
+                        })
+                      }
+                      placeholder="如：任务, 钥匙"
+                    />
+                  </div>
+                </div>
+              ))}
+
+              <Button
+                disabled={autoDisassembleLoading || autoDisassembleSaving || autoDisassembleRules.length >= 20}
+                onClick={handleAddAutoDisassembleRule}
+                style={{ alignSelf: 'flex-start' }}
+              >
+                新增一条规则
+              </Button>
+
               <Button
                 type="primary"
                 loading={autoDisassembleSaving}

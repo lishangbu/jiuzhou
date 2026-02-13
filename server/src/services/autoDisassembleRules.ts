@@ -18,7 +18,7 @@ export interface AutoDisassembleRuleSet {
 export interface AutoDisassembleSetting {
   enabled: boolean;
   maxQualityRank: number;
-  rules: AutoDisassembleRuleSet;
+  rules: AutoDisassembleRuleSet[];
 }
 
 export interface AutoDisassembleCandidateMeta {
@@ -47,6 +47,24 @@ const normalizeKeywordList = (raw: unknown, maxSize: number = 100): string[] => 
   return normalizeStringList(raw, maxSize);
 };
 
+const DEFAULT_AUTO_DISASSEMBLE_RULE_SET: AutoDisassembleRuleSet = {
+  categories: ['equipment'],
+  subCategories: [],
+  excludedSubCategories: [],
+  includeNameKeywords: [],
+  excludeNameKeywords: [],
+};
+
+const createDefaultAutoDisassembleRuleSet = (): AutoDisassembleRuleSet => {
+  return {
+    categories: [...DEFAULT_AUTO_DISASSEMBLE_RULE_SET.categories],
+    subCategories: [...DEFAULT_AUTO_DISASSEMBLE_RULE_SET.subCategories],
+    excludedSubCategories: [...DEFAULT_AUTO_DISASSEMBLE_RULE_SET.excludedSubCategories],
+    includeNameKeywords: [...DEFAULT_AUTO_DISASSEMBLE_RULE_SET.includeNameKeywords],
+    excludeNameKeywords: [...DEFAULT_AUTO_DISASSEMBLE_RULE_SET.excludeNameKeywords],
+  };
+};
+
 /**
  * 归一化规则：
  * - 未配置 categories 时默认仅自动分解装备（保持现有行为）
@@ -62,12 +80,25 @@ export const normalizeAutoDisassembleRuleSet = (raw: unknown): AutoDisassembleRu
   const excludeNameKeywords = normalizeKeywordList(record.excludeNameKeywords);
 
   return {
-    categories: categories.length > 0 ? categories : ['equipment'],
+    categories: categories.length > 0 ? categories : [...DEFAULT_AUTO_DISASSEMBLE_RULE_SET.categories],
     subCategories,
     excludedSubCategories,
     includeNameKeywords,
     excludeNameKeywords,
   };
+};
+
+const normalizeAutoDisassembleRuleSetList = (raw: unknown, maxSize: number = 20): AutoDisassembleRuleSet[] => {
+  if (!Array.isArray(raw)) return [createDefaultAutoDisassembleRuleSet()];
+  const out: AutoDisassembleRuleSet[] = [];
+  for (const row of raw) {
+    if (out.length >= maxSize) break;
+    out.push(normalizeAutoDisassembleRuleSet(row));
+  }
+  if (out.length <= 0) {
+    return [createDefaultAutoDisassembleRuleSet()];
+  }
+  return out;
 };
 
 export const normalizeAutoDisassembleSetting = (raw: {
@@ -78,7 +109,7 @@ export const normalizeAutoDisassembleSetting = (raw: {
   return {
     enabled: Boolean(raw.enabled),
     maxQualityRank: clampQualityRank(raw.maxQualityRank, 1),
-    rules: normalizeAutoDisassembleRuleSet(raw.rules),
+    rules: normalizeAutoDisassembleRuleSetList(raw.rules),
   };
 };
 
@@ -121,5 +152,6 @@ export const shouldAutoDisassembleBySetting = (
   const qualityRank = Number(meta.qualityRank);
   if (!Number.isInteger(qualityRank) || qualityRank <= 0) return false;
   if (qualityRank > setting.maxQualityRank) return false;
-  return matchesRuleSet(setting.rules, meta);
+  // 多条规则采用 OR：命中任一规则即可自动分解。
+  return setting.rules.some((ruleSet) => matchesRuleSet(ruleSet, meta));
 };

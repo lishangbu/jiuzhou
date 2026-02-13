@@ -18,7 +18,7 @@ export interface Character {
   auto_cast_skills: boolean;
   auto_disassemble_enabled: boolean;
   auto_disassemble_max_quality_rank: number;
-  auto_disassemble_rules: AutoDisassembleRuleSet | null;
+  auto_disassemble_rules: AutoDisassembleRuleSet[] | null;
   spirit_stones: number;
   silver: number;
   stamina: number;
@@ -296,7 +296,7 @@ export const updateCharacterAutoDisassembleSettings = async (
       UPDATE characters
       SET auto_disassemble_enabled = $1,
           auto_disassemble_max_quality_rank = GREATEST(1, LEAST(4, COALESCE($2, auto_disassemble_max_quality_rank, 1))),
-          auto_disassemble_rules = COALESCE($3::jsonb, auto_disassemble_rules, '{}'::jsonb),
+          auto_disassemble_rules = COALESCE($3::jsonb, auto_disassemble_rules, '[]'::jsonb),
           updated_at = CURRENT_TIMESTAMP
       WHERE user_id = $4
     `;

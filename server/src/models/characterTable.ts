@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS characters (
   auto_cast_skills BOOLEAN DEFAULT true,               -- 自动释放技能开关
   auto_disassemble_enabled BOOLEAN DEFAULT false,      -- 自动分解物品开关
   auto_disassemble_max_quality_rank INTEGER DEFAULT 1, -- 自动分解最高品质（1黄/2玄/3地/4天）
-  auto_disassemble_rules JSONB DEFAULT '{}'::jsonb,    -- 自动分解高级规则
+  auto_disassemble_rules JSONB DEFAULT '[]'::jsonb,    -- 自动分解高级规则（数组）
 
   -- 时间戳
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,     -- 创建时间
@@ -193,7 +193,8 @@ BEGIN
     SELECT 1 FROM information_schema.columns
     WHERE table_name = 'characters' AND column_name = 'auto_disassemble_rules'
   ) THEN
-    EXECUTE $$COMMENT ON COLUMN characters.auto_disassemble_rules IS '自动分解高级规则JSON（品类/子类/名称关键词）'$$;
+    EXECUTE $$ALTER TABLE characters ALTER COLUMN auto_disassemble_rules SET DEFAULT '[]'::jsonb$$;
+    EXECUTE $$COMMENT ON COLUMN characters.auto_disassemble_rules IS '自动分解高级规则JSON数组（规则间 OR）'$$;
   END IF;
 END
 $do$;
@@ -278,7 +279,7 @@ const columnsToCheck = [
   { name: 'auto_cast_skills', type: 'BOOLEAN DEFAULT true', comment: '自动释放技能开关' },
   { name: 'auto_disassemble_enabled', type: 'BOOLEAN DEFAULT false', comment: '自动分解物品开关' },
   { name: 'auto_disassemble_max_quality_rank', type: 'INTEGER DEFAULT 1', comment: '自动分解最高品质（1黄/2玄/3地/4天）' },
-  { name: 'auto_disassemble_rules', type: "JSONB DEFAULT '{}'::jsonb", comment: '自动分解高级规则JSON（品类/子类/名称关键词）' },
+  { name: 'auto_disassemble_rules', type: "JSONB DEFAULT '[]'::jsonb", comment: '自动分解高级规则JSON数组（规则间 OR）' },
 ];
 
 // 检查并添加缺失字段

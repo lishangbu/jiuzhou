@@ -54,6 +54,7 @@ import type { BagAction, BagCategory, BagItem, BagQuality, BagSort, BatchMode } 
 import DisassembleModal from './DisassembleModal';
 import CraftModal from './CraftModal';
 import GemSynthesisModal from './GemSynthesisModal';
+import { buildAutoDisassembleSubCategoryOptions } from '../../shared/autoDisassembleFilters';
 import { useIsMobile } from '../../shared/responsive';
 import './index.scss';
 
@@ -699,7 +700,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
     for (const it of bagOnlyItems) {
       if (it.subCategory) set.add(it.subCategory);
     }
-    return [...set].sort((a, b) => a.localeCompare(b));
+    return buildAutoDisassembleSubCategoryOptions([...set]);
   }, [bagOnlyItems]);
 
   const batchCandidates = useMemo(() => {
@@ -1615,7 +1616,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
               value={batchSubCategory}
               onChange={(v) => setBatchSubCategory(String(v))}
               placeholder="子类型"
-              options={[{ value: 'all', label: '全部子类型' }, ...batchSubCategoryOptions.map((s) => ({ value: s, label: s }))]}
+              options={[{ value: 'all', label: '全部子类型' }, ...batchSubCategoryOptions]}
             />
           </div>
           {batchMode === 'disassemble' ? (

@@ -38,13 +38,15 @@ export interface CharacterResponse {
   };
 }
 
-export interface AutoDisassembleRulesDto {
+export interface AutoDisassembleRuleDto {
   categories?: string[];
   subCategories?: string[];
   excludedSubCategories?: string[];
   includeNameKeywords?: string[];
   excludeNameKeywords?: string[];
 }
+
+export type AutoDisassembleRulesDto = AutoDisassembleRuleDto[];
 
 // 登录
 export const login = (username: string, password: string): Promise<AuthResponse> => {
