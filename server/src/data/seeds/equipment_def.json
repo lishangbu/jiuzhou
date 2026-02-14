@@ -8,9 +8,6 @@
       "name": "新手剑",
       "category": "equipment",
       "sub_category": "sword",
-      "quality": "黄",
-      "quality_rank": 1,
-      "rarity": "common",
       "level": 1,
       "stack_max": 1,
       "bind_type": "equip",
@@ -30,9 +27,7 @@
         "武器",
         "剑",
         "新手"
-      ],
-      "quality_min": "黄",
-      "quality_max": "玄"
+      ]
     },
     {
       "id": "equip-weapon-002",
@@ -40,9 +35,6 @@
       "name": "清风剑",
       "category": "equipment",
       "sub_category": "sword",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -63,9 +55,7 @@
         "武器",
         "剑",
         "风属性"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "equip-weapon-003",
@@ -73,9 +63,6 @@
       "name": "玄元剑",
       "category": "equipment",
       "sub_category": "sword",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 30,
       "stack_max": 1,
       "bind_type": "pickup",
@@ -97,9 +84,7 @@
         "武器",
         "剑",
         "上古"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "equip-head-001",
@@ -107,9 +92,6 @@
       "name": "布衣帽",
       "category": "equipment",
       "sub_category": "hat",
-      "quality": "黄",
-      "quality_rank": 1,
-      "rarity": "common",
       "level": 1,
       "stack_max": 1,
       "bind_type": "equip",
@@ -129,9 +111,7 @@
         "防具",
         "头部",
         "新手"
-      ],
-      "quality_min": "黄",
-      "quality_max": "玄"
+      ]
     },
     {
       "id": "equip-clothes-001",
@@ -139,9 +119,6 @@
       "name": "布衣",
       "category": "equipment",
       "sub_category": "robe",
-      "quality": "黄",
-      "quality_rank": 1,
-      "rarity": "common",
       "level": 1,
       "stack_max": 1,
       "bind_type": "equip",
@@ -162,9 +139,7 @@
         "防具",
         "衣服",
         "新手"
-      ],
-      "quality_min": "黄",
-      "quality_max": "玄"
+      ]
     },
     {
       "id": "equip-clothes-002",
@@ -172,9 +147,6 @@
       "name": "玄灵袍",
       "category": "equipment",
       "sub_category": "robe",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -196,9 +168,7 @@
         "防具",
         "衣服",
         "灵气"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "equip-necklace-001",
@@ -206,9 +176,6 @@
       "name": "灵石坠",
       "category": "equipment",
       "sub_category": "necklace",
-      "quality": "黄",
-      "quality_rank": 1,
-      "rarity": "common",
       "level": 1,
       "stack_max": 1,
       "bind_type": "equip",
@@ -227,9 +194,7 @@
       "tags": [
         "饰品",
         "项链"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "equip-artifact-001",
@@ -237,9 +202,6 @@
       "name": "御剑符",
       "category": "equipment",
       "sub_category": "talisman",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 15,
       "stack_max": 1,
       "bind_type": "pickup",
@@ -258,9 +220,7 @@
       "tags": [
         "法宝",
         "飞行"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "_comment": "========== 养气期物攻套装1：青锋套装（剑客风格，追求暴击） =========="
@@ -271,9 +231,6 @@
       "name": "青锋剑",
       "category": "equipment",
       "sub_category": "sword",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -297,9 +254,7 @@
         "剑",
         "青锋套装",
         "物攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-qingfeng-head",
@@ -307,9 +262,6 @@
       "name": "青锋冠",
       "category": "equipment",
       "sub_category": "hat",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -333,9 +285,7 @@
         "头部",
         "青锋套装",
         "物攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-qingfeng-clothes",
@@ -343,9 +293,6 @@
       "name": "青锋衣",
       "category": "equipment",
       "sub_category": "robe",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -369,9 +316,7 @@
         "衣服",
         "青锋套装",
         "物攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-qingfeng-gloves",
@@ -379,9 +324,6 @@
       "name": "青锋护手",
       "category": "equipment",
       "sub_category": "gloves",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -405,9 +347,7 @@
         "手部",
         "青锋套装",
         "物攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-qingfeng-pants",
@@ -415,9 +355,6 @@
       "name": "青锋裤",
       "category": "equipment",
       "sub_category": "pants",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -441,9 +378,7 @@
         "腿部",
         "青锋套装",
         "物攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-qingfeng-necklace",
@@ -451,9 +386,6 @@
       "name": "青锋玉佩",
       "category": "equipment",
       "sub_category": "necklace",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -477,9 +409,7 @@
         "项链",
         "青锋套装",
         "物攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-qingfeng-accessory",
@@ -487,9 +417,6 @@
       "name": "青锋戒",
       "category": "equipment",
       "sub_category": "ring",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -513,9 +440,7 @@
         "戒指",
         "青锋套装",
         "物攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-qingfeng-artifact",
@@ -523,9 +448,6 @@
       "name": "青锋令",
       "category": "equipment",
       "sub_category": "token",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -549,9 +471,7 @@
         "令牌",
         "青锋套装",
         "物攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "_comment": "========== 养气期物攻套装2：玄铁套装（刚猛风格，追求高攻高防） =========="
@@ -562,9 +482,6 @@
       "name": "玄铁刀",
       "category": "equipment",
       "sub_category": "blade",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -588,9 +505,7 @@
         "刀",
         "玄铁套装",
         "物攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-xuantie-head",
@@ -598,9 +513,6 @@
       "name": "玄铁盔",
       "category": "equipment",
       "sub_category": "helmet",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -624,9 +536,7 @@
         "头部",
         "玄铁套装",
         "物攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-xuantie-clothes",
@@ -634,9 +544,6 @@
       "name": "玄铁甲",
       "category": "equipment",
       "sub_category": "armor",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -660,9 +567,7 @@
         "衣服",
         "玄铁套装",
         "物攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-xuantie-gloves",
@@ -670,9 +575,6 @@
       "name": "玄铁腕甲",
       "category": "equipment",
       "sub_category": "gauntlets",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -696,9 +598,7 @@
         "手部",
         "玄铁套装",
         "物攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-xuantie-pants",
@@ -706,9 +606,6 @@
       "name": "玄铁战裙",
       "category": "equipment",
       "sub_category": "legguards",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -732,9 +629,7 @@
         "腿部",
         "玄铁套装",
         "物攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-xuantie-necklace",
@@ -742,9 +637,6 @@
       "name": "玄铁锁",
       "category": "equipment",
       "sub_category": "necklace",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -768,9 +660,7 @@
         "项链",
         "玄铁套装",
         "物攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-xuantie-accessory",
@@ -778,9 +668,6 @@
       "name": "玄铁环",
       "category": "equipment",
       "sub_category": "ring",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -804,9 +691,7 @@
         "戒指",
         "玄铁套装",
         "物攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-xuantie-artifact",
@@ -814,9 +699,6 @@
       "name": "玄铁盾符",
       "category": "equipment",
       "sub_category": "shield",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -840,9 +722,7 @@
         "盾",
         "玄铁套装",
         "物攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "_comment": "========== 养气期法攻套装1：紫霄套装（道法风格，追求法攻与灵气） =========="
@@ -853,9 +733,6 @@
       "name": "紫霄剑",
       "category": "equipment",
       "sub_category": "sword",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -879,9 +756,7 @@
         "剑",
         "紫霄套装",
         "法攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-zixiao-head",
@@ -889,9 +764,6 @@
       "name": "紫霄道冠",
       "category": "equipment",
       "sub_category": "hat",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -915,9 +787,7 @@
         "头部",
         "紫霄套装",
         "法攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-zixiao-clothes",
@@ -925,9 +795,6 @@
       "name": "紫霄道袍",
       "category": "equipment",
       "sub_category": "robe",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -951,9 +818,7 @@
         "衣服",
         "紫霄套装",
         "法攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-zixiao-gloves",
@@ -961,9 +826,6 @@
       "name": "紫霄袖套",
       "category": "equipment",
       "sub_category": "gloves",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -987,9 +849,7 @@
         "手部",
         "紫霄套装",
         "法攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-zixiao-pants",
@@ -997,9 +857,6 @@
       "name": "紫霄道裙",
       "category": "equipment",
       "sub_category": "pants",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -1023,9 +880,7 @@
         "腿部",
         "紫霄套装",
         "法攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-zixiao-necklace",
@@ -1033,9 +888,6 @@
       "name": "紫霄灵珠",
       "category": "equipment",
       "sub_category": "necklace",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -1059,9 +911,7 @@
         "项链",
         "紫霄套装",
         "法攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-zixiao-accessory",
@@ -1069,9 +919,6 @@
       "name": "紫霄戒",
       "category": "equipment",
       "sub_category": "ring",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -1095,9 +942,7 @@
         "戒指",
         "紫霄套装",
         "法攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-zixiao-artifact",
@@ -1105,9 +950,6 @@
       "name": "紫霄符箓",
       "category": "equipment",
       "sub_category": "talisman",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -1131,9 +973,7 @@
         "符箓",
         "紫霄套装",
         "法攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "_comment": "========== 养气期法攻套装2：碧落套装（灵修风格，追求治疗与续航） =========="
@@ -1144,9 +984,6 @@
       "name": "碧落杖",
       "category": "equipment",
       "sub_category": "staff",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -1170,9 +1007,7 @@
         "杖",
         "碧落套装",
         "法攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-biluo-head",
@@ -1180,9 +1015,6 @@
       "name": "碧落莲冠",
       "category": "equipment",
       "sub_category": "hat",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -1206,9 +1038,7 @@
         "头部",
         "碧落套装",
         "法攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-biluo-clothes",
@@ -1216,9 +1046,6 @@
       "name": "碧落仙衣",
       "category": "equipment",
       "sub_category": "robe",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -1242,9 +1069,7 @@
         "衣服",
         "碧落套装",
         "法攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-biluo-gloves",
@@ -1252,9 +1077,6 @@
       "name": "碧落玉手",
       "category": "equipment",
       "sub_category": "gloves",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -1278,9 +1100,7 @@
         "手部",
         "碧落套装",
         "法攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-biluo-pants",
@@ -1288,9 +1108,6 @@
       "name": "碧落云裙",
       "category": "equipment",
       "sub_category": "pants",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -1314,9 +1131,7 @@
         "腿部",
         "碧落套装",
         "法攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-biluo-necklace",
@@ -1324,9 +1139,6 @@
       "name": "碧落念珠",
       "category": "equipment",
       "sub_category": "necklace",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -1350,9 +1162,7 @@
         "项链",
         "碧落套装",
         "法攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-biluo-accessory",
@@ -1360,9 +1170,6 @@
       "name": "碧落玉环",
       "category": "equipment",
       "sub_category": "ring",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -1386,9 +1193,7 @@
         "戒指",
         "碧落套装",
         "法攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-biluo-artifact",
@@ -1396,9 +1201,6 @@
       "name": "碧落宝镜",
       "category": "equipment",
       "sub_category": "mirror",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 10,
       "stack_max": 1,
       "bind_type": "equip",
@@ -1422,9 +1224,7 @@
         "镜",
         "碧落套装",
         "法攻"
-      ],
-      "quality_min": "黄",
-      "quality_max": "天"
+      ]
     },
     {
       "_comment": "========== 通脉期/凝炁期散件（新地图产出） =========="
@@ -1435,9 +1235,6 @@
       "name": "断碑残刃",
       "category": "equipment",
       "sub_category": "sword",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 12,
       "stack_max": 1,
       "bind_type": "pickup",
@@ -1460,9 +1257,7 @@
         "剑",
         "遗迹",
         "通脉期"
-      ],
-      "quality_min": "黄",
-      "quality_max": "地"
+      ]
     },
     {
       "id": "equip-head-002",
@@ -1470,9 +1265,6 @@
       "name": "裂风兜帽",
       "category": "equipment",
       "sub_category": "hat",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 11,
       "stack_max": 1,
       "bind_type": "equip",
@@ -1495,9 +1287,7 @@
         "头部",
         "风岭",
         "通脉期"
-      ],
-      "quality_min": "黄",
-      "quality_max": "地"
+      ]
     },
     {
       "id": "equip-clothes-003",
@@ -1505,9 +1295,6 @@
       "name": "玄藤战甲",
       "category": "equipment",
       "sub_category": "robe",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 14,
       "stack_max": 1,
       "bind_type": "pickup",
@@ -1530,9 +1317,7 @@
         "衣服",
         "幽林",
         "凝炁期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "equip-necklace-002",
@@ -1540,9 +1325,6 @@
       "name": "遗迹骨链",
       "category": "equipment",
       "sub_category": "necklace",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 12,
       "stack_max": 1,
       "bind_type": "equip",
@@ -1565,9 +1347,7 @@
         "项链",
         "遗迹",
         "通脉期"
-      ],
-      "quality_min": "黄",
-      "quality_max": "地"
+      ]
     },
     {
       "id": "equip-accessory-001",
@@ -1575,9 +1355,6 @@
       "name": "符纹指戒",
       "category": "equipment",
       "sub_category": "ring",
-      "quality": "玄",
-      "quality_rank": 2,
-      "rarity": "uncommon",
       "level": 13,
       "stack_max": 1,
       "bind_type": "equip",
@@ -1600,9 +1377,7 @@
         "戒指",
         "符文",
         "通脉期"
-      ],
-      "quality_min": "黄",
-      "quality_max": "地"
+      ]
     },
     {
       "id": "equip-artifact-002",
@@ -1610,9 +1385,6 @@
       "name": "枯木灵灯",
       "category": "equipment",
       "sub_category": "talisman",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 14,
       "stack_max": 1,
       "bind_type": "pickup",
@@ -1635,9 +1407,7 @@
         "灵灯",
         "幽林",
         "凝炁期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "equip-weapon-005",
@@ -1645,9 +1415,6 @@
       "name": "幽林曜剑",
       "category": "equipment",
       "sub_category": "sword",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 14,
       "stack_max": 1,
       "bind_type": "pickup",
@@ -1670,9 +1437,7 @@
         "剑",
         "幽林",
         "凝炁期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "equip-head-003",
@@ -1680,9 +1445,6 @@
       "name": "玄藤护额",
       "category": "equipment",
       "sub_category": "hat",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 13,
       "stack_max": 1,
       "bind_type": "pickup",
@@ -1705,9 +1467,7 @@
         "头部",
         "幽林",
         "凝炁期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "equip-gloves-001",
@@ -1715,9 +1475,6 @@
       "name": "枯木护手",
       "category": "equipment",
       "sub_category": "gloves",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 13,
       "stack_max": 1,
       "bind_type": "pickup",
@@ -1740,9 +1497,7 @@
         "手部",
         "幽林",
         "凝炁期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "equip-pants-001",
@@ -1750,9 +1505,6 @@
       "name": "幽藤战裙",
       "category": "equipment",
       "sub_category": "pants",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 13,
       "stack_max": 1,
       "bind_type": "pickup",
@@ -1775,9 +1527,7 @@
         "腿部",
         "幽林",
         "凝炁期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "equip-necklace-003",
@@ -1785,9 +1535,6 @@
       "name": "凝炁心链",
       "category": "equipment",
       "sub_category": "necklace",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 14,
       "stack_max": 1,
       "bind_type": "pickup",
@@ -1810,9 +1557,7 @@
         "项链",
         "幽林",
         "凝炁期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "equip-accessory-002",
@@ -1820,9 +1565,6 @@
       "name": "回光指环",
       "category": "equipment",
       "sub_category": "ring",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 14,
       "stack_max": 1,
       "bind_type": "pickup",
@@ -1845,9 +1587,7 @@
         "戒指",
         "幽林",
         "凝炁期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "_comment": "========== 炼己期地品套装：赤焰套装 =========="
@@ -1858,9 +1598,6 @@
       "name": "赤焰斩刀",
       "category": "equipment",
       "sub_category": "sword",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 30,
       "stack_max": 1,
       "bind_type": "equip",
@@ -1884,9 +1621,7 @@
         "赤焰套装",
         "物攻",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-chiyan-head",
@@ -1894,9 +1629,6 @@
       "name": "赤焰战盔",
       "category": "equipment",
       "sub_category": "hat",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -1920,9 +1652,7 @@
         "赤焰套装",
         "物攻",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-chiyan-clothes",
@@ -1930,9 +1660,6 @@
       "name": "赤焰战甲",
       "category": "equipment",
       "sub_category": "robe",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -1956,9 +1683,7 @@
         "赤焰套装",
         "物攻",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-chiyan-gloves",
@@ -1966,9 +1691,6 @@
       "name": "赤焰护手",
       "category": "equipment",
       "sub_category": "gloves",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -1991,9 +1713,7 @@
         "赤焰套装",
         "物攻",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-chiyan-pants",
@@ -2001,9 +1721,6 @@
       "name": "赤焰胫甲",
       "category": "equipment",
       "sub_category": "pants",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2027,9 +1744,7 @@
         "赤焰套装",
         "物攻",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-chiyan-necklace",
@@ -2037,9 +1752,6 @@
       "name": "赤焰坠",
       "category": "equipment",
       "sub_category": "necklace",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2062,9 +1774,7 @@
         "赤焰套装",
         "物攻",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-chiyan-accessory",
@@ -2072,9 +1782,6 @@
       "name": "赤焰戒",
       "category": "equipment",
       "sub_category": "ring",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2097,9 +1804,7 @@
         "赤焰套装",
         "物攻",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-chiyan-artifact",
@@ -2107,9 +1812,6 @@
       "name": "赤焰火印",
       "category": "equipment",
       "sub_category": "token",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2132,9 +1834,7 @@
         "赤焰套装",
         "物攻",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "_comment": "========== 炼己期地品套装：玄武套装 =========="
@@ -2145,9 +1845,6 @@
       "name": "玄武重戟",
       "category": "equipment",
       "sub_category": "sword",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 30,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2171,9 +1868,7 @@
         "玄武套装",
         "坦克",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-xuanwu-head",
@@ -2181,9 +1876,6 @@
       "name": "玄武铁盔",
       "category": "equipment",
       "sub_category": "hat",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2207,9 +1899,7 @@
         "玄武套装",
         "坦克",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-xuanwu-clothes",
@@ -2217,9 +1907,6 @@
       "name": "玄武重铠",
       "category": "equipment",
       "sub_category": "robe",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2243,9 +1930,7 @@
         "玄武套装",
         "坦克",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-xuanwu-gloves",
@@ -2253,9 +1938,6 @@
       "name": "玄武臂铠",
       "category": "equipment",
       "sub_category": "gloves",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2278,9 +1960,7 @@
         "玄武套装",
         "坦克",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-xuanwu-pants",
@@ -2288,9 +1968,6 @@
       "name": "玄武腿铠",
       "category": "equipment",
       "sub_category": "pants",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2313,9 +1990,7 @@
         "玄武套装",
         "坦克",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-xuanwu-necklace",
@@ -2323,9 +1998,6 @@
       "name": "玄武护链",
       "category": "equipment",
       "sub_category": "necklace",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2348,9 +2020,7 @@
         "玄武套装",
         "坦克",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-xuanwu-accessory",
@@ -2358,9 +2028,6 @@
       "name": "玄武玄环",
       "category": "equipment",
       "sub_category": "ring",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2383,9 +2050,7 @@
         "玄武套装",
         "坦克",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-xuanwu-artifact",
@@ -2393,9 +2058,6 @@
       "name": "玄武龟甲印",
       "category": "equipment",
       "sub_category": "token",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2418,9 +2080,7 @@
         "玄武套装",
         "坦克",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "_comment": "========== 炼己期地品套装：天璇套装 =========="
@@ -2431,9 +2091,6 @@
       "name": "天璇法杖",
       "category": "equipment",
       "sub_category": "sword",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 30,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2457,9 +2114,7 @@
         "天璇套装",
         "法攻",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-tianxuan-head",
@@ -2467,9 +2122,6 @@
       "name": "天璇灵冠",
       "category": "equipment",
       "sub_category": "hat",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2493,9 +2145,7 @@
         "天璇套装",
         "法攻",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-tianxuan-clothes",
@@ -2503,9 +2153,6 @@
       "name": "天璇法袍",
       "category": "equipment",
       "sub_category": "robe",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2529,9 +2176,7 @@
         "天璇套装",
         "法攻",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-tianxuan-gloves",
@@ -2539,9 +2184,6 @@
       "name": "天璇护腕",
       "category": "equipment",
       "sub_category": "gloves",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2564,9 +2206,7 @@
         "天璇套装",
         "法攻",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-tianxuan-pants",
@@ -2574,9 +2214,6 @@
       "name": "天璇灵履",
       "category": "equipment",
       "sub_category": "pants",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2600,9 +2237,7 @@
         "天璇套装",
         "法攻",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-tianxuan-necklace",
@@ -2610,9 +2245,6 @@
       "name": "天璇星链",
       "category": "equipment",
       "sub_category": "necklace",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2635,9 +2267,7 @@
         "天璇套装",
         "法攻",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-tianxuan-accessory",
@@ -2645,9 +2275,6 @@
       "name": "天璇星戒",
       "category": "equipment",
       "sub_category": "ring",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2670,9 +2297,7 @@
         "天璇套装",
         "法攻",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-tianxuan-artifact",
@@ -2680,9 +2305,6 @@
       "name": "天璇星盘",
       "category": "equipment",
       "sub_category": "token",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2705,9 +2327,7 @@
         "天璇套装",
         "法攻",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "_comment": "========== 炼己期地品套装：青莲套装 =========="
@@ -2718,9 +2338,6 @@
       "name": "青莲玉扇",
       "category": "equipment",
       "sub_category": "sword",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 30,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2743,9 +2360,7 @@
         "青莲套装",
         "治疗",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-qinglian-head",
@@ -2753,9 +2368,6 @@
       "name": "青莲灵冠",
       "category": "equipment",
       "sub_category": "hat",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2778,9 +2390,7 @@
         "青莲套装",
         "治疗",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-qinglian-clothes",
@@ -2788,9 +2398,6 @@
       "name": "青莲羽衣",
       "category": "equipment",
       "sub_category": "robe",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2814,9 +2421,7 @@
         "青莲套装",
         "治疗",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-qinglian-gloves",
@@ -2824,9 +2429,6 @@
       "name": "青莲纱手",
       "category": "equipment",
       "sub_category": "gloves",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2849,9 +2451,7 @@
         "青莲套装",
         "治疗",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-qinglian-pants",
@@ -2859,9 +2459,6 @@
       "name": "青莲云履",
       "category": "equipment",
       "sub_category": "pants",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2884,9 +2481,7 @@
         "青莲套装",
         "治疗",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-qinglian-necklace",
@@ -2894,9 +2489,6 @@
       "name": "青莲心链",
       "category": "equipment",
       "sub_category": "necklace",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2919,9 +2511,7 @@
         "青莲套装",
         "治疗",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-qinglian-accessory",
@@ -2929,9 +2519,6 @@
       "name": "青莲灵佩",
       "category": "equipment",
       "sub_category": "ring",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2954,9 +2541,7 @@
         "青莲套装",
         "治疗",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     },
     {
       "id": "set-qinglian-artifact",
@@ -2964,9 +2549,6 @@
       "name": "青莲宝莲台",
       "category": "equipment",
       "sub_category": "token",
-      "quality": "地",
-      "quality_rank": 3,
-      "rarity": "rare",
       "level": 28,
       "stack_max": 1,
       "bind_type": "equip",
@@ -2989,9 +2571,7 @@
         "青莲套装",
         "治疗",
         "炼己期"
-      ],
-      "quality_min": "玄",
-      "quality_max": "天"
+      ]
     }
   ]
 }

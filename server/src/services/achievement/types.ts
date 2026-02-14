@@ -23,7 +23,6 @@ export interface AchievementDefRow {
   name: string;
   description: string;
   category: string;
-  rarity: string;
   points: number;
   icon: string | null;
   hidden: boolean;
@@ -76,7 +75,6 @@ export interface AchievementListItem {
   name: string;
   description: string;
   category: string;
-  rarity: string;
   points: number;
   icon: string | null;
   hidden: boolean;
@@ -112,7 +110,6 @@ export interface AchievementListResult {
 export interface AchievementClaimTitle {
   id: string;
   name: string;
-  rarity: string;
   color: string | null;
   icon: string | null;
 }
@@ -158,7 +155,6 @@ export interface TitleInfo {
   id: string;
   name: string;
   description: string;
-  rarity: string;
   color: string | null;
   icon: string | null;
   effects: Record<string, number>;

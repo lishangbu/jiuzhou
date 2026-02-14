@@ -49,19 +49,6 @@ const ITEM_ICON_BY_FILENAME: Record<string, string> = Object.fromEntries(
   }),
 );
 
-const rarityLabelMap: Record<string, string> = {
-  common: '普通',
-  uncommon: '精良',
-  rare: '稀有',
-  epic: '史诗',
-  legendary: '传说',
-};
-
-const getRarityLabel = (rarity: string): string => {
-  const key = String(rarity || '').trim().toLowerCase();
-  return rarityLabelMap[key] ?? (String(rarity || '').trim() || '普通');
-};
-
 const resolveRewardIcon = (icon: string | null | undefined): string => {
   const raw = String(icon || '').trim();
   if (!raw) return coin01;
@@ -486,7 +473,6 @@ const AchievementModal: React.FC<AchievementModalProps> = ({ open, onClose, onCh
                             ) : (
                               <Tag>进行中</Tag>
                             )}
-                            <Tag>{getRarityLabel(row.rarity)}</Tag>
                             <Tag color="cyan">+{row.points}点</Tag>
                           </div>
                         </div>
@@ -580,13 +566,6 @@ const AchievementModal: React.FC<AchievementModalProps> = ({ open, onClose, onCh
                       <div className="achievement-title-main">
                         <div className="achievement-title-top">
                           <div className="achievement-title-name">{title.name}</div>
-                          <Tag color={
-                            title.rarity === 'legendary' ? 'orange' :
-                            title.rarity === 'epic' ? 'purple' :
-                            title.rarity === 'rare' ? 'blue' :
-                            title.rarity === 'uncommon' ? 'cyan' :
-                            'default'
-                          }>{getRarityLabel(title.rarity)}</Tag>
                         </div>
                         <div className="achievement-item-desc">{title.description}</div>
                         <div className="achievement-item-desc">{effectsText || '无属性加成'}</div>

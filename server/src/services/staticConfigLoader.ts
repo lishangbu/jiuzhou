@@ -100,7 +100,6 @@ export type AchievementDefConfig = {
   name: string;
   description?: string;
   category?: string;
-  rarity?: string;
   points?: number;
   icon?: string;
   hidden?: boolean;
@@ -120,7 +119,6 @@ export type TitleDefConfig = {
   id: string;
   name: string;
   description?: string;
-  rarity?: string;
   color?: string;
   icon?: string;
   effects?: Record<string, unknown>;
@@ -439,9 +437,6 @@ export type ItemDefConfig = {
   sub_category?: string;
   quality?: string;
   quality_rank?: number;
-  quality_min?: string;
-  quality_max?: string;
-  rarity?: string;
   level?: number;
   stack_max?: number;
   bind_type?: string;

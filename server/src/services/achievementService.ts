@@ -290,7 +290,6 @@ const toAchievementListItem = (
     name: hiddenUnfinished ? '？？？' : def.name,
     description: hiddenUnfinished ? '隐藏成就，完成后解锁描述' : def.description,
     category: def.category,
-    rarity: def.rarity,
     points: def.points,
     icon: def.icon,
     hidden: def.hidden,

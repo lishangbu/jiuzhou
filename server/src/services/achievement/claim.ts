@@ -135,7 +135,6 @@ const getTitleInfo = async (titleId: string, _client?: PoolClient): Promise<Achi
   return {
     id,
     name: asNonEmptyString(row.name) ?? id,
-    rarity: asNonEmptyString(row.rarity) ?? 'common',
     color: asNonEmptyString(row.color),
     icon: asNonEmptyString(row.icon),
   };

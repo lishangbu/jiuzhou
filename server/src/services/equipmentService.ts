@@ -182,10 +182,6 @@ export interface EquipmentDef {
   name: string;
   category: string;
   sub_category: string;
-  quality: Quality;
-  quality_rank: number;
-  quality_min: Quality | null;
-  quality_max: Quality | null;
   level: number;
   equip_slot: string;
   equip_req_realm: string;
@@ -291,7 +287,6 @@ export const getEquipmentDef = async (itemDefId: string): Promise<EquipmentDef |
   const row = getItemDefinitionById(itemDefId);
   if (!row || row.category !== 'equipment' || row.enabled === false) return null;
 
-  const quality = coerceQuality(row.quality) ?? '黄';
   const baseAttrs = row.base_attrs && typeof row.base_attrs === 'object'
     ? (row.base_attrs as Record<string, number>)
     : {};
@@ -302,10 +297,6 @@ export const getEquipmentDef = async (itemDefId: string): Promise<EquipmentDef |
     name: String(row.name || row.id),
     category: String(row.category || 'equipment'),
     sub_category: String(row.sub_category || ''),
-    quality,
-    quality_rank: Number(row.quality_rank) || QUALITY_RANK[quality] || 1,
-    quality_min: coerceQuality(row.quality_min),
-    quality_max: coerceQuality(row.quality_max),
     level: Number(row.level) || 1,
     equip_slot: String(row.equip_slot || ''),
     equip_req_realm: String(row.equip_req_realm || ''),
@@ -333,19 +324,17 @@ export const getAffixPool = async (poolId: string): Promise<{ rules: AffixPoolRu
  */
 export const rollQuality = (
   rng: SeededRandom,
-  baseQuality: Quality,
   weights?: Record<Quality, number>,
   fuyuan?: number,
-  qualityMin?: Quality,
-  qualityMax?: Quality
+  qualityMin: Quality = '黄',
+  qualityMax: Quality = '天'
 ): Quality => {
-  const minRankRaw = QUALITY_RANK[qualityMin ?? '黄'];
-  const maxRankRaw = QUALITY_RANK[qualityMax ?? '天'];
+  const minRankRaw = QUALITY_RANK[qualityMin];
+  const maxRankRaw = QUALITY_RANK[qualityMax];
   const minRank = Math.min(minRankRaw, maxRankRaw);
   const maxRank = Math.max(minRankRaw, maxRankRaw);
 
-  const baseRankRaw = QUALITY_RANK[baseQuality];
-  const baseRank = Math.min(maxRank, Math.max(minRank, baseRankRaw));
+  const baseRank = minRank;
 
   const defaultWeights: Record<Quality, number> = {
     '黄': 0,
@@ -400,7 +389,7 @@ export const rollQuality = (
 
   const validQualities = QUALITIES.filter((q) => adjustedWeights[q] > 0);
   if (validQualities.length === 0) {
-    const clamped = QUALITIES.find((q) => QUALITY_RANK[q] === baseRank) ?? baseQuality;
+    const clamped = QUALITIES.find((q) => QUALITY_RANK[q] === baseRank) ?? '黄';
     return clamped;
   }
 
@@ -621,8 +610,8 @@ export const generateEquipment = async (
   const rng = new SeededRandom(options.seed);
   
   // 2. 抽取品质
-  const boundMin = def.quality_min ?? def.quality;
-  const boundMax = def.quality_max ?? def.quality;
+  const boundMin: Quality = '黄';
+  const boundMax: Quality = '天';
   const minRank = Math.min(QUALITY_RANK[boundMin], QUALITY_RANK[boundMax]);
   const maxRank = Math.max(QUALITY_RANK[boundMin], QUALITY_RANK[boundMax]);
 
@@ -637,10 +626,10 @@ export const generateEquipment = async (
       : resolvedQuality
         ? (QUALITIES.find((q) => QUALITY_RANK[q] === Math.min(maxRank, Math.max(minRank, QUALITY_RANK[resolvedQuality]))) ??
           boundMin)
-        : rollQuality(rng, def.quality, options.qualityWeights, options.fuyuan, boundMin, boundMax);
+        : rollQuality(rng, options.qualityWeights, options.fuyuan, boundMin, boundMax);
   const qualityRank = QUALITY_RANK[quality];
 
-  const baseQualityRank = Number(def.quality_rank) || QUALITY_RANK[def.quality];
+  const baseQualityRank = QUALITY_RANK['黄'];
   const attrFactor = getQualityMultiplier(qualityRank) / getQualityMultiplier(baseQualityRank);
   const scaledBaseAttrs = scaleAttrs(def.base_attrs, attrFactor);
   
@@ -859,10 +848,9 @@ export const getEquipmentInstance = async (instanceId: number): Promise<any | nu
   const itemDef = getItemDefinitionById(itemDefId);
   if (!itemDef || itemDef.category !== 'equipment') return null;
 
-  const fallbackQuality = coerceQuality(itemDef.quality) ?? '黄';
-  const resolvedQuality = coerceQuality(row.quality) ?? fallbackQuality;
-  const resolvedQualityRank = Number(row.quality_rank) || Number(itemDef.quality_rank) || QUALITY_RANK[resolvedQuality] || 1;
-  const baseRank = Number(itemDef.quality_rank) || QUALITY_RANK[fallbackQuality] || 1;
+  const resolvedQuality = coerceQuality(row.quality) ?? '黄';
+  const resolvedQualityRank = Number(row.quality_rank) || QUALITY_RANK[resolvedQuality] || 1;
+  const baseRank = QUALITY_RANK['黄'];
   const attrFactor = getQualityMultiplier(resolvedQualityRank) / getQualityMultiplier(baseRank);
   const strengthenFactor = getStrengthenMultiplier(Number(row.strengthen_level) || 0);
   const baseAttrs = itemDef.base_attrs && typeof itemDef.base_attrs === 'object'

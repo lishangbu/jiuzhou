@@ -114,7 +114,6 @@ export const parseAchievementDefRow = (row: Record<string, unknown>): Achievemen
     name,
     description: String(row.description ?? ''),
     category: asNonEmptyString(row.category) ?? 'combat',
-    rarity: asNonEmptyString(row.rarity) ?? 'common',
     points: asFiniteNonNegativeInt(row.points, 0),
     icon: asNonEmptyString(row.icon),
     hidden: row.hidden === true,

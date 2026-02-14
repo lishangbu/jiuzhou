@@ -69,7 +69,6 @@ export const getTitleList = async (characterId: number): Promise<TitleListResult
       id,
       name: asNonEmptyString(def.name) ?? id,
       description: String(def.description ?? ''),
-      rarity: asNonEmptyString(def.rarity) ?? 'common',
       color: asNonEmptyString(def.color),
       icon: asNonEmptyString(def.icon),
       effects: normalizeTitleEffects(def.effects),

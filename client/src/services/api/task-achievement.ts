@@ -142,7 +142,6 @@ export type AchievementItemDto = {
   name: string;
   description: string;
   category: string;
-  rarity: string;
   points: number;
   icon: string | null;
   hidden: boolean;
@@ -217,7 +216,6 @@ export type ClaimAchievementResponse = {
     title?: {
       id: string;
       name: string;
-      rarity: string;
       color: string | null;
       icon: string | null;
     };
@@ -237,7 +235,6 @@ export type AchievementPointRewardDto = {
   title?: {
     id: string;
     name: string;
-    rarity: string;
     color: string | null;
     icon: string | null;
   };
@@ -268,7 +265,6 @@ export type ClaimAchievementPointsRewardResponse = {
     title?: {
       id: string;
       name: string;
-      rarity: string;
       color: string | null;
       icon: string | null;
     };
@@ -283,7 +279,6 @@ export type TitleInfoDto = {
   id: string;
   name: string;
   description: string;
-  rarity: string;
   color: string | null;
   icon: string | null;
   effects: Record<string, number>;
