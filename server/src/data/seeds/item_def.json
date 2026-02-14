@@ -1082,67 +1082,6 @@
       ]
     },
     {
-      "id": "scroll-001",
-      "code": "chuan_song_fu",
-      "name": "传送符",
-      "category": "consumable",
-      "sub_category": "scroll",
-      "quality": "黄",
-      "quality_rank": 1,
-      "rarity": "common",
-      "level": 1,
-      "stack_max": 999,
-      "bind_type": "none",
-      "tradeable": true,
-      "icon": "/assets/ui/sh_icon_0006_jinbi_02.png",
-      "description": "使用后传送回主城",
-      "tags": [
-        "符箓",
-        "传送"
-      ],
-      "use_type": "instant",
-      "use_cd_sec": 60,
-      "effect_defs": [
-        {
-          "trigger": "use",
-          "effect_type": "teleport",
-          "params": {
-            "destination": "main_city"
-          }
-        }
-      ]
-    },
-    {
-      "id": "scroll-002",
-      "code": "jian_ding_fu",
-      "name": "鉴定符",
-      "category": "consumable",
-      "sub_category": "scroll",
-      "quality": "黄",
-      "quality_rank": 1,
-      "rarity": "common",
-      "level": 1,
-      "stack_max": 999,
-      "bind_type": "none",
-      "tradeable": true,
-      "icon": "/assets/ui/sh_icon_0006_jinbi_02.png",
-      "description": "鉴定未鉴定的装备",
-      "tags": [
-        "符箓",
-        "鉴定"
-      ],
-      "use_type": "target",
-      "effect_defs": [
-        {
-          "trigger": "use",
-          "effect_type": "identify",
-          "params": {
-            "target_type": "equipment"
-          }
-        }
-      ]
-    },
-    {
       "id": "scroll-003",
       "code": "xi_lian_fu",
       "name": "洗炼符",
