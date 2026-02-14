@@ -1216,7 +1216,6 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
     <div className="market-pane">
       <div className="market-pane-top">
         <div className="market-title">我的上架</div>
-        <div className="market-subtitle">查看并管理自己上架的物品</div>
       </div>
       <div className="market-pane-body">
         <div className="market-pane-scroll">
@@ -1354,7 +1353,6 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
       <div className="market-pane">
         <div className="market-pane-top">
           <div className="market-title">物品上架</div>
-          <div className="market-subtitle">从背包选择物品并设置价格上架</div>
         </div>
         <div className="market-pane-body">
           <div className="market-list-shell">

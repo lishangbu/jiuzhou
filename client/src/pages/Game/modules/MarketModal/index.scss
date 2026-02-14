@@ -29,7 +29,7 @@
   gap: 10px;
   box-sizing: border-box;
   /* 与右侧 .market-pane-top 统一桌面端基线高度，避免顶部横线错位。 */
-  min-height: 76px;
+  min-height: 50px;
 }
 
 .market-left-icon {
@@ -99,10 +99,11 @@
   border-bottom: 1px solid var(--border-color-soft);
   background: var(--panel-bg);
   display: flex;
+  justify-content: center;
   flex-direction: column;
   gap: 10px;
   box-sizing: border-box;
-  min-height: 76px;
+  min-height: 50px;
 }
 
 .market-pane-actions {
