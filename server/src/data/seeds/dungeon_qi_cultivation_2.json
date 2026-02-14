@@ -16,7 +16,7 @@
         "min_realm": "炼精化炁·养气期",
         "recommended_realm": "炼精化炁·养气期",
         "unlock_condition": {},
-        "daily_limit": 10,
+        "daily_limit": 0,
         "weekly_limit": 0,
         "stamina_cost": 8,
         "time_limit_sec": 900,

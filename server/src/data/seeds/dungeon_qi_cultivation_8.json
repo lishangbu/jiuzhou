@@ -16,7 +16,7 @@
         "min_realm": "炼炁化神·炼己期",
         "recommended_realm": "炼炁化神·炼己期",
         "unlock_condition": {},
-        "daily_limit": 4,
+        "daily_limit": 0,
         "weekly_limit": 0,
         "stamina_cost": 16,
         "time_limit_sec": 1140,
