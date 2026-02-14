@@ -1,5 +1,4 @@
 import { Button, Input, Modal, Select, Table, Tabs, Tag } from 'antd';
-import { formatPercent } from '../../shared/formatAttr';
 import { LeftOutlined, SearchOutlined } from '@ant-design/icons';
 import { useEffect, useMemo, useState } from 'react';
 import map01 from '../../../../assets/images/map/cp_icon_map01.png';
@@ -20,6 +19,7 @@ import {
 } from '../../../../services/api';
 import { useIsMobile } from '../../shared/responsive';
 import { getRealmRankFromLiteral as getRealmRank, normalizeRealmText } from '../../shared/realm';
+import WaveDetailPanel from './WaveDetailPanel';
 import './index.scss';
 
 type MapCategory = 'world' | 'dungeon' | 'event';
@@ -48,11 +48,6 @@ type MapEntry = {
 type DungeonDifficultyOption = {
   value: number;
   label: string;
-};
-
-const formatDropProbPercent = (value: number | null | undefined): string => {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
-  return formatPercent(Math.max(0, Math.min(1, value)));
 };
 
 const categoryLabels: Record<MapCategory, string> = {
@@ -466,34 +461,16 @@ const MapModal: React.FC<MapModalProps> = ({ open, onClose, initialCategory, onE
     }
     return rows;
   }, [activeDetail, mergedActiveMap]);
-  const waveRows = useMemo(() => {
-    if (!mergedActiveMap || mergedActiveMap.category !== 'dungeon') return [];
-    const stages = mergedActiveMap.dungeonStages ?? [];
-    const rows: Array<{
-      key: string;
-      stage_index: number;
-      stage_name: string;
-      wave_index: number;
-      spawn_delay_sec: number;
-      monsters: NonNullable<DungeonPreviewResponse['data']>['stages'][number]['waves'][number]['monsters'];
-    }> = [];
-
-    for (const s of stages) {
-      const stageName = s.name || `第${s.stage_index}关`;
-      for (const w of s.waves ?? []) {
-        rows.push({
-          key: `${s.id}-${w.wave_index}`,
-          stage_index: s.stage_index,
-          stage_name: stageName,
-          wave_index: w.wave_index,
-          spawn_delay_sec: w.spawn_delay_sec,
-          monsters: w.monsters ?? [],
-        });
-      }
+  const dungeonWaveStages = useMemo(() => {
+    if (!mergedActiveMap || mergedActiveMap.category !== 'dungeon') {
+      return [] as NonNullable<DungeonPreviewResponse['data']>['stages'];
     }
-    return rows;
+    return mergedActiveMap.dungeonStages ?? [];
   }, [mergedActiveMap]);
-  const totalWaveCount = useMemo(() => waveRows.length, [waveRows]);
+  const totalWaveCount = useMemo(
+    () => dungeonWaveStages.reduce((total, stage) => total + (stage.waves?.length ?? 0), 0),
+    [dungeonWaveStages],
+  );
   const dungeonEntryText = useMemo(() => {
     if (!mergedActiveMap || mergedActiveMap.category !== 'dungeon') return '';
     const entry = mergedActiveMap.dungeonEntry ?? null;
@@ -512,8 +489,8 @@ const MapModal: React.FC<MapModalProps> = ({ open, onClose, initialCategory, onE
   }, [activeDetail, detailLoading, mergedActiveMap]);
   const shouldShowWaveSection = useMemo(() => {
     if (!mergedActiveMap || mergedActiveMap.category !== 'dungeon') return false;
-    return (detailLoading && !activeDetail) || waveRows.length > 0;
-  }, [activeDetail, detailLoading, mergedActiveMap, waveRows.length]);
+    return (detailLoading && !activeDetail) || totalWaveCount > 0;
+  }, [activeDetail, detailLoading, mergedActiveMap, totalWaveCount]);
 
   const monsterColumns = useMemo(
     () => [{ title: '怪物', dataIndex: 'name', key: 'name' }],
@@ -547,67 +524,6 @@ const MapModal: React.FC<MapModalProps> = ({ open, onClose, initialCategory, onE
         render: (v: string) => <Tag className="map-modal-quality-tag">{v}</Tag>,
       },
       { title: '概率/权重', dataIndex: 'chance', key: 'chance', width: 110 },
-    ],
-    [],
-  );
-
-  const waveColumns = useMemo(
-    () => [
-      { title: '关卡', dataIndex: 'stage_name', key: 'stage_name', width: 120 },
-      { title: '波次', dataIndex: 'wave_index', key: 'wave_index', width: 70 },
-      {
-        title: '怪物（数量×名称）',
-        dataIndex: 'monsters',
-        key: 'monsters',
-        render: (
-          monsters: NonNullable<DungeonPreviewResponse['data']>['stages'][number]['waves'][number]['monsters']
-        ) => (
-          <div>
-            {(monsters ?? []).map((m) => (
-              <div key={`${m.id}-${m.name}`}>
-                {m.count}×{m.name}
-                {m.realm ? ` · ${m.realm}` : ''}
-              </div>
-            ))}
-            {(monsters ?? []).length === 0 ? <div>暂无</div> : null}
-          </div>
-        ),
-      },
-      {
-        title: '怪物掉落预览',
-        dataIndex: 'monsters',
-        key: 'drop_preview',
-        render: (
-          monsters: NonNullable<DungeonPreviewResponse['data']>['stages'][number]['waves'][number]['monsters']
-        ) => (
-          <div>
-            {(monsters ?? []).map((m) => (
-              <div key={`${m.id}-drops`}>
-                <div>{m.name}</div>
-                <div>
-                  {(m.drop_preview ?? []).map((dp) => {
-                    const qty = dp.qty_min === dp.qty_max ? `${dp.qty_min}` : `${dp.qty_min}-${dp.qty_max}`;
-                    const rate =
-                      dp.mode === 'prob'
-                        ? formatDropProbPercent(dp.chance)
-                        : dp.weight !== null
-                          ? `${dp.weight}`
-                          : '-';
-                    const rateLabel = dp.mode === 'prob' ? '概率' : '权重';
-                    return (
-                      <div key={`${m.id}-${dp.item.id}`}>
-                        {dp.item.name} ×{qty}（{rateLabel}:{rate}）
-                      </div>
-                    );
-                  })}
-                  {(m.drop_preview ?? []).length === 0 ? <div>暂无</div> : null}
-                </div>
-              </div>
-            ))}
-            {(monsters ?? []).length === 0 ? <div>暂无</div> : null}
-          </div>
-        ),
-      },
     ],
     [],
   );
@@ -823,15 +739,8 @@ const MapModal: React.FC<MapModalProps> = ({ open, onClose, initialCategory, onE
                 {shouldShowWaveSection ? (
                   <div className="map-modal-section">
                     <div className="map-modal-section-title">波次详情（共{totalWaveCount}波）</div>
-                    <div className="map-modal-table">
-                      <Table
-                        size="small"
-                        rowKey={(row) => row.key}
-                        columns={waveColumns}
-                        dataSource={waveRows}
-                        pagination={false}
-                        locale={{ emptyText: detailLoading && !activeDetail ? '加载中...' : '暂无波次' }}
-                      />
+                    <div className="map-modal-wave-shell">
+                      <WaveDetailPanel stages={dungeonWaveStages} loading={detailLoading && !activeDetail} />
                     </div>
                   </div>
                 ) : null}

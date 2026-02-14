@@ -1,0 +1,273 @@
+.map-modal-wave-shell {
+  width: 100%;
+}
+
+.map-modal-wave-board {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.map-modal-wave-overview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(22, 119, 255, 0.35);
+  background: linear-gradient(135deg, rgba(22, 119, 255, 0.14) 0%, rgba(22, 119, 255, 0.03) 70%);
+}
+
+.map-modal-wave-overview-cell {
+  min-width: 0;
+  border-radius: 10px;
+  border: 1px solid var(--border-color-soft);
+  background: var(--panel-bg);
+  padding: 10px 12px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.map-modal-wave-overview-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-weight: 700;
+}
+
+.map-modal-wave-overview-value {
+  font-size: 18px;
+  line-height: 1;
+  color: var(--primary-color);
+  font-weight: 900;
+}
+
+.map-modal-wave-stage {
+  border: 1px solid var(--border-color-soft);
+  border-radius: 12px;
+  overflow: hidden;
+  background: linear-gradient(180deg, var(--panel-bg) 0%, var(--panel-bg-soft) 100%);
+}
+
+.map-modal-wave-stage-head {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-color-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.map-modal-wave-stage-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.map-modal-wave-stage-index {
+  border-radius: 999px;
+  border: 1px solid var(--primary-color);
+  background: var(--primary-bg-soft);
+  color: var(--primary-color);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 8px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.map-modal-wave-stage-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-color);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.map-modal-wave-stage-count {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--panel-bg);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 8px;
+}
+
+.map-modal-wave-list {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.map-modal-wave-card {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 10px;
+  background: var(--panel-bg);
+}
+
+.map-modal-wave-badge {
+  border-radius: 10px;
+  border: 1px solid rgba(22, 119, 255, 0.35);
+  background: linear-gradient(160deg, rgba(22, 119, 255, 0.2), rgba(22, 119, 255, 0.06));
+  color: var(--text-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 10px 8px;
+  min-height: 54px;
+}
+
+.map-modal-wave-content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.map-modal-wave-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+}
+
+.map-modal-wave-monsters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.map-modal-wave-monster-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--panel-bg-soft);
+  padding: 4px 9px;
+  min-width: 0;
+}
+
+.map-modal-wave-monster-main {
+  font-size: 11px;
+  color: var(--text-color);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.map-modal-wave-monster-realm {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.map-modal-wave-drop-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.map-modal-wave-drop-block {
+  border: 1px solid var(--border-color-soft);
+  border-radius: 10px;
+  background: var(--panel-bg-soft);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.map-modal-wave-drop-monster {
+  color: var(--text-color);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.map-modal-wave-drop-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.map-modal-wave-drop-item {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--panel-bg);
+  padding: 5px 7px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.map-modal-wave-drop-item-name {
+  font-size: 11px;
+  color: var(--text-color);
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-modal-wave-drop-item-rate {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.map-modal-wave-empty,
+.map-modal-wave-drop-empty {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.map-modal-wave-stage > .map-modal-wave-empty {
+  padding: 12px;
+}
+
+@media screen and (max-width: 768px) {
+  .map-modal-wave-overview {
+    grid-template-columns: 1fr;
+  }
+
+  .map-modal-wave-card {
+    grid-template-columns: 1fr;
+  }
+
+  .map-modal-wave-badge {
+    justify-content: flex-start;
+    padding: 8px 10px;
+    min-height: 0;
+  }
+
+  .map-modal-wave-drop-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .map-modal-wave-drop-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+}
