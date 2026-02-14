@@ -389,8 +389,15 @@
           "show_in_ui": true
         },
         {
-          "item_def_id": "equip-artifact-002",
-          "chance": 0.06,
+          "item_def_id": "equip-weapon-005",
+          "chance": 0.04,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "equip-head-003",
+          "chance": 0.08,
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true
@@ -398,6 +405,41 @@
         {
           "item_def_id": "equip-clothes-003",
           "chance": 0.08,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "equip-gloves-001",
+          "chance": 0.08,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "equip-pants-001",
+          "chance": 0.08,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "equip-necklace-003",
+          "chance": 0.06,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "equip-accessory-002",
+          "chance": 0.06,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "equip-artifact-002",
+          "chance": 0.06,
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true

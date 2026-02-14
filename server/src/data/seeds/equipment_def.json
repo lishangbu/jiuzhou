@@ -1601,16 +1601,16 @@
       "equip_slot": "clothes",
       "equip_req_realm": "炼精化炁·凝炁期",
       "base_attrs": {
-        "wufang": 20,
-        "fafang": 18
+        "wufang": 18,
+        "fafang": 16
       },
       "implicit_attrs": {
-        "max_qixue": 150,
-        "kongzhi_kangxing": 0.02
+        "max_qixue": 130,
+        "kongzhi_kangxing": 0.016
       },
       "affix_pool_id": "ap-armor-rare",
-      "affix_count_min": 3,
-      "affix_count_max": 5,
+      "affix_count_min": 2,
+      "affix_count_max": 4,
       "tags": [
         "防具",
         "衣服",
@@ -1712,19 +1712,241 @@
       "equip_slot": "artifact",
       "equip_req_realm": "炼精化炁·凝炁期",
       "base_attrs": {
-        "fagong": 12,
+        "fagong": 11,
         "sudu": 2
       },
       "implicit_attrs": {
-        "max_lingqi": 35,
-        "shanbi": 0.012
+        "max_lingqi": 30,
+        "shanbi": 0.011
       },
       "affix_pool_id": "ap-artifact-uncommon",
-      "affix_count_min": 3,
-      "affix_count_max": 5,
+      "affix_count_min": 2,
+      "affix_count_max": 4,
       "tags": [
         "法宝",
         "灵灯",
+        "幽林",
+        "凝炁期"
+      ],
+      "quality_min": "玄",
+      "quality_max": "天"
+    },
+    {
+      "id": "equip-weapon-005",
+      "code": "you_lin_yao_jian",
+      "name": "幽林曜剑",
+      "category": "equipment",
+      "sub_category": "sword",
+      "quality": "地",
+      "quality_rank": 3,
+      "rarity": "rare",
+      "level": 14,
+      "stack_max": 1,
+      "bind_type": "pickup",
+      "tradeable": false,
+      "icon": "/assets/items/lin_ri_shen_dao.png",
+      "description": "取幽林妖核锻造而成，剑势沉稳，能破护体灵炁",
+      "equip_slot": "weapon",
+      "equip_req_realm": "炼精化炁·凝炁期",
+      "base_attrs": {
+        "wugong": 17,
+        "mingzhong": 0.0095
+      },
+      "implicit_attrs": {
+        "wugong": 9,
+        "baoji": 0.0062
+      },
+      "affix_pool_id": "ap-weapon-rare",
+      "affix_count_min": 3,
+      "affix_count_max": 4,
+      "tags": [
+        "武器",
+        "剑",
+        "幽林",
+        "凝炁期"
+      ],
+      "quality_min": "玄",
+      "quality_max": "天"
+    },
+    {
+      "id": "equip-head-003",
+      "code": "xuan_teng_hu_e",
+      "name": "玄藤护额",
+      "category": "equipment",
+      "sub_category": "hat",
+      "quality": "地",
+      "quality_rank": 3,
+      "rarity": "rare",
+      "level": 13,
+      "stack_max": 1,
+      "bind_type": "pickup",
+      "tradeable": false,
+      "icon": "/assets/items/icon_Hat_1_14.png",
+      "description": "以玄藤纤维编成的护额，能稳固神识并分散冲击",
+      "equip_slot": "head",
+      "equip_req_realm": "炼精化炁·凝炁期",
+      "base_attrs": {
+        "wufang": 9,
+        "fafang": 8
+      },
+      "implicit_attrs": {
+        "max_qixue": 85,
+        "shanbi": 0.009
+      },
+      "affix_pool_id": "ap-armor-rare",
+      "affix_count_min": 2,
+      "affix_count_max": 4,
+      "tags": [
+        "防具",
+        "头部",
+        "幽林",
+        "凝炁期"
+      ],
+      "quality_min": "玄",
+      "quality_max": "天"
+    },
+    {
+      "id": "equip-gloves-001",
+      "code": "ku_mu_hu_shou",
+      "name": "枯木护手",
+      "category": "equipment",
+      "sub_category": "gloves",
+      "quality": "地",
+      "quality_rank": 3,
+      "rarity": "rare",
+      "level": 13,
+      "stack_max": 1,
+      "bind_type": "pickup",
+      "tradeable": false,
+      "icon": "/assets/items/icon_shoulder armour_1_13.png",
+      "description": "护手中嵌有枯木芯纹，可在近身缠斗中稳住出手",
+      "equip_slot": "gloves",
+      "equip_req_realm": "炼精化炁·凝炁期",
+      "base_attrs": {
+        "wugong": 8,
+        "wufang": 4
+      },
+      "implicit_attrs": {
+        "baoji": 0.0062,
+        "mingzhong": 0.005
+      },
+      "affix_pool_id": "ap-armor-rare",
+      "affix_count_min": 2,
+      "affix_count_max": 4,
+      "tags": [
+        "防具",
+        "手部",
+        "幽林",
+        "凝炁期"
+      ],
+      "quality_min": "玄",
+      "quality_max": "天"
+    },
+    {
+      "id": "equip-pants-001",
+      "code": "you_teng_zhan_qun",
+      "name": "幽藤战裙",
+      "category": "equipment",
+      "sub_category": "pants",
+      "quality": "地",
+      "quality_rank": 3,
+      "rarity": "rare",
+      "level": 13,
+      "stack_max": 1,
+      "bind_type": "pickup",
+      "tradeable": false,
+      "icon": "/assets/items/icon_pants_1_13.png",
+      "description": "战裙经幽藤汁液浸炼，韧性极佳，兼顾防护与机动",
+      "equip_slot": "pants",
+      "equip_req_realm": "炼精化炁·凝炁期",
+      "base_attrs": {
+        "wufang": 10,
+        "fafang": 8
+      },
+      "implicit_attrs": {
+        "max_qixue": 100,
+        "sudu": 1
+      },
+      "affix_pool_id": "ap-armor-rare",
+      "affix_count_min": 2,
+      "affix_count_max": 4,
+      "tags": [
+        "防具",
+        "腿部",
+        "幽林",
+        "凝炁期"
+      ],
+      "quality_min": "玄",
+      "quality_max": "天"
+    },
+    {
+      "id": "equip-necklace-003",
+      "code": "ning_qi_xin_lian",
+      "name": "凝炁心链",
+      "category": "equipment",
+      "sub_category": "necklace",
+      "quality": "地",
+      "quality_rank": 3,
+      "rarity": "rare",
+      "level": 14,
+      "stack_max": 1,
+      "bind_type": "pickup",
+      "tradeable": false,
+      "icon": "/assets/items/icon_Jade pendants_1_13.png",
+      "description": "链身铭刻稳炁纹路，可提升灵炁回转并强化术法节奏",
+      "equip_slot": "necklace",
+      "equip_req_realm": "炼精化炁·凝炁期",
+      "base_attrs": {
+        "max_lingqi": 22,
+        "fagong": 7
+      },
+      "implicit_attrs": {
+        "lingqi_huifu": 2,
+        "baoshang": 0.009
+      },
+      "affix_pool_id": "ap-accessory-uncommon",
+      "affix_count_min": 2,
+      "affix_count_max": 4,
+      "tags": [
+        "饰品",
+        "项链",
+        "幽林",
+        "凝炁期"
+      ],
+      "quality_min": "玄",
+      "quality_max": "天"
+    },
+    {
+      "id": "equip-accessory-002",
+      "code": "hui_guang_zhi_huan",
+      "name": "回光指环",
+      "category": "equipment",
+      "sub_category": "ring",
+      "quality": "地",
+      "quality_rank": 3,
+      "rarity": "rare",
+      "level": 14,
+      "stack_max": 1,
+      "bind_type": "pickup",
+      "tradeable": false,
+      "icon": "/assets/items/icon_jiezhi_10004.png",
+      "description": "戒面封存回光灵纹，能在激战中提升术攻与命中",
+      "equip_slot": "accessory",
+      "equip_req_realm": "炼精化炁·凝炁期",
+      "base_attrs": {
+        "fagong": 9,
+        "max_lingqi": 17
+      },
+      "implicit_attrs": {
+        "mingzhong": 0.0075,
+        "baoji": 0.0052
+      },
+      "affix_pool_id": "ap-accessory-uncommon",
+      "affix_count_min": 2,
+      "affix_count_max": 4,
+      "tags": [
+        "饰品",
+        "戒指",
         "幽林",
         "凝炁期"
       ],
