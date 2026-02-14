@@ -1,4 +1,5 @@
 import { getItemDefinitionsByIds, getSkillDefinitions, getTechniqueDefinitions, getTechniqueLayerDefinitions } from './staticConfigLoader.js';
+import { resolveQualityRankFromName } from './shared/itemQuality.js';
 
 export type TechniqueDefRow = {
   id: string;
@@ -101,7 +102,7 @@ export const getEnabledTechniqueDefs = async (): Promise<TechniqueDefRow[]> => {
       name: entry.name,
       type: entry.type,
       quality: entry.quality,
-      quality_rank: Number(entry.quality_rank ?? 1),
+      quality_rank: resolveQualityRankFromName(entry.quality, 1),
       max_layer: Number(entry.max_layer ?? 1),
       required_realm: entry.required_realm ?? '凡人',
       attribute_type: entry.attribute_type ?? 'physical',
@@ -131,7 +132,7 @@ export const getTechniqueDefById = async (techniqueId: string): Promise<Techniqu
     name: entry.name,
     type: entry.type,
     quality: entry.quality,
-    quality_rank: Number(entry.quality_rank ?? 1),
+    quality_rank: resolveQualityRankFromName(entry.quality, 1),
     max_layer: Number(entry.max_layer ?? 1),
     required_realm: entry.required_realm ?? '凡人',
     attribute_type: entry.attribute_type ?? 'physical',

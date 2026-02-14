@@ -12,6 +12,7 @@ import { getGameServer } from '../game/GameServer.js';
 import {
   buildEquipmentDisplayBaseAttrs,
 } from '../services/equipmentGrowthRules.js';
+import { resolveQualityRankFromName } from '../services/shared/itemQuality.js';
 import { getCharacterComputedByCharacterId } from '../services/characterComputedService.js';
 import { getItemDefinitionById, getItemDefinitionsByIds, getItemSetDefinitions } from '../services/staticConfigLoader.js';
 
@@ -213,7 +214,7 @@ router.get('/items', async (req: Request, res: Response) => {
 
         const displayBaseAttrs = buildEquipmentDisplayBaseAttrs({
           baseAttrsRaw: def.base_attrs,
-          defQualityRankRaw: def.quality_rank,
+          defQualityRankRaw: resolveQualityRankFromName(def.quality, 1),
           resolvedQualityRankRaw: item.quality_rank,
           strengthenLevelRaw: item.strengthen_level,
           refineLevelRaw: item.refine_level,

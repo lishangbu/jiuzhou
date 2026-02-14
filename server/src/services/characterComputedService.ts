@@ -19,6 +19,7 @@ import { redis } from '../config/redis.js';
 import { buildEquipmentDisplayBaseAttrs } from './equipmentGrowthRules.js';
 import { getItemDefinitionsByIds, getItemSetDefinitions, getTechniqueLayerDefinitions, getTitleDefinitions } from './staticConfigLoader.js';
 import { extractFlatAffixDeltas } from './shared/affixModifier.js';
+import { resolveQualityRankFromName } from './shared/itemQuality.js';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -615,7 +616,7 @@ const loadEquippedAttrBonuses = async (characterId: number): Promise<CharacterCo
     if (!itemDefId) continue;
     const def = defs.get(itemDefId);
     if (!def || def.category !== 'equipment') continue;
-    const defQualityRank = Number.isFinite(Number(def.quality_rank)) ? Number(def.quality_rank) : 1;
+    const defQualityRank = resolveQualityRankFromName(def.quality, 1);
     const resolvedQualityRank = Number.isFinite(Number(row.quality_rank))
       ? Number(row.quality_rank)
       : defQualityRank;

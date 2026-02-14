@@ -2,6 +2,7 @@ import { pool } from '../config/database.js';
 import crypto from 'crypto';
 import { getBountyDefinitions, getItemDefinitions, getItemDefinitionsByIds } from './staticConfigLoader.js';
 import { getTaskDefinitionById } from './taskDefinitionService.js';
+import { resolveQualityRankFromName } from './shared/itemQuality.js';
 
 export type BountySourceType = 'daily' | 'player';
 export type BountyClaimPolicy = 'unique' | 'limited' | 'unlimited';
@@ -622,7 +623,8 @@ export const searchItemDefsForBounty = async (
     .sort((left, right) => {
       const categoryDiff = String(left.category || '').localeCompare(String(right.category || ''));
       if (categoryDiff !== 0) return categoryDiff;
-      const qualityRankDiff = Number(right.quality_rank ?? 0) - Number(left.quality_rank ?? 0);
+      const qualityRankDiff =
+        resolveQualityRankFromName(right.quality, 0) - resolveQualityRankFromName(left.quality, 0);
       if (qualityRankDiff !== 0) return qualityRankDiff;
       return String(left.id || '').localeCompare(String(right.id || ''));
     })

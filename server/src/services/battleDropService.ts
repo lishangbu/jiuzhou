@@ -31,6 +31,7 @@ import {
   shouldApplyDropQuantityMultiplier,
 } from './shared/dropQuantityMultiplier.js';
 import { lockCharacterInventoryMutexesTx } from './inventoryMutex.js';
+import { resolveQualityRankFromName } from './shared/itemQuality.js';
 
 // ============================================
 // 类型定义
@@ -530,7 +531,7 @@ export const distributeBattleRewards = async (
         subCategory: def?.sub_category ?? null,
         effectDefs: def?.effect_defs ?? null,
         level: Math.max(0, Math.floor(Number(def?.level) || 0)),
-        qualityRank: Math.max(1, Math.floor(Number(def?.quality_rank) || 1)),
+        qualityRank: resolveQualityRankFromName(def?.quality, 1),
       };
       itemMetaCache.set(itemDefId, meta);
       return meta;

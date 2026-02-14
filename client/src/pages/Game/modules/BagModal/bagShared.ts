@@ -1316,7 +1316,7 @@ export const buildBagItem = (it: InventoryItemDto): BagItem | null => {
           identified: !!it.identified,
           baseAttrs: coerceAttrRecord(def.base_attrs),
           baseAttrsRaw: coerceAttrRecord(def.base_attrs_raw ?? def.base_attrs),
-          defQualityRank: Number(def.quality_rank) || qualityRank[quality],
+          defQualityRank: qualityRank[quality],
           resolvedQualityRank: Number(it.quality_rank) || qualityRank[quality],
           affixes: coerceAffixes(it.affixes),
           socketMax: resolveSocketMax(def.socket_max, qualityRank[quality]),

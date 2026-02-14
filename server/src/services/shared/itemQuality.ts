@@ -33,3 +33,26 @@ export const QUALITY_MULTIPLIER_BY_RANK: Record<number, number> = {
 export const isQualityName = (value: unknown): value is QualityName => {
   return value === '黄' || value === '玄' || value === '地' || value === '天';
 };
+
+/**
+ * 从品质中文名推导品质档位（黄/玄/地/天 -> 1/2/3/4）。
+ * 当输入无效时返回 null，调用方可自行决定默认值。
+ */
+export const getQualityRankByName = (qualityRaw: unknown): number | null => {
+  const quality = String(qualityRaw ?? '').trim();
+  if (!quality) return null;
+  const rank = (QUALITY_RANK_MAP as Record<string, number>)[quality];
+  if (!Number.isInteger(rank)) return null;
+  return rank;
+};
+
+/**
+ * 品质档位解析器：
+ * - 优先按品质名解析
+ * - 解析失败时回退到调用方传入的默认值（默认 1）
+ */
+export const resolveQualityRankFromName = (qualityRaw: unknown, fallback: number = 1): number => {
+  const rank = getQualityRankByName(qualityRaw);
+  if (rank !== null) return rank;
+  return Math.max(1, Math.floor(Number(fallback) || 1));
+};

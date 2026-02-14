@@ -52,6 +52,7 @@ import {
 } from './disassembleRewardPlanner.js';
 import type { GeneratedAffix } from './equipmentService.js';
 import { extractFlatAffixDeltas } from './shared/affixModifier.js';
+import { resolveQualityRankFromName } from './shared/itemQuality.js';
 
 // 背包位置类型
 export type InventoryLocation = 'bag' | 'warehouse' | 'equipped';
@@ -246,7 +247,7 @@ const getEquipmentAttrDeltaByInstanceIdTx = async (
 
   const delta = new Map<CharacterAttrKey, number>();
 
-  const defQualityRank = Number(itemDef.quality_rank) || 1;
+  const defQualityRank = resolveQualityRankFromName(itemDef.quality, 1);
   const resolvedQualityRank = Number(row.quality_rank) || defQualityRank;
   const baseAttrs = buildEquipmentDisplayBaseAttrs({
     baseAttrsRaw: itemDef.base_attrs,
@@ -678,9 +679,12 @@ const getRerollItemStateTx = async (
       affixPoolId,
       affixes,
       resolvedQuality: typeof row.quality === 'string' ? row.quality : (typeof itemDef.quality === 'string' ? itemDef.quality : null),
-      resolvedQualityRank: Math.max(1, Math.floor(Number(row.quality_rank) || Number(itemDef.quality_rank) || 1)),
+      resolvedQualityRank: Math.max(
+        1,
+        Math.floor(Number(row.quality_rank) || resolveQualityRankFromName(row.quality ?? itemDef.quality, 1))
+      ),
       defQuality: typeof itemDef.quality === 'string' ? itemDef.quality : null,
-      defQualityRank: Math.max(1, Math.floor(Number(itemDef.quality_rank) || 1)),
+      defQualityRank: resolveQualityRankFromName(itemDef.quality, 1),
       equipReqRealm: typeof itemDef.equip_req_realm === 'string' ? itemDef.equip_req_realm : null,
     },
   };
@@ -1051,7 +1055,8 @@ const readEquipmentSocketStateTx = async (
     return { success: false, message: '该物品当前位置不可镶嵌' };
   }
 
-  const resolvedQualityRank = Number(row.quality_rank) || Number(itemDef.quality_rank) || 1;
+  const resolvedQualityRank =
+    Number(row.quality_rank) || resolveQualityRankFromName(itemDef.quality, 1);
   const socketMax = resolveSocketMax(itemDef.socket_max, resolvedQualityRank);
   if (socketMax <= 0) return { success: false, message: '该装备无可用镶嵌孔' };
 
@@ -2756,7 +2761,7 @@ export const disassembleEquipment = async (
     const itemSubCategory = itemDef.sub_category ?? null;
     const itemEffectDefs = itemDef.effect_defs ?? null;
     const itemLevel = Math.max(0, Math.floor(Number(itemDef.level) || 0));
-    const defQualityRank = Math.max(1, Math.floor(Number(itemDef.quality_rank) || 1));
+    const defQualityRank = resolveQualityRankFromName(itemDef.quality, 1);
     const resolvedQualityRank = item.instance_quality_rank ?? defQualityRank;
 
     if (item.locked) {
@@ -2983,7 +2988,7 @@ export const disassembleEquipmentBatch = async (
         category: String(itemDef.category || ''),
         subCategory: itemDef.sub_category ?? null,
         effectDefs: itemDef.effect_defs ?? null,
-        qualityRankRaw: row.instance_quality_rank ?? Math.max(1, Math.floor(Number(itemDef.quality_rank) || 1)),
+        qualityRankRaw: row.instance_quality_rank ?? resolveQualityRankFromName(itemDef.quality, 1),
         itemLevelRaw: Math.max(0, Math.floor(Number(itemDef.level) || 0)),
         strengthenLevelRaw: row.strengthen_level,
         refineLevelRaw: row.refine_level,
@@ -3195,7 +3200,8 @@ export const sortInventory = async (
       const itemDef = defMap.get(String(row.item_def_id || '').trim()) ?? null;
       const category = itemDef?.category ? String(itemDef.category) : null;
       const subCategory = itemDef?.sub_category ? String(itemDef.sub_category) : null;
-      const resolvedQualityRank = Number(row.quality_rank) || Number(itemDef?.quality_rank) || 0;
+      const resolvedQualityRank =
+        Number(row.quality_rank) || resolveQualityRankFromName(itemDef?.quality, 0);
       return { ...row, category, subCategory, resolvedQualityRank };
     });
 

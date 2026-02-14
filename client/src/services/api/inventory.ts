@@ -20,7 +20,6 @@ export interface ItemDefLite {
   name: string;
   icon: string | null;
   quality: string;
-  quality_rank?: number | null;
   category: string;
   sub_category: string | null;
   stack_max: number;

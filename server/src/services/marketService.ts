@@ -4,6 +4,7 @@ import { findEmptySlotsWithClient } from './inventoryService.js';
 import { lockCharacterInventoryMutexTx, lockCharacterInventoryMutexesTx } from './inventoryMutex.js';
 import { buildEquipmentDisplayBaseAttrs } from './equipmentGrowthRules.js';
 import { getItemDefinitionById, getItemDefinitions } from './staticConfigLoader.js';
+import { resolveQualityRankFromName } from './shared/itemQuality.js';
 
 export type MarketSort = 'timeDesc' | 'priceAsc' | 'priceDesc' | 'qtyDesc';
 
@@ -82,8 +83,9 @@ const toListingDto = (row: Record<string, unknown>): MarketListingDto | null => 
   if (!itemDef) return null;
 
   const category = itemDef.category === null || itemDef.category === undefined ? null : String(itemDef.category);
-  const defQualityRank = Number(itemDef.quality_rank) || 1;
-  const resolvedQualityRank = Number(row.instance_quality_rank) || defQualityRank;
+  const defQualityRank = resolveQualityRankFromName(itemDef.quality, 1);
+  const resolvedQualityRank =
+    Number(row.instance_quality_rank) || resolveQualityRankFromName(row.instance_quality, defQualityRank);
   const baseAttrsRaw =
     itemDef.base_attrs && typeof itemDef.base_attrs === 'object'
       ? (itemDef.base_attrs as Record<string, number>)

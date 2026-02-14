@@ -7,6 +7,7 @@ import { updateSectionProgress } from './mainQuestService.js';
 import { updateAchievementProgress } from './achievementService.js';
 import { isCharacterInBattle } from './battleService.js';
 import { getRealmRankZeroBased } from './shared/realmOrder.js';
+import { resolveQualityRankFromName } from './shared/itemQuality.js';
 import { invalidateCharacterComputedCache } from './characterComputedService.js';
 import { getItemDefinitionById, getItemDefinitionsByIds, getSkillDefinitions, getTechniqueDefinitions, getTechniqueLayerDefinitions } from './staticConfigLoader.js';
 
@@ -349,7 +350,7 @@ export const getCharacterTechniques = async (
         max_layer: Number(def.max_layer ?? 1),
         attribute_type: def.attribute_type ?? 'physical',
         attribute_element: def.attribute_element ?? 'none',
-        __quality_rank: Number(def.quality_rank ?? 1),
+        __quality_rank: resolveQualityRankFromName(def.quality, 1),
       });
     }
     const rows = rowsWithRank

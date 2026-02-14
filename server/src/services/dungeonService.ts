@@ -32,6 +32,7 @@ import {
 } from './shared/dropRateMultiplier.js';
 import { getAdjustedDropQuantityRange } from './shared/dropQuantityMultiplier.js';
 import { lockCharacterInventoryMutexesTx } from './inventoryMutex.js';
+import { resolveQualityRankFromName } from './shared/itemQuality.js';
 
 export type DungeonType = 'material' | 'equipment' | 'trial' | 'challenge' | 'event';
 
@@ -1712,7 +1713,7 @@ export const nextDungeonInstance = async (
             subCategory: typeof row?.sub_category === 'string' && row.sub_category.length > 0 ? row.sub_category : null,
             effectDefs: row?.effect_defs ?? null,
             level: Math.max(0, Math.floor(Number(row?.level) || 0)),
-            qualityRank: Math.max(1, Math.floor(Number(row?.quality_rank) || 1)),
+            qualityRank: resolveQualityRankFromName(row?.quality, 1),
           };
           itemMetaCache.set(itemDefId, meta);
           return meta;

@@ -16,6 +16,7 @@ import {
 import { lockCharacterInventoryMutexTx } from './inventoryMutex.js';
 import { buildEquipmentDisplayBaseAttrs } from './equipmentGrowthRules.js';
 import { getRealmRankZeroBased } from './shared/realmOrder.js';
+import { resolveQualityRankFromName } from './shared/itemQuality.js';
 import {
   applyCharacterResourceDeltaByCharacterId,
   getCharacterComputedByCharacterId,
@@ -123,7 +124,7 @@ export const getItemDefWithClient = async (itemDefId: string, client?: PoolClien
     category: String(def.category || ''),
     sub_category: String(def.sub_category || ''),
     quality: String(def.quality || ''),
-    quality_rank: Number(def.quality_rank) || 0,
+    quality_rank: resolveQualityRankFromName(def.quality, 1),
     stack_max: Math.max(1, Number(def.stack_max) || 1),
     bind_type: String(def.bind_type || 'none'),
     icon: String(def.icon || ''),
@@ -728,8 +729,8 @@ export const getItemInstance = async (instanceId: number): Promise<any | null> =
   if (!itemDef) return null;
 
   const resolvedQuality = row.quality ?? itemDef.quality ?? null;
-  const resolvedQualityRank = row.quality_rank ?? itemDef.quality_rank ?? null;
-  const defQualityRank = itemDef.quality_rank ?? null;
+  const defQualityRank = resolveQualityRankFromName(itemDef.quality, 1);
+  const resolvedQualityRank = row.quality_rank ?? resolveQualityRankFromName(resolvedQuality, defQualityRank);
   const displayBaseAttrs = buildEquipmentDisplayBaseAttrs({
     baseAttrsRaw: itemDef.base_attrs,
     defQualityRankRaw: defQualityRank,

@@ -353,7 +353,6 @@ export type TechniqueDefConfig = {
   name: string;
   type: string;
   quality: string;
-  quality_rank?: number;
   max_layer?: number;
   required_realm?: string;
   attribute_type?: string;
@@ -435,7 +434,6 @@ export type ItemDefConfig = {
   category: string;
   sub_category?: string;
   quality?: string;
-  quality_rank?: number;
   level?: number;
   stack_max?: number;
   bind_type?: string;
