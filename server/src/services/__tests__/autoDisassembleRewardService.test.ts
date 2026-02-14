@@ -275,6 +275,6 @@ test('非装备命中规则时应按默认公式转化银两', async () => {
   assert.deepEqual(result.warnings, []);
   assert.deepEqual(result.grantedItems, []);
   assert.deepEqual(result.pendingMailItems, []);
-  assert.equal(result.gainedSilver, 100);
-  assert.deepEqual(silverCalls, [100]);
+  assert.equal(result.gainedSilver, 10);
+  assert.deepEqual(silverCalls, [10]);
 });

@@ -88,7 +88,7 @@ const QUALITY_FACTOR_BY_RANK: Record<number, number> = {
  * - base = 20 + level * 12
  * - qualityFactor = {1:1.0, 2:1.8, 3:3.0, 4:4.8}
  * - growthFactor = 1 + strengthenLevel*0.06 + refineLevel*0.08 + affixCount*0.03
- * - unitSilver = floor(base * qualityFactor * growthFactor), 且最小为1
+ * - unitSilver = floor(base * qualityFactor * growthFactor / 10), 且最小为1
  * - totalSilver = unitSilver * qty
  */
 export const calculateDefaultDisassembleSilver = (
@@ -104,7 +104,7 @@ export const calculateDefaultDisassembleSilver = (
   const base = 20 + level * 12;
   const qualityFactor = QUALITY_FACTOR_BY_RANK[qualityRank] ?? 1.0;
   const growthFactor = 1 + strengthenLevel * 0.06 + refineLevel * 0.08 + affixCount * 0.03;
-  const unitSilver = Math.max(1, Math.floor(base * qualityFactor * growthFactor));
+  const unitSilver = Math.max(1, Math.floor((base * qualityFactor * growthFactor) / 10));
   const totalSilver = unitSilver * qty;
   return { unitSilver, totalSilver };
 };
