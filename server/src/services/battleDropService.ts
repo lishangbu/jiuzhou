@@ -17,7 +17,8 @@ import {
 } from './autoDisassembleRewardService.js';
 import { normalizeAutoDisassembleSetting } from './autoDisassembleRules.js';
 import type { MonsterData } from '../battle/BattleFactory.js';
-import { getDropPoolDefinitions, getItemDefinitionById, getMonsterDefinitions } from './staticConfigLoader.js';
+import { getItemDefinitionById, getMonsterDefinitions } from './staticConfigLoader.js';
+import { resolveDropPoolById } from './dropPoolResolver.js';
 
 // ============================================
 // 类型定义
@@ -99,37 +100,22 @@ export interface BattleParticipant {
  * 获取掉落池及其条目
  */
 export const getDropPool = async (poolId: string): Promise<DropPool | null> => {
-  const poolRow =
-    getDropPoolDefinitions().find((entry) => entry.enabled !== false && entry.id === poolId) ?? null;
-  if (!poolRow) return null;
-
-  const entries = Array.isArray(poolRow.entries) ? poolRow.entries : [];
+  const resolvedPool = resolveDropPoolById(poolId);
+  if (!resolvedPool) return null;
   return {
-    id: String(poolRow.id),
-    name: String(poolRow.name || poolRow.id),
-    mode: poolRow.mode === 'weight' ? 'weight' : 'prob',
-    entries: entries
-      .filter((entry) => typeof entry.item_def_id === 'string' && entry.item_def_id.trim().length > 0)
-      .map((entry, idx) => ({
-        id: idx + 1,
-        item_def_id: String(entry.item_def_id),
-        chance: Number.isFinite(Number(entry.chance)) ? Number(entry.chance) : 0,
-        weight: Number.isFinite(Number(entry.weight)) ? Math.floor(Number(entry.weight)) : 0,
-        qty_min: Number.isFinite(Number(entry.qty_min)) ? Math.max(1, Math.floor(Number(entry.qty_min))) : 1,
-        qty_max: Number.isFinite(Number(entry.qty_max))
-          ? Math.max(
-              Number.isFinite(Number(entry.qty_min)) ? Math.max(1, Math.floor(Number(entry.qty_min))) : 1,
-              Math.floor(Number(entry.qty_max)),
-            )
-          : Number.isFinite(Number(entry.qty_min))
-          ? Math.max(1, Math.floor(Number(entry.qty_min)))
-          : 1,
-        quality_weights:
-          entry.quality_weights && typeof entry.quality_weights === 'object' && !Array.isArray(entry.quality_weights)
-            ? (entry.quality_weights as Record<string, number> | null)
-            : null,
-        bind_type: typeof entry.bind_type === 'string' && entry.bind_type.trim().length > 0 ? entry.bind_type : 'none',
-      })),
+    id: resolvedPool.id,
+    name: resolvedPool.name,
+    mode: resolvedPool.mode,
+    entries: resolvedPool.entries.map((entry, idx) => ({
+      id: idx + 1,
+      item_def_id: entry.item_def_id,
+      chance: entry.chance,
+      weight: entry.weight,
+      qty_min: entry.qty_min,
+      qty_max: entry.qty_max,
+      quality_weights: entry.quality_weights,
+      bind_type: entry.bind_type,
+    })),
   };
 };
 

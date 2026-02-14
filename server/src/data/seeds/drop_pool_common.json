@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "description": "怪物通用掉落池配置（与专属池组合使用）",
+  "pools": [
+    {
+      "id": "dp-common-monster-global",
+      "name": "怪物全局通用掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "box-001",
+          "chance": 0.02,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-gongfa-canye",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "scroll-003",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-lingmo",
+          "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "enhance-001",
+          "chance": 0.02,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "enhance-002",
+          "chance": 0.02,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "dp-common-monster-boss",
+      "name": "怪物BOSS通用掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "box-001",
+          "chance": 0.5,
+          "qty_min": 1,
+          "qty_max": 3,
+          "show_in_ui": true
+        }
+      ],
+      "enabled": true
+    }
+  ]
+}

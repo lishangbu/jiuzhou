@@ -1,13 +1,13 @@
 import { query } from '../config/database.js';
 import type { MapObjectDto } from './roomObjectService.js';
 import {
-  getDropPoolDefinitions,
   getItemDefinitionById,
   getItemDefinitionsByIds,
   getMonsterDefinitions,
   getNpcDefinitions,
   getTechniqueDefinitions,
 } from './staticConfigLoader.js';
+import { resolveDropPoolById } from './dropPoolResolver.js';
 
 type InfoTargetType = 'npc' | 'monster' | 'item' | 'player';
 
@@ -283,25 +283,25 @@ const EQUIPPED_SLOT_TO_UI_LABEL: Record<string, string> = {
 };
 
 const getDropsByPoolId = async (dropPoolId: string): Promise<Array<{ name: string; quality: string; chance: string }>> => {
-  const pool = getDropPoolDefinitions().find((entry) => entry.enabled !== false && entry.id === dropPoolId) ?? null;
+  const pool = resolveDropPoolById(dropPoolId);
   if (!pool) return [];
 
-  const mode: 'prob' | 'weight' = pool.mode === 'weight' ? 'weight' : 'prob';
-  const entries = (Array.isArray(pool.entries) ? pool.entries : [])
-    .filter((entry) => entry.show_in_ui !== false)
+  const mode: 'prob' | 'weight' = pool.mode;
+  const entries = pool.entries
+    .filter((entry) => entry.show_in_ui)
     .map((entry) => {
-      const itemDefId = typeof entry.item_def_id === 'string' ? entry.item_def_id.trim() : '';
-      const qtyMin = Math.max(1, Number(entry.qty_min ?? 1) || 1);
-      const qtyMax = Math.max(qtyMin, Number(entry.qty_max ?? qtyMin) || qtyMin);
+      const itemDefId = entry.item_def_id.trim();
+      const qtyMin = Math.max(1, Number(entry.qty_min) || 1);
+      const qtyMax = Math.max(qtyMin, Number(entry.qty_max) || qtyMin);
       return {
         mode,
         item_def_id: itemDefId,
-        chance: Number(entry.chance ?? 0) || 0,
-        weight: Number(entry.weight ?? 0) || 0,
+        chance: Number(entry.chance) || 0,
+        weight: Number(entry.weight) || 0,
         qty_min: qtyMin,
         qty_max: qtyMax,
-        sort_order: Math.max(0, Math.floor(Number(entry.sort_order ?? 0) || 0)),
-        bind_type: typeof entry.bind_type === 'string' ? entry.bind_type : null,
+        sort_order: Math.max(0, Math.floor(Number(entry.sort_order) || 0)),
+        bind_type: entry.bind_type,
       } satisfies DropEntryRow;
     })
     .filter((entry) => entry.item_def_id.length > 0)

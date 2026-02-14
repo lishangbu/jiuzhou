@@ -587,6 +587,7 @@ export type DropPoolDefConfig = {
   name: string;
   description?: string;
   mode?: 'prob' | 'weight';
+  common_pool_ids?: string[];
   entries?: DropPoolEntryConfig[];
   enabled?: boolean;
   sort_weight?: number;
@@ -594,6 +595,10 @@ export type DropPoolDefConfig = {
 };
 
 type DropPoolFile = {
+  pools: DropPoolDefConfig[];
+};
+
+type CommonDropPoolFile = {
   pools: DropPoolDefConfig[];
 };
 
@@ -734,6 +739,7 @@ let techniqueDefCache: TechniqueDefConfig[] | null | undefined;
 let skillDefCache: SkillDefConfig[] | null | undefined;
 let taskDefCache: TaskDefConfig[] | null | undefined;
 let dropPoolDefCache: DropPoolDefConfig[] | null | undefined;
+let commonDropPoolDefCache: DropPoolDefConfig[] | null | undefined;
 let affixPoolDefCache: AffixPoolDefConfig[] | null | undefined;
 let itemSetDefCache: ItemSetDefConfig[] | null | undefined;
 let techniqueLayerCache: TechniqueLayerConfig[] | null | undefined;
@@ -1371,6 +1377,13 @@ export const getDropPoolDefinitions = (): DropPoolDefConfig[] => {
   const file = readJsonFile<DropPoolFile>('drop_pool.json');
   dropPoolDefCache = Array.isArray(file?.pools) ? file.pools : [];
   return dropPoolDefCache;
+};
+
+export const getCommonDropPoolDefinitions = (): DropPoolDefConfig[] => {
+  if (commonDropPoolDefCache !== undefined) return commonDropPoolDefCache ?? [];
+  const file = readJsonFile<CommonDropPoolFile>('drop_pool_common.json');
+  commonDropPoolDefCache = Array.isArray(file?.pools) ? file.pools : [];
+  return commonDropPoolDefCache;
 };
 
 export const getAffixPoolDefinitions = (): AffixPoolDefConfig[] => {

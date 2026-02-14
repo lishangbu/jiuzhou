@@ -12,6 +12,7 @@ import {
   getAffixPoolDefinitions,
   getBattlePassStaticConfig,
   getBountyDefinitions,
+  getCommonDropPoolDefinitions,
   getDialogueDefinitions,
   getDropPoolDefinitions,
   getDungeonDefinitions,
@@ -76,6 +77,7 @@ export const loadAllSeeds = async (): Promise<void> => {
   console.log(`  对话树定义: ${countEnabled(getTalkTreeDefinitions())} 条（静态JSON，跳过入库）`);
   console.log(`  怪物定义: ${countEnabled(getMonsterDefinitions())} 条（静态JSON，跳过入库）`);
   console.log(`  掉落池: ${countEnabled(getDropPoolDefinitions())} 条（静态JSON，跳过入库）`);
+  console.log(`  通用掉落池: ${countEnabled(getCommonDropPoolDefinitions())} 条（静态JSON，跳过入库）`);
   console.log(`  刷新规则: ${countEnabled(getSpawnRuleDefinitions())} 条（静态JSON，跳过入库）`);
   console.log(`  地图定义: ${countEnabled(getMapDefinitions())} 条（静态JSON，跳过入库）`);
   console.log(`  任务定义: ${countEnabled(getTaskDefinitions())} 条（静态JSON，跳过入库）`);

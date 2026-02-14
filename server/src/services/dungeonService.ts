@@ -1,5 +1,4 @@
 import {
-  getDropPoolDefinitions,
   getDungeonDifficultiesByDungeonId,
   getDungeonDifficultyById,
   getDungeonDefinitions,
@@ -9,6 +8,7 @@ import {
   getItemDefinitionsByIds,
   getMonsterDefinitions,
 } from './staticConfigLoader.js';
+import { resolveDropPoolById } from './dropPoolResolver.js';
 import { pool, query } from '../config/database.js';
 import crypto from 'crypto';
 import { getBattleState, startDungeonPVEBattle } from './battleService.js';
@@ -627,28 +627,17 @@ export const getDungeonPreview = async (
     sort_order: number;
   };
 
-  const staticDropPoolMap = new Map(
-    getDropPoolDefinitions()
-      .filter((entry) => entry.enabled !== false)
-      .map((entry) => [entry.id, entry] as const),
-  );
-
   const dropPreviewRows: DropPreviewRow[] = [];
   for (const poolId of monsterDropPoolIds) {
-    const pool = staticDropPoolMap.get(poolId);
+    const pool = resolveDropPoolById(poolId);
     if (!pool) continue;
-    const mode: 'prob' | 'weight' = pool.mode === 'weight' ? 'weight' : 'prob';
-    const entries = Array.isArray(pool.entries) ? pool.entries : [];
-    for (const entry of entries) {
-      if (entry.show_in_ui === false) continue;
-      const itemDefId = typeof entry.item_def_id === 'string' ? entry.item_def_id.trim() : '';
+    const mode: 'prob' | 'weight' = pool.mode;
+    for (const entry of pool.entries) {
+      if (!entry.show_in_ui) continue;
+      const itemDefId = entry.item_def_id.trim();
       if (!itemDefId) continue;
       const qtyMin = Math.max(1, Math.floor(asNumber(entry.qty_min, 1)));
       const qtyMax = Math.max(qtyMin, Math.floor(asNumber(entry.qty_max, qtyMin)));
-      const qualityWeights =
-        entry.quality_weights && typeof entry.quality_weights === 'object' && !Array.isArray(entry.quality_weights)
-          ? entry.quality_weights
-          : null;
       dropPreviewRows.push({
         drop_pool_id: poolId,
         mode,
@@ -657,8 +646,8 @@ export const getDungeonPreview = async (
         weight: asNumber(entry.weight, 0),
         qty_min: qtyMin,
         qty_max: qtyMax,
-        quality_weights: qualityWeights,
-        bind_type: typeof entry.bind_type === 'string' ? entry.bind_type : null,
+        quality_weights: entry.quality_weights,
+        bind_type: entry.bind_type,
         sort_order: Math.max(0, Math.floor(asNumber(entry.sort_order, 0))),
       });
     }
