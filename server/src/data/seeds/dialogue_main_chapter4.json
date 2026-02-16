@@ -58,32 +58,32 @@
     },
     {
       "id": "dlg-main-4-004",
-      "name": "第四章-004 明泉初试",
+      "name": "第四章-004 入宫阙",
       "nodes": [
         {
           "id": "start",
           "type": "npc",
           "speaker": "镇沼使",
-          "text": "先跑一趟胎元明泉普通强度，确认你的气机是否稳定。",
+          "text": "阵门已稳。去九台宫阙外门找隐修者，他会带你过第一道关。",
           "next": "end"
         },
         {
           "id": "end",
           "type": "system",
-          "text": "目标更新：通关胎元明泉（普通）。"
+          "text": "目标更新：抵达宫阙外门并与九台隐修者交谈。"
         }
       ],
       "enabled": true
     },
     {
       "id": "dlg-main-4-005",
-      "name": "第四章-005 九台入门",
+      "name": "第四章-005 宫阙初试",
       "nodes": [
         {
           "id": "start",
           "type": "npc",
           "speaker": "九台隐修者",
-          "text": "宫阙会放大你体内每一丝偏差。先过普通试炼，再谈突破。",
+          "text": "先过普通试炼，熟悉阵核节奏。能稳住气机，再谈压测。",
           "next": "end"
         },
         {
@@ -96,7 +96,25 @@
     },
     {
       "id": "dlg-main-4-006",
-      "name": "第四章-006 宫阙压测",
+      "name": "第四章-006 七层归一",
+      "nodes": [
+        {
+          "id": "start",
+          "type": "narration",
+          "text": "功法未至七层，胎元无法稳固成形。",
+          "next": "end"
+        },
+        {
+          "id": "end",
+          "type": "system",
+          "text": "目标更新：将任意天阶功法提升至第七层。"
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "dlg-main-4-007",
+      "name": "第四章-007 宫阙压测",
       "nodes": [
         {
           "id": "start",
@@ -114,57 +132,39 @@
       "enabled": true
     },
     {
-      "id": "dlg-main-4-007",
-      "name": "第四章-007 七层归一",
-      "nodes": [
-        {
-          "id": "start",
-          "type": "narration",
-          "text": "功法未至七层，胎元无法稳固成形。",
-          "next": "end"
-        },
-        {
-          "id": "end",
-          "type": "system",
-          "text": "目标更新：将任意天阶功法提升至第七层。"
-        }
-      ],
-      "enabled": true
-    },
-    {
       "id": "dlg-main-4-008",
-      "name": "第四章-008 结胎一跃",
+      "name": "第四章-008 结胎筹备",
       "nodes": [
         {
           "id": "start",
           "type": "npc",
           "speaker": "九台隐修者",
-          "text": "去吧，把采药期的散势收拢为胎元。破此关，便是新境。",
+          "text": "压测已过，接下来把突破材料一次备齐。晶魄与结胎丹，缺一不可。",
           "next": "end"
         },
         {
           "id": "end",
           "type": "system",
-          "text": "目标更新：突破到炼炁化神·结胎期。"
+          "text": "目标更新：收集胎元晶魄 12 份与结胎丹 3 份。"
         }
       ],
       "enabled": true
     },
     {
       "id": "dlg-main-4-009",
-      "name": "第四章-009 胎元定序",
+      "name": "第四章-009 破关前夜",
       "nodes": [
         {
           "id": "start",
           "type": "npc",
           "speaker": "九台隐修者",
-          "text": "自此胎元有序，心神可守。你已正式踏入结胎期。",
+          "text": "材料与阵序都已完备。第四章到此收束，你可正式冲击结胎。",
           "next": "end"
         },
         {
           "id": "end",
           "type": "system",
-          "text": "第四章完成：胎息初成。"
+          "text": "第四章完成：胎息初成。已满足结胎突破主线前置。"
         }
       ],
       "enabled": true

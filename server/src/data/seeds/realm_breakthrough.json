@@ -302,19 +302,11 @@
           "title": "功法融会贯通"
         },
         {
-          "id": "dungeon-clear-taiyuan-hard-2",
-          "type": "dungeon_clear_min",
-          "dungeonId": "dungeon-lianqi-taiyuan-mingquan",
-          "difficultyId": "dd-lianqi-taiyuan-h",
-          "minCount": 2,
-          "title": "胎元明泉困难通关"
-        },
-        {
-          "id": "dungeon-clear-jiutai-hard-2",
+          "id": "dungeon-clear-jiutai-hard-3",
           "type": "dungeon_clear_min",
           "dungeonId": "dungeon-lianqi-jiutai-gongque",
           "difficultyId": "dd-lianqi-jiutai-h",
-          "minCount": 2,
+          "minCount": 3,
           "title": "九台宫阙困难通关"
         },
         {

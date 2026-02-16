@@ -2624,8 +2624,8 @@
         },
         {
           "id": "room-taixi-pool-gate",
-          "name": "明泉外庭",
-          "description": "通向胎元明泉的阵门前庭，宫阙侍者在此把守。",
+          "name": "宫阙外庭",
+          "description": "通向九台宫阙的阵门前庭，宫阙侍者在此把守。",
           "position": {
             "x": 1,
             "y": 1

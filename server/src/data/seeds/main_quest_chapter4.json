@@ -4,7 +4,7 @@
       "id": "mq-chapter-4",
       "chapter_num": 4,
       "name": "第四章：胎息初成",
-      "description": "你在胎息沼与九台宫阙间调和内外灵压，最终完成结胎突破。",
+      "description": "你在胎息沼与九台宫阙间调和内外灵压，最终完成结胎前的全部整备。",
       "background": "采药期后段灵压开始向内塌缩，若无法稳定胎元，修士将陷入灵息崩乱。你需在胎息沼沉心、在九台宫阙证道，完成由采药向结胎的关键跨越。",
       "min_realm": "炼炁化神·采药期",
       "chapter_rewards": {
@@ -24,7 +24,6 @@
       },
       "unlock_features": [
         "map-taixi-marsh",
-        "dungeon-lianqi-taiyuan-mingquan",
         "dungeon-lianqi-jiutai-gongque",
         "map-jiutai-sanctum",
         "dungeon-lianqi-xuanmu-shentai"
@@ -173,9 +172,9 @@
       "id": "main-4-004",
       "chapter_id": "mq-chapter-4",
       "section_num": 4,
-      "name": "明泉初试",
-      "description": "你首次进入胎元明泉，验证阵法是否能承受采药后段灵压。",
-      "brief": "通关胎元明泉（普通）1 次。",
+      "name": "入宫阙",
+      "description": "阵门已稳，你需穿过宫阙通道，前往九台宫阙外门与隐修者会合。",
+      "brief": "抵达宫阙外门并与九台隐修者交谈。",
       "npc_id": "npc-taixi-warden",
       "map_id": "map-taixi-marsh",
       "room_id": "room-taixi-pool-gate",
@@ -184,12 +183,20 @@
       "objectives": [
         {
           "id": "obj-1",
-          "type": "dungeon_clear",
-          "text": "通关胎元明泉（普通）",
+          "type": "reach",
+          "text": "抵达宫阙外门",
           "target": 1,
           "params": {
-            "dungeon_id": "dungeon-lianqi-taiyuan-mingquan",
-            "difficulty_id": "dd-lianqi-taiyuan-n"
+            "room_id": "room-jiutai-outer-gate"
+          }
+        },
+        {
+          "id": "obj-2",
+          "type": "talk_npc",
+          "text": "与九台隐修者会合",
+          "target": 1,
+          "params": {
+            "npc_id": "npc-jiutai-hermit"
           }
         }
       ],
@@ -214,8 +221,8 @@
       "id": "main-4-005",
       "chapter_id": "mq-chapter-4",
       "section_num": 5,
-      "name": "九台入门",
-      "description": "前往九台宫阙，完成首次宫阙试炼。",
+      "name": "宫阙初试",
+      "description": "在隐修者的指引下完成九台宫阙普通试炼，熟悉阵核节奏。",
       "brief": "通关九台宫阙（普通）1 次。",
       "npc_id": "npc-jiutai-hermit",
       "map_id": "map-jiutai-sanctum",
@@ -255,47 +262,6 @@
       "id": "main-4-006",
       "chapter_id": "mq-chapter-4",
       "section_num": 6,
-      "name": "宫阙压测",
-      "description": "在困难强度下稳定宫阙阵核，验证你是否具备冲击结胎的资格。",
-      "brief": "通关九台宫阙（困难）1 次。",
-      "npc_id": "npc-jiutai-hermit",
-      "map_id": "map-jiutai-sanctum",
-      "room_id": "room-jiutai-core-hall",
-      "min_realm": "炼炁化神·采药期",
-      "dialogue_id": "dlg-main-4-006",
-      "objectives": [
-        {
-          "id": "obj-1",
-          "type": "dungeon_clear",
-          "text": "通关九台宫阙（困难）",
-          "target": 1,
-          "params": {
-            "dungeon_id": "dungeon-lianqi-jiutai-gongque",
-            "difficulty_id": "dd-lianqi-jiutai-h"
-          }
-        }
-      ],
-      "rewards": {
-        "exp": 1760,
-        "silver": 2120,
-        "spirit_stones": 152,
-        "items": [
-          {
-            "item_def_id": "mat-jietai-dan",
-            "quantity": 1
-          }
-        ]
-      },
-      "auto_accept": true,
-      "auto_complete": false,
-      "is_chapter_final": false,
-      "sort_weight": 650,
-      "enabled": true
-    },
-    {
-      "id": "main-4-007",
-      "chapter_id": "mq-chapter-4",
-      "section_num": 7,
       "name": "七层归一",
       "description": "隐修者要求你将至少一门天阶功法推至七层，以承载胎元共鸣。",
       "brief": "任意天阶功法达到第 7 层。",
@@ -303,7 +269,7 @@
       "map_id": "map-jiutai-sanctum",
       "room_id": "room-jiutai-core-hall",
       "min_realm": "炼炁化神·采药期",
-      "dialogue_id": "dlg-main-4-007",
+      "dialogue_id": "dlg-main-4-006",
       "objectives": [
         {
           "id": "obj-1",
@@ -317,9 +283,50 @@
         }
       ],
       "rewards": {
+        "exp": 1760,
+        "silver": 2120,
+        "spirit_stones": 152
+      },
+      "auto_accept": true,
+      "auto_complete": false,
+      "is_chapter_final": false,
+      "sort_weight": 650,
+      "enabled": true
+    },
+    {
+      "id": "main-4-007",
+      "chapter_id": "mq-chapter-4",
+      "section_num": 7,
+      "name": "宫阙压测",
+      "description": "在困难强度下稳定宫阙阵核，验证你是否具备冲击结胎的资格。",
+      "brief": "通关九台宫阙（困难）1 次。",
+      "npc_id": "npc-jiutai-hermit",
+      "map_id": "map-jiutai-sanctum",
+      "room_id": "room-jiutai-core-hall",
+      "min_realm": "炼炁化神·采药期",
+      "dialogue_id": "dlg-main-4-007",
+      "objectives": [
+        {
+          "id": "obj-1",
+          "type": "dungeon_clear",
+          "text": "通关九台宫阙（困难）",
+          "target": 1,
+          "params": {
+            "dungeon_id": "dungeon-lianqi-jiutai-gongque",
+            "difficulty_id": "dd-lianqi-jiutai-h"
+          }
+        }
+      ],
+      "rewards": {
         "exp": 1980,
         "silver": 2360,
-        "spirit_stones": 166
+        "spirit_stones": 166,
+        "items": [
+          {
+            "item_def_id": "mat-jietai-dan",
+            "quantity": 1
+          }
+        ]
       },
       "auto_accept": true,
       "auto_complete": false,
@@ -331,9 +338,9 @@
       "id": "main-4-008",
       "chapter_id": "mq-chapter-4",
       "section_num": 8,
-      "name": "结胎一跃",
-      "description": "万事俱备，你将以九台阵核完成采药向结胎的真正跃迁。",
-      "brief": "突破到炼炁化神·结胎期。",
+      "name": "结胎筹备",
+      "description": "压测结束后，隐修者要求你备齐突破所需晶魄与结胎丹。",
+      "brief": "收集胎元晶魄 12 份与结胎丹 3 份。",
       "npc_id": "npc-jiutai-hermit",
       "map_id": "map-jiutai-sanctum",
       "room_id": "room-jiutai-core-hall",
@@ -342,11 +349,20 @@
       "objectives": [
         {
           "id": "obj-1",
-          "type": "upgrade_realm",
-          "text": "突破到炼炁化神·结胎期",
-          "target": 1,
+          "type": "collect",
+          "text": "收集胎元晶魄 12 份",
+          "target": 12,
           "params": {
-            "realm": "炼炁化神·结胎期"
+            "item_id": "mat-taiyuan-jingpo"
+          }
+        },
+        {
+          "id": "obj-2",
+          "type": "collect",
+          "text": "收集结胎丹 3 份",
+          "target": 3,
+          "params": {
+            "item_id": "mat-jietai-dan"
           }
         }
       ],
@@ -371,13 +387,13 @@
       "id": "main-4-009",
       "chapter_id": "mq-chapter-4",
       "section_num": 9,
-      "name": "胎元定序",
-      "description": "你回到宫阙中殿复命，结胎秩序正式确立。",
+      "name": "破关前夜",
+      "description": "你回到宫阙中殿复命，隐修者确认你已具备冲击结胎的全部条件。",
       "brief": "与九台隐修者交谈，完成第四章。",
       "npc_id": "npc-jiutai-hermit",
       "map_id": "map-jiutai-sanctum",
       "room_id": "room-jiutai-core-hall",
-      "min_realm": "炼炁化神·结胎期",
+      "min_realm": "炼炁化神·采药期",
       "dialogue_id": "dlg-main-4-009",
       "objectives": [
         {

@@ -1006,20 +1006,20 @@
     {
       "id": "task-caiyao-daily-004",
       "category": "daily",
-      "title": "明泉日修",
+      "title": "宫阙日修",
       "realm": "炼炁化神·采药期",
-      "description": "完成一次胎元明泉修行。",
-      "giver_npc_id": "npc-taixi-warden",
-      "map_id": "map-taixi-marsh",
-      "room_id": "room-taixi-pool-gate",
+      "description": "完成一次九台宫阙修行。",
+      "giver_npc_id": "npc-jiutai-hermit",
+      "map_id": "map-jiutai-sanctum",
+      "room_id": "room-jiutai-outer-gate",
       "objectives": [
         {
           "id": "obj-001",
           "type": "dungeon_clear",
-          "text": "通关胎元明泉 1 次",
+          "text": "通关九台宫阙 1 次",
           "target": 1,
           "params": {
-            "dungeon_id": "dungeon-lianqi-taiyuan-mingquan"
+            "dungeon_id": "dungeon-lianqi-jiutai-gongque"
           }
         }
       ],
@@ -1084,30 +1084,31 @@
     {
       "id": "task-caiyao-weekly-001",
       "category": "event",
-      "title": "周常：明泉压测",
+      "title": "周常：宫阙压测",
       "realm": "炼炁化神·采药期",
-      "description": "本周累计完成胎元明泉深度压测。",
-      "giver_npc_id": "npc-taixi-warden",
-      "map_id": "map-taixi-marsh",
-      "room_id": "room-taixi-pool-gate",
+      "description": "本周累计完成九台宫阙高压试炼。",
+      "giver_npc_id": "npc-jiutai-hermit",
+      "map_id": "map-jiutai-sanctum",
+      "room_id": "room-jiutai-core-hall",
       "objectives": [
         {
           "id": "obj-001",
           "type": "dungeon_clear",
-          "text": "通关胎元明泉 3 次",
-          "target": 3,
+          "text": "通关九台宫阙（普通）2 次",
+          "target": 2,
           "params": {
-            "dungeon_id": "dungeon-lianqi-taiyuan-mingquan"
+            "dungeon_id": "dungeon-lianqi-jiutai-gongque",
+            "difficulty_id": "dd-lianqi-jiutai-n"
           }
         },
         {
           "id": "obj-002",
           "type": "dungeon_clear",
-          "text": "通关胎元明泉（困难）1 次",
-          "target": 1,
+          "text": "通关九台宫阙（困难）2 次",
+          "target": 2,
           "params": {
-            "dungeon_id": "dungeon-lianqi-taiyuan-mingquan",
-            "difficulty_id": "dd-lianqi-taiyuan-h"
+            "dungeon_id": "dungeon-lianqi-jiutai-gongque",
+            "difficulty_id": "dd-lianqi-jiutai-h"
           }
         }
       ],
