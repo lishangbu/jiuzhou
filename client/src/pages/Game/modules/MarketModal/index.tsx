@@ -42,6 +42,7 @@ type ItemQuality = '黄' | '玄' | '地' | '天';
 type MarketCategory = 'all' | MarketTooltipCategory;
 
 type MarketSort = 'timeDesc' | 'priceAsc' | 'priceDesc' | 'qtyDesc';
+type MarketTooltipPlacement = 'rightTop' | 'right' | 'rightBottom';
 
 /* ─── 移动端 Bottom Sheet 组件 ─── */
 
@@ -392,10 +393,18 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [records, setRecords] = useState<TradeRecord[]>([]);
   const [recordsTotal, setRecordsTotal] = useState(0);
+  const [marketTooltipPlacement, setMarketTooltipPlacement] = useState<MarketTooltipPlacement>('right');
+  const resolveMarketTooltipPlacement = useCallback((event: React.MouseEvent<HTMLElement>) => {
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+    if (!viewportHeight) return;
+    const { top, bottom } = event.currentTarget.getBoundingClientRect();
+    const nextPlacement: MarketTooltipPlacement = top <= viewportHeight * 0.28 ? 'rightTop' : bottom >= viewportHeight * 0.72 ? 'rightBottom' : 'right';
+    setMarketTooltipPlacement((prev) => (prev === nextPlacement ? prev : nextPlacement));
+  }, []);
   const getMarketTooltipPopupContainer = useCallback(
     (triggerNode: HTMLElement): HTMLElement => {
-      const modalRoot = triggerNode.closest('.market-modal');
-      return modalRoot instanceof HTMLElement ? modalRoot : document.body;
+      const modalWrap = triggerNode.closest('.ant-modal-wrap');
+      return modalWrap instanceof HTMLElement ? modalWrap : document.body;
     },
     [],
   );
@@ -879,12 +888,13 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                     <Tooltip
                       overlayClassName={ITEM_TOOLTIP_CLASS_NAMES.root}
                       classNames={ITEM_TOOLTIP_CLASS_NAMES}
-                      placement="right"
+                      placement={marketTooltipPlacement}
+                      autoAdjustOverflow
                       mouseEnterDelay={0.15}
                       title={<MarketItemTooltipContent item={row} />}
                       getPopupContainer={getMarketTooltipPopupContainer}
                     >
-                      <div className={`market-item ${getQualityClassName(row.quality)}`}>
+                      <div className={`market-item ${getQualityClassName(row.quality)}`} onMouseEnter={resolveMarketTooltipPlacement}>
                         <img className={`market-item-icon ${getQualityClassName(row.quality)}`} src={row.icon} alt={row.name} />
                         <div className="market-item-meta">
                           <div className="market-item-name">{row.name}</div>
@@ -1019,12 +1029,13 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                     <Tooltip
                       overlayClassName={ITEM_TOOLTIP_CLASS_NAMES.root}
                       classNames={ITEM_TOOLTIP_CLASS_NAMES}
-                      placement="right"
+                      placement={marketTooltipPlacement}
+                      autoAdjustOverflow
                       mouseEnterDelay={0.15}
                       title={<MarketItemTooltipContent item={row} />}
                       getPopupContainer={getMarketTooltipPopupContainer}
                     >
-                      <div className={`market-item ${getQualityClassName(row.quality)}`}>
+                      <div className={`market-item ${getQualityClassName(row.quality)}`} onMouseEnter={resolveMarketTooltipPlacement}>
                         <img className={`market-item-icon ${getQualityClassName(row.quality)}`} src={row.icon} alt={row.name} />
                         <div className="market-item-meta">
                           <div className="market-item-name">{row.name}</div>
@@ -1386,6 +1397,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
       centered
       width={1120}
       className="market-modal"
+      wrapClassName="market-modal-wrap"
       destroyOnHidden
       maskClosable
       afterOpenChange={(visible) => {

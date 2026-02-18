@@ -9,7 +9,14 @@
   }
 }
 
+/* Tooltip 挂在 modal wrap 时，禁用 wrap 自身滚动，避免出现“整页右侧滚动条”。 */
+.market-modal-wrap.ant-modal-wrap {
+  overflow: hidden;
+}
+
 .market-modal-shell {
+  --market-item-icon-size: 48px;
+  --market-item-icon-padding: 3px;
   height: 680px;
   display: flex;
   background: var(--panel-bg);
@@ -227,14 +234,14 @@
 }
 
 .market-item-icon {
-  width: 38px;
-  height: 38px;
+  width: var(--market-item-icon-size);
+  height: var(--market-item-icon-size);
   object-fit: contain;
   display: block;
   border-radius: 10px;
   border: 1px solid var(--border-color-soft);
   background: var(--panel-bg);
-  padding: 4px;
+  padding: var(--market-item-icon-padding);
 }
 
 .market-item-icon {
@@ -645,6 +652,8 @@
   }
 
   .market-modal-shell {
+    --market-item-icon-size: 42px;
+    --market-item-icon-padding: 3px;
     height: min(88dvh, 760px);
     max-height: calc(100dvh - 16px);
     flex-direction: column;
@@ -721,11 +730,6 @@
 
   .market-price-range {
     gap: 6px;
-  }
-
-  .market-item-icon {
-    width: 34px;
-    height: 34px;
   }
 
   .market-mobile-price {
