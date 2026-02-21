@@ -68,7 +68,7 @@ const battleTickLocks = new Set<string>();
 const characterOwnerCache = new Map<number, { userId: number; at: number }>();
 const CHARACTER_OWNER_CACHE_TTL_MS = 60000;
 const BATTLE_TICK_MS = 650;
-const BATTLE_START_COOLDOWN_MS = 2000;
+const BATTLE_START_COOLDOWN_MS = 3000;
 const characterBattleStartCooldownUntil = new Map<number, number>();
 const battleLastEmittedLogLen = new Map<string, number>();
 const battleLastRedisSavedAt = new Map<string, number>();
@@ -1290,7 +1290,7 @@ export async function startPVEBattle(
     }
     const characterId = Number(characterBase.id);
     const characterWithSetBonus = await attachSetBonusEffectsToCharacterData(characterId, characterBase as CharacterData);
-    
+
     if (characterWithSetBonus.qixue <= 0) {
       return { success: false, message: '气血不足，无法战斗' };
     }
@@ -1349,11 +1349,11 @@ export async function startPVEBattle(
     if (teamInfo.isInTeam && !teamInfo.isLeader) {
       return { success: false, message: '组队中只有队长可以发起战斗' };
     }
-    
+
     // 如果在队伍中，检查队友状态
     const validTeamMembers: Array<{ data: CharacterData; skills: SkillData[] }> = [];
     const participantUserIds: number[] = [userId];
-    
+
     if (teamInfo.isInTeam && teamInfo.members.length > 0) {
       for (const member of teamInfo.members) {
         const memberCharacterId = Number((member.data as any)?.id);
@@ -1378,7 +1378,7 @@ export async function startPVEBattle(
         if (!Number.isFinite(uid) || uid <= 0) continue;
         void gameServer.pushCharacterUpdate(uid);
       }
-    } catch {}
+    } catch { }
 
     const playerCount = validTeamMembers.length + 1;
     const maxMonsters = playerCount > 1 ? Math.min(playerCount, 5) : 2;
@@ -1403,10 +1403,10 @@ export async function startPVEBattle(
     }
     const monsters = monsterResolveResult.monsters;
     const monsterSkillsMap = monsterResolveResult.monsterSkillsMap;
-    
+
     // 生成战斗ID
     const battleId = `battle-${userId}-${Date.now()}`;
-    
+
     // 创建战斗状态（传入队友数据）
     const battleState = createPVEBattle(
       battleId,
@@ -1416,10 +1416,10 @@ export async function startPVEBattle(
       monsterSkillsMap,
       validTeamMembers.length > 0 ? validTeamMembers : undefined
     );
-    
+
     // 创建战斗引擎
     const engine = new BattleEngine(battleState);
-    
+
     // 开始战斗
     engine.startBattle();
 
@@ -1429,7 +1429,7 @@ export async function startPVEBattle(
     battleParticipants.set(battleId, participantUserIds);
     startBattleTicker(battleId);
     emitBattleUpdate(battleId, { kind: 'battle_started', battleId, state: engine.getState() });
-    
+
     return {
       success: true,
       message: playerCount > 1 ? `组队战斗开始（${playerCount}人）` : '战斗开始',
@@ -1458,13 +1458,13 @@ export async function playerAction(
 ): Promise<BattleResult> {
   try {
     const engine = activeBattles.get(battleId);
-    
+
     if (!engine) {
       return { success: false, message: '战斗不存在或已结束' };
     }
-    
+
     const state = engine.getState();
-    
+
     // 验证是否是该战斗的参与者
     const participants = battleParticipants.get(battleId) || [];
     if (!participants.includes(userId) && state.teams.attacker.odwnerId !== userId) {
@@ -1489,15 +1489,15 @@ export async function playerAction(
     if (!allowedUserIds.includes(ownerUserId)) {
       return { success: false, message: '无权操作此战斗' };
     }
-    
+
     // 执行玩家行动
     const result = engine.playerAction(userId, skillId, targetIds);
-    
+
     if (!result.success) {
       return { success: false, message: result.error || '行动失败' };
     }
     emitBattleUpdate(battleId, { kind: 'battle_state', battleId, state: engine.getState() });
-    
+
     // 检查战斗是否结束
     const currentState = engine.getState();
     if (currentState.phase === 'finished') {
@@ -1506,7 +1506,7 @@ export async function playerAction(
       stopBattleTicker(battleId);
       return battleResult;
     }
-    
+
     return {
       success: true,
       message: '行动成功',
@@ -1595,7 +1595,7 @@ export async function startDungeonPVEBattle(
         if (!Number.isFinite(uid) || uid <= 0) continue;
         void gameServer.pushCharacterUpdate(uid);
       }
-    } catch {}
+    } catch { }
 
     const playerCount = validTeamMembers.length + 1;
     const maxMonsters = Math.min(5, Math.max(1, playerCount > 1 ? playerCount : 3));
@@ -1722,7 +1722,7 @@ export async function startPVPBattle(
       const gameServer = getGameServer();
       if (Number.isFinite(userId) && userId > 0) void gameServer.pushCharacterUpdate(userId);
       if (!isArenaBattle && Number.isFinite(opponentUserId) && opponentUserId > 0) void gameServer.pushCharacterUpdate(opponentUserId);
-    } catch {}
+    } catch { }
 
     const finalBattleId = requestedBattleId ? requestedBattleId : `pvp-battle-${userId}-${Date.now()}`;
     const battleState = createPVPBattle(
@@ -1851,13 +1851,13 @@ async function finishBattle(
 ): Promise<BattleResult> {
   const state = engine.getState();
   const result = engine.getResult();
-  
+
   // 获取战斗参与者
   const participantUserIds = (battleParticipants.get(battleId) || []).slice();
   const participantCount = Math.max(1, participantUserIds.length);
   const isVictory = result.result === 'attacker_win';
   const isDungeonBattle = battleId.startsWith('dungeon-battle-');
-  
+
   // 构建参与者信息
   const participants: BattleParticipant[] = [];
   for (const participantUserId of participantUserIds) {
@@ -1871,7 +1871,7 @@ async function finishBattle(
       fuyuan: Number(computed.fuyuan ?? 1),
     });
   }
-  
+
   // 使用掉落服务分发奖励
   let dropResult: DistributeResult | null = null;
 
@@ -1905,7 +1905,7 @@ async function finishBattle(
             }
           }
         }
-      } catch {}
+      } catch { }
     } else if (result.result === 'defender_win') {
       for (const participantUserId of participantUserIds) {
         const computed = await getCharacterComputedByUserId(participantUserId);
@@ -1915,7 +1915,7 @@ async function finishBattle(
       }
     }
   }
-  
+
   // 构建奖励数据
   const rewardsData = dropResult ? {
     exp: dropResult.rewards.exp,
@@ -1940,11 +1940,11 @@ async function finishBattle(
     : collectPlayerCharacterIdsFromBattleState(state);
   // 先写服务端冷却，再推送结束事件，避免“结束事件先到达 -> 客户端立即开战”竞态。
   const cooldownUntilMs = setBattleStartCooldownByCharacterIds(cooldownCharacterIds);
-  
+
   const battleResult: BattleResult = {
     success: true,
-    message: result.result === 'attacker_win' ? '战斗胜利' : 
-             result.result === 'defender_win' ? '战斗失败' : '战斗平局',
+    message: result.result === 'attacker_win' ? '战斗胜利' :
+      result.result === 'defender_win' ? '战斗失败' : '战斗平局',
     data: {
       result: result.result,
       rounds: result.rounds,
@@ -2001,7 +2001,7 @@ async function finishBattle(
  */
 export async function getBattleState(battleId: string): Promise<BattleResult> {
   const engine = activeBattles.get(battleId);
-  
+
   if (!engine) {
     const cached = finishedBattleResults.get(battleId);
     if (cached && Date.now() - cached.at <= FINISHED_BATTLE_TTL_MS) {
@@ -2015,7 +2015,7 @@ export async function getBattleState(battleId: string): Promise<BattleResult> {
     const monsters = await getBattleMonsters(engine);
     return await finishBattle(battleId, engine, monsters);
   }
-  
+
   return {
     success: true,
     message: '获取成功',
@@ -2033,22 +2033,22 @@ export async function abandonBattle(
   battleId: string
 ): Promise<BattleResult> {
   const engine = activeBattles.get(battleId);
-  
+
   if (!engine) {
     return { success: false, message: '战斗不存在' };
   }
-  
+
   const state = engine.getState();
   const participants = (battleParticipants.get(battleId) || []).slice();
   const participantCharacterIds: number[] = [];
-  
+
   if (participants.length > 1 && state.teams.attacker.odwnerId !== userId) {
     return { success: false, message: '组队战斗只有队长可以逃跑' };
   }
   if (participants.length <= 1 && !participants.includes(userId) && state.teams.attacker.odwnerId !== userId) {
     return { success: false, message: '无权操作此战斗' };
   }
-  
+
   // 扣除所有参与者气血作为惩罚
   for (const participantUserId of participants) {
     const computed = await getCharacterComputedByUserId(participantUserId);
@@ -2071,7 +2071,7 @@ export async function abandonBattle(
   } catch (error) {
     console.warn('放弃战斗时竞技场结算失败:', error);
   }
-  
+
   try {
     const gameServer = getGameServer();
     for (const participantUserId of participants) {
@@ -2122,7 +2122,7 @@ export async function abandonBattle(
 export function cleanupExpiredBattles(): void {
   const now = Date.now();
   const maxAge = 30 * 60 * 1000; // 30分钟
-  
+
   for (const battleId of activeBattles.keys()) {
     const parts = String(battleId || '').split('-');
     let battleTime = 0;
@@ -2133,7 +2133,7 @@ export function cleanupExpiredBattles(): void {
       battleTime = Math.floor(n);
       break;
     }
-    
+
     if (!Number.isFinite(battleTime) || battleTime <= 0) continue;
     if (now - battleTime > maxAge) {
       activeBattles.delete(battleId);

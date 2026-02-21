@@ -45,7 +45,7 @@ interface BattleAreaProps {
 }
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
-const DEFAULT_BATTLE_START_COOLDOWN_MS = 2000;
+const DEFAULT_BATTLE_START_COOLDOWN_MS = 3000;
 
 /**
  * 低于此阈值的 retryAfterMs 视为"无意义冷却"，直接静默重试，不显示冷却提示。
@@ -237,12 +237,12 @@ const isTransientBattleActionError = (msg: unknown): boolean => {
   const text = String(msg ?? '').trim();
   if (!text) return false;
   if (TRANSIENT_BATTLE_ACTION_ERRORS.has(text)) return true;
-  return text.includes('目标不是有效的') || text.includes('行动回合');
+  // 战斗结束瞬间 auto-release 可能命中服务端技能冷却检查，属于瞬态错误
+  return text.includes('目标不是有效的') || text.includes('行动回合') || text.includes('冷却中');
 };
 
 const BattleArea: React.FC<BattleAreaProps> = ({
   enemies,
-  allies,
   onEscape,
   onTurnChange,
   onBindSkillCaster,
@@ -321,13 +321,7 @@ const BattleArea: React.FC<BattleAreaProps> = ({
   }, []);
 
   const getAutoNextDelayMs = useCallback((): number => {
-    const nextAvailableAt = nextBattleAvailableAtRef.current;
-    if (nextAvailableAt != null) {
-      const remaining = nextAvailableAt - Date.now();
-      if (remaining > 0) return remaining;
-      nextBattleAvailableAtRef.current = null;
-      return 0;
-    }
+    // 优先使用服务端同步的冷却时长（相对值），避免客户端/服务端时钟偏差导致延迟不准
     return Math.max(DEFAULT_BATTLE_START_COOLDOWN_MS, battleStartCooldownMsRef.current);
   }, []);
 
@@ -460,6 +454,10 @@ const BattleArea: React.FC<BattleAreaProps> = ({
       announcedAutoNextBattleIdRef.current = null;
       setIsTeamBattle(false);
       setTeamMemberCount(1);
+      // 先清空旧战斗状态，防止 auto-next useEffect 在 await 期间
+      // 看到旧的 finished state + 已清空的 announcedAutoNextBattleIdRef 而误弹提示
+      setBattleState(null);
+      setBattleId(null);
       setStartupStatus('preparing');
 
       if (monsterIds.length === 0) {
@@ -485,9 +483,10 @@ const BattleArea: React.FC<BattleAreaProps> = ({
           autoNextTimerRef.current = window.setTimeout(() => {
             void startBattle(monsterIds, { retryOnCooldown: true, silentCooldown: true });
           }, Math.max(0, retryAfterMs));
-          // 静默模式下不更新 startupStatus，避免触发 auto-next useEffect 重执行导致 UI 闪烁
+          // 静默模式：仍设 'cooldown' 保护 autoNextTimer 不被 auto-next useEffect 清理分支清掉，
+          // 但跳过 message.info 避免显示多余的冷却提示
+          setStartupStatus('cooldown');
           if (!effectivelySilent) {
-            setStartupStatus('cooldown');
             message.info(`冷却中，${(retryAfterMs / 1000).toFixed(2)}秒后自动重试`, Math.max(1, Math.ceil(retryAfterMs / 1000)));
           }
           setBattleId(null);
@@ -497,6 +496,20 @@ const BattleArea: React.FC<BattleAreaProps> = ({
           return;
         }
         if (!res?.success || !res.data?.battleId || !res.data?.state) {
+          // auto-next 触发时服务端可能还没清理完上一场战斗，静默短暂重试
+          const resMessage = String(res?.message ?? '').trim();
+          if (shouldRetryOnCooldown && resMessage === '角色正在战斗中') {
+            const retryMs = retryAfterMs ?? 500;
+            autoNextTimerRef.current = window.setTimeout(() => {
+              void startBattle(monsterIds, { retryOnCooldown: true, silentCooldown: true });
+            }, retryMs);
+            setStartupStatus('cooldown');
+            setBattleId(null);
+            setBattleState(null);
+            setResult('idle');
+            startingBattleRef.current = false;
+            return;
+          }
           message.error(res?.message || '战斗发起失败');
           setBattleId(null);
           setBattleState(null);
@@ -640,12 +653,14 @@ const BattleArea: React.FC<BattleAreaProps> = ({
     if (announcedAutoNextBattleIdRef.current === currentBattleId) return;
     announcedAutoNextBattleIdRef.current = currentBattleId;
     clearAutoNextTimer();
+
     const delayMs = getAutoNextDelayMs();
-    const delaySec = (delayMs / 1000).toFixed(2);
-    // 延迟低于阈值时静默触发，不显示无意义的"等待0.00秒"提示
-    const isMeaningfulDelay = delayMs >= MINIMUM_MEANINGFUL_COOLDOWN_DISPLAY_MS;
+    const delaySec = (delayMs / 1000).toFixed(1);
+    // 延迟低于阈值时静默触发，不显示无意义的"等待0.0秒"提示
+    const shouldShowMessage = delayMs >= MINIMUM_MEANINGFUL_COOLDOWN_DISPLAY_MS;
+
     if (onNext) {
-      if (isMeaningfulDelay) {
+      if (shouldShowMessage) {
         message.info(`战斗结束，等待${delaySec}秒后继续推进`, Math.max(1, Math.ceil(delayMs / 1000)));
       }
       autoNextTimerRef.current = window.setTimeout(() => {
@@ -665,7 +680,7 @@ const BattleArea: React.FC<BattleAreaProps> = ({
 
     if (resolvedExternalBattleId) return;
 
-    if (isMeaningfulDelay) {
+    if (shouldShowMessage) {
       message.info(`战斗结束，等待${delaySec}秒后开启下一场`, Math.max(1, Math.ceil(delayMs / 1000)));
     }
     autoNextTimerRef.current = window.setTimeout(() => {
@@ -872,22 +887,16 @@ const BattleArea: React.FC<BattleAreaProps> = ({
     if (Array.isArray(units)) {
       return units.map((u) => toClientUnit(u));
     }
-    if (!resolvedExternalBattleId && startupStatus !== 'none') {
-      return enemies ?? [];
-    }
     return [];
-  }, [battleState, enemies, resolvedExternalBattleId, startupStatus]);
+  }, [battleState]);
 
   const allyUnits = useMemo<BattleUnit[]>(() => {
     const units = battleState?.teams?.attacker?.units;
     if (Array.isArray(units)) {
       return units.map((u) => toClientUnit(u));
     }
-    if (!resolvedExternalBattleId && startupStatus !== 'none') {
-      return allies ?? [];
-    }
     return [];
-  }, [allies, battleState, resolvedExternalBattleId, startupStatus]);
+  }, [battleState]);
 
   const enemyAliveCount = useMemo(() => pickAlive(enemyUnits).length, [enemyUnits]);
   const allyAliveCount = useMemo(() => pickAlive(allyUnits).length, [allyUnits]);
