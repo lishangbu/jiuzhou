@@ -5,6 +5,7 @@
 import type { BattleState, BattleUnit, DamageResult } from '../types.js';
 import { BATTLE_CONSTANTS } from '../types.js';
 import { rollChance } from '../utils/random.js';
+import { calculateDefenseReductionRate } from './defense.js';
 
 interface DamageProfile {
   damageType: 'physical' | 'magic' | 'true';
@@ -49,11 +50,7 @@ export function calculateDamage(
 
   // 3. 防御减伤（真实伤害跳过）
   if (profile.damageType !== 'true') {
-    const defense = profile.damageType === 'physical' 
-      ? defender.currentAttrs.wufang 
-      : defender.currentAttrs.fafang;
-    const defenseConstant = getDefenseConstant(defender.currentAttrs.realm);
-    const defenseReduction = defense / (defense + defenseConstant);
+    const defenseReduction = calculateDefenseReductionRate(attacker, defender, profile.damageType);
     damage *= (1 - defenseReduction);
   }
 
@@ -146,14 +143,6 @@ export function applyDamage(
   }
 
   return { actualDamage, shieldAbsorbed: totalAbsorbed };
-}
-
-/**
- * 获取防御常数
- */
-function getDefenseConstant(realm?: string): number {
-  if (!realm) return BATTLE_CONSTANTS.DEFENSE_CONSTANT['凡人'];
-  return BATTLE_CONSTANTS.DEFENSE_CONSTANT[realm] || BATTLE_CONSTANTS.DEFENSE_CONSTANT['凡人'];
 }
 
 /**

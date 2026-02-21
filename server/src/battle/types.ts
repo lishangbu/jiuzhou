@@ -463,22 +463,10 @@ export const BATTLE_CONSTANTS = {
   MAX_ELEMENT_RESIST: 0.8,
   
   BASE_LINGQI_REGEN: 10,
-  
-  DEFENSE_CONSTANT: {
-    '凡人': 50,
-    '炼精化炁·养气期': 80,
-    '炼精化炁·通脉期': 100,
-    '炼精化炁·凝炁期': 120,
-    '炼炁化神·炼己期': 160,
-    '炼炁化神·采药期': 200,
-    '炼炁化神·结胎期': 250,
-    '炼神返虚·养神期': 320,
-    '炼神返虚·还虚期': 400,
-    '炼神返虚·合道期': 500,
-    '炼虚合道·证道期': 640,
-    '炼虚合道·历劫期': 800,
-    '炼虚合道·成圣期': 1000,
-  } as Record<string, number>,
+
+  // 防御减伤曲线参数：减伤 = 防御 / (防御 + 攻击 * 系数 + 常量偏移)
+  DEFENSE_ATTACK_FACTOR: 2.8,
+  DEFENSE_BASE_OFFSET: 60,
   
   ELEMENT_COUNTER: {
     'jin': 'mu',
