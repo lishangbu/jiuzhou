@@ -15,6 +15,7 @@ import type {
 } from './types.js';
 import { generateBattleSeed, getNextRandom } from './utils/random.js';
 import { getNormalAttack } from './modules/skill.js';
+import { normalizeRealmKeepingUnknown } from '../services/shared/realmRules.js';
 
 // 角色数据接口（来自数据库）
 export interface CharacterData {
@@ -22,6 +23,7 @@ export interface CharacterData {
   id: number;
   nickname: string;
   realm: string;
+  sub_realm?: string | null;
   attribute_element: string;
   qixue: number;
   max_qixue: number;
@@ -407,6 +409,7 @@ function createMonsterUnit(state: BattleState, data: MonsterData, skills: SkillD
  * 提取角色属性
  */
 function extractAttrs(data: CharacterData): BattleAttrs {
+  const normalizedRealm = normalizeRealmKeepingUnknown(data.realm, data.sub_realm);
   return {
     max_qixue: data.max_qixue,
     max_lingqi: data.max_lingqi,
@@ -434,7 +437,7 @@ function extractAttrs(data: CharacterData): BattleAttrs {
     tu_kangxing: data.tu_kangxing,
     qixue_huifu: data.qixue_huifu,
     lingqi_huifu: data.lingqi_huifu,
-    realm: data.realm,
+    realm: normalizedRealm,
     element: data.attribute_element,
   };
 }
