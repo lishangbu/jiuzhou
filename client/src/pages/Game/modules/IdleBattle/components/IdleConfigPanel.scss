@@ -179,6 +179,43 @@
 }
 
 // ============================================
+// 体力规则说明
+// ============================================
+
+// ============================================
+// 体力规则说明
+// ============================================
+
+.idle-config-stamina-info {
+  .idle-config-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .idle-config-stamina-icon {
+    font-size: 13px;
+    color: var(--text-color-secondary, #888);
+    cursor: pointer;
+
+    &:hover {
+      color: var(--primary-color);
+    }
+  }
+}
+
+.idle-config-stamina-rules {
+  margin: 0;
+  padding: 0 0 0 16px;
+  font-size: 12px;
+  line-height: 1.8;
+
+  li {
+    list-style: disc;
+  }
+}
+
+// ============================================
 // Stamina 警告
 // ============================================
 

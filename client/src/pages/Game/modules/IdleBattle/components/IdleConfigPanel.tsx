@@ -25,8 +25,8 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Button, Select, Slider, Tag, Tooltip } from 'antd';
-import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Button, Popover, Select, Slider, Tag, Tooltip } from 'antd';
+import { PlusOutlined, DeleteOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import { getEnabledMaps, getMapDetail, type MapDefLite, type MapRoom } from '../../../../../services/api/world';
 import { getCharacterTechniqueStatus } from '../../../../../services/api/technique';
 import { gameSocket } from '../../../../../services/gameSocket';
@@ -337,6 +337,26 @@ const IdleConfigPanel: React.FC<IdleConfigPanelProps> = ({
             </button>
           )}
         </div>
+      </div>
+
+      {/* 体力规则说明 */}
+      <div className="idle-config-section idle-config-stamina-info">
+        <label className="idle-config-label">
+          体力说明
+          <Popover
+            trigger="hover"
+            placement="topLeft"
+            content={
+              <ul className="idle-config-stamina-rules">
+                <li>每场战斗消耗 <strong>1 点</strong>体力，无论胜负</li>
+                <li>体力上限 <strong>100 点</strong>，最多可挂机 100 场</li>
+                <li>体力耗尽后挂机自动结束</li>
+              </ul>
+            }
+          >
+            <QuestionCircleOutlined className="idle-config-stamina-icon" />
+          </Popover>
+        </label>
       </div>
 
       {/* Stamina 提示 */}
