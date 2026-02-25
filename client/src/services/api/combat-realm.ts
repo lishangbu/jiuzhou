@@ -9,7 +9,8 @@ export type BattleStateDto = {
   };
   roundCount: number;
   currentTeam: 'attacker' | 'defender';
-  currentUnitIndex: number;
+  /** 当前应行动单位的 ID，null 表示当前队伍无可行动单位（回合开始/结束过渡期） */
+  currentUnitId: string | null;
   phase: 'roundStart' | 'action' | 'roundEnd' | 'finished';
   firstMover: 'attacker' | 'defender';
   logs: BattleLogEntryDto[];

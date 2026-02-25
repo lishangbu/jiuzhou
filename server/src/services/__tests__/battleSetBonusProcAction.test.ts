@@ -85,7 +85,7 @@ const createState = (attacker: BattleUnit, defender: BattleUnit): BattleState =>
   },
   roundCount: 1,
   currentTeam: 'attacker',
-  currentUnitIndex: 0,
+  currentUnitId: null,
   phase: 'action',
   firstMover: 'attacker',
   logs: [],

@@ -276,11 +276,13 @@ export function validatePlayerAction(
   
   const currentTeam = state.teams.attacker;
   
-  // 检查是否是当前应该行动的单位
-  const aliveUnits = currentTeam.units.filter(u => u.isAlive);
-  const currentUnit = aliveUnits[state.currentUnitIndex];
-  
-  if (!currentUnit || currentUnit.id !== unitId) {
+  // 用 currentUnitId 精确匹配，避免用下标索引在单位死亡后漂移
+  if (state.currentUnitId !== unitId) {
+    return { valid: false, error: '不是该单位的行动回合' };
+  }
+  // 确认单位仍存活且可行动（currentUnitId 可能指向已死亡单位）
+  const currentUnit = currentTeam.units.find(u => u.id === unitId && u.isAlive && u.canAct);
+  if (!currentUnit) {
     return { valid: false, error: '不是该单位的行动回合' };
   }
   

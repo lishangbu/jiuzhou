@@ -293,7 +293,12 @@ export interface BattleState {
   
   roundCount: number;
   currentTeam: 'attacker' | 'defender';
-  currentUnitIndex: number;
+  /**
+   * 当前应行动单位的 ID。
+   * 替代原 currentUnitIndex（数组下标），避免行动过程中有单位死亡导致列表缩短、
+   * 下标漂移、跳过后续单位的 bug。null 表示当前队伍无可行动单位。
+   */
+  currentUnitId: string | null;
   phase: 'roundStart' | 'action' | 'roundEnd' | 'finished';
   
   firstMover: 'attacker' | 'defender';

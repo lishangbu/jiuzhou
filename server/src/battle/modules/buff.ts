@@ -5,6 +5,7 @@
 import type { 
   BattleState, 
   BattleUnit, 
+  BattleAttrs,
   ActiveBuff, 
   DotEffect,
   HotEffect,
@@ -17,6 +18,10 @@ import { applyHealing } from './healing.js';
 
 /**
  * 添加Buff到单位
+ *
+ * 坑点1：刷新已有 Buff 时，若 stacks 发生变化，attrModifiers 的叠加值也会变化，
+ *        必须重新计算属性，否则 currentAttrs 会与实际 stacks 不一致。
+ * 坑点2：maxStacks=1 的 Buff 刷新时不叠层，但仍需刷新时间，属性无变化可跳过重算。
  */
 export function addBuff(
   unit: BattleUnit,
@@ -33,9 +38,13 @@ export function addBuff(
     // 刷新持续时间
     existing.remainingDuration = Math.max(existing.remainingDuration, duration);
     
-    // 叠加层数
+    // 叠加层数，并在层数实际变化时重算属性
     if (existing.maxStacks > 1) {
+      const prevStacks = existing.stacks;
       existing.stacks = Math.min(existing.stacks + stacks, existing.maxStacks);
+      if (existing.stacks !== prevStacks) {
+        recalculateUnitAttrs(unit);
+      }
     }
     
     return { added: false, refreshed: true };
@@ -71,15 +80,19 @@ export function removeBuff(unit: BattleUnit, buffId: string): boolean {
 
 /**
  * 添加护盾
+ *
+ * 坑点：护盾 ID 使用防作弊随机数生成器，与战斗内其他随机判定保持一致。
+ *       此处 ID 仅用于唯一标识，不影响战斗结果，但统一来源便于调试追踪。
  */
 export function addShield(
   unit: BattleUnit,
   shield: Omit<Shield, 'id'>,
   sourceSkillId: string
 ): void {
+  // 使用时间戳+计数器生成唯一ID，不依赖 Math.random()
   const newShield: Shield = {
     ...shield,
-    id: `shield-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    id: `shield-${sourceSkillId}-${Date.now()}-${unit.shields.length}`,
     sourceSkillId,
   };
   
@@ -211,41 +224,53 @@ function calculateHotHeal(hot: HotEffect, target: BattleUnit): number {
 
 /**
  * 重新计算单位属性
+ *
+ * 作用：从 baseAttrs 快照出发，叠加所有存活 Buff 的 attrModifiers，得到 currentAttrs。
+ * 数据流：baseAttrs（只读快照）→ flatMods/percentMods 累加 → currentAttrs（可变）。
+ * 坑点1：先叠加所有 flat，再叠加所有 percent，顺序不能颠倒，否则百分比基数会错。
+ * 坑点2：percent 修正以 baseAttrs 为基数（已在 flat 叠加后），不是对 currentAttrs 再乘，
+ *        当前实现是先 flat 后 percent，符合"基础值+固定值，再乘百分比"的标准公式。
  */
 function recalculateUnitAttrs(unit: BattleUnit): void {
   // 从基础属性开始
   unit.currentAttrs = { ...unit.baseAttrs };
   
   // 收集所有属性修正
-  const flatMods: Record<string, number> = {};
-  const percentMods: Record<string, number> = {};
+  const flatMods: Partial<Record<keyof BattleAttrs, number>> = {};
+  const percentMods: Partial<Record<keyof BattleAttrs, number>> = {};
   
   for (const buff of unit.buffs) {
     if (!buff.attrModifiers) continue;
     
     for (const mod of buff.attrModifiers) {
+      const attr = mod.attr as keyof BattleAttrs;
+      // 跳过非数值属性（realm、element 等字符串字段）
+      if (typeof unit.currentAttrs[attr] !== 'number') continue;
+
       const value = mod.value * buff.stacks;
       
       if (mod.mode === 'flat') {
-        flatMods[mod.attr] = (flatMods[mod.attr] || 0) + value;
+        flatMods[attr] = ((flatMods[attr] ?? 0)) + value;
       } else {
-        percentMods[mod.attr] = (percentMods[mod.attr] || 0) + value;
+        percentMods[attr] = ((percentMods[attr] ?? 0)) + value;
       }
     }
   }
   
   // 应用固定值修正
-  for (const [attr, value] of Object.entries(flatMods)) {
-    if (attr in unit.currentAttrs) {
-      (unit.currentAttrs as any)[attr] += value;
+  for (const [attr, value] of Object.entries(flatMods) as [string, number][]) {
+    const key = attr as keyof BattleAttrs;
+    if (typeof unit.currentAttrs[key] === 'number') {
+      (unit.currentAttrs[key] as number) += value;
     }
   }
   
   // 应用百分比修正
-  for (const [attr, value] of Object.entries(percentMods)) {
-    if (attr in unit.currentAttrs) {
-      (unit.currentAttrs as any)[attr] = Math.floor(
-        (unit.currentAttrs as any)[attr] * (1 + value)
+  for (const [attr, value] of Object.entries(percentMods) as [string, number][]) {
+    const key = attr as keyof BattleAttrs;
+    if (typeof unit.currentAttrs[key] === 'number') {
+      (unit.currentAttrs[key] as number) = Math.floor(
+        (unit.currentAttrs[key] as number) * (1 + value)
       );
     }
   }

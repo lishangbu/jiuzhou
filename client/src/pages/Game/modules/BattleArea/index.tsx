@@ -182,10 +182,8 @@ const toClientUnit = (u: {
 
 const getCurrentUnitId = (state: BattleStateDto | null): string | null => {
   if (!state) return null;
-  const team = state.teams[state.currentTeam];
-  const alive = (team?.units ?? []).filter((u) => u.isAlive);
-  const u = alive[state.currentUnitIndex];
-  return u?.id ?? null;
+  // 直接读服务端维护的 currentUnitId，不再用下标推算，避免客户端与服务端状态不一致
+  return state.currentUnitId ?? null;
 };
 
 const getPhaseRank = (phase: BattleStateDto['phase']): number => {
@@ -216,9 +214,9 @@ const isNewerBattleState = (next: BattleStateDto, current: BattleStateDto | null
   const currentRank = getPhaseRank(current.phase);
   if (nextRank !== currentRank) return nextRank > currentRank;
 
-  const nextIndex = Number(next.currentUnitIndex) || 0;
-  const currentIndex = Number(current.currentUnitIndex) || 0;
-  if (nextIndex !== currentIndex) return nextIndex > currentIndex;
+  const nextIndex = next.currentUnitId ?? '';
+  const currentIndex = current.currentUnitId ?? '';
+  if (nextIndex !== currentIndex) return true;
 
   const nextTeam = String(next.currentTeam || '');
   const currentTeam = String(current.currentTeam || '');
@@ -873,7 +871,7 @@ const BattleArea: React.FC<BattleAreaProps> = ({
   const turnSide: 'enemy' | 'ally' = battleState?.currentTeam === 'defender' ? 'enemy' : 'ally';
   const actionKey = useMemo(() => {
     if (!battleState) return 'idle';
-    return `${battleState.battleId}-${battleState.roundCount}-${battleState.currentTeam}-${battleState.currentUnitIndex}-${activeUnitId ?? ''}`;
+    return `${battleState.battleId}-${battleState.roundCount}-${battleState.currentTeam}-${battleState.currentUnitId ?? ''}-${activeUnitId ?? ''}`;
   }, [activeUnitId, battleState]);
 
   const battlePhase = battleState?.phase ?? null;

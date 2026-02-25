@@ -101,7 +101,7 @@ export class BattleEngine {
     // 初始化
     this.state.roundCount = 1;
     this.state.currentTeam = this.state.firstMover;
-    this.state.currentUnitIndex = 0;
+    this.state.currentUnitId = null;
     this.state.phase = 'roundStart';
     
     // 按速度排序队内单位
@@ -177,6 +177,8 @@ export class BattleEngine {
     // 检查是否有单位死亡（可能改变phase为finished）
     if (!this.checkBattleEnd()) {
       this.state.phase = 'action';
+      // 回合开始处理完毕后，将 currentUnitId 指向先手方第一个可行动单位
+      this.state.currentUnitId = this.getFirstActableUnitId(this.state.currentTeam);
     }
   }
   
@@ -462,40 +464,58 @@ export class BattleEngine {
   }
   
   /**
-   * 获取当前行动单位
+   * 获取当前行动单位。
+   *
+   * 设计说明：用 currentUnitId 而非数组下标定位，避免行动过程中有单位死亡导致
+   * 过滤列表缩短、下标漂移、跳过后续单位的 bug。
+   * - currentUnitId 为 null：当前队伍尚未分配行动单位，调用方需先调用 advanceAction 推进。
+   * - 找不到对应单位（已死亡/不可行动）：返回 null，由 advanceAction 跳过并推进。
    */
   getCurrentUnit(): BattleUnit | null {
+    if (!this.state.currentUnitId) return null;
     const team = this.state.teams[this.state.currentTeam];
-    const aliveUnits = team.units.filter(u => u.isAlive && u.canAct);
-    
-    if (this.state.currentUnitIndex >= aliveUnits.length) {
-      return null;
-    }
-    
-    return aliveUnits[this.state.currentUnitIndex];
+    const unit = team.units.find(u => u.id === this.state.currentUnitId);
+    if (!unit || !unit.isAlive || !unit.canAct) return null;
+    return unit;
   }
   
   /**
-   * 推进行动
+   * 推进行动：将 currentUnitId 移动到当前队伍下一个可行动单位。
+   *
+   * 坑点：不能用下标 +1，因为行动过程中可能有单位死亡导致列表缩短。
+   * 正确做法：找到当前单位在"全量列表"中的位置，向后扫描第一个存活且可行动的单位。
+   * 若当前队伍已无可行动单位，则切换队伍。
    */
   private advanceAction(): void {
-    // 检查战斗是否结束
     if (this.checkBattleEnd()) return;
-    
-    // 移动到下一个单位
-    this.state.currentUnitIndex++;
-    
+
     const team = this.state.teams[this.state.currentTeam];
-    const aliveUnits = team.units.filter(u => u.isAlive && u.canAct);
-    
-    // 当前方所有单位行动完毕
-    if (this.state.currentUnitIndex >= aliveUnits.length) {
+
+    // 在全量列表中找到当前单位的位置，向后找下一个可行动单位
+    const currentIdx = this.state.currentUnitId
+      ? team.units.findIndex(u => u.id === this.state.currentUnitId)
+      : -1;
+
+    let nextUnit: BattleUnit | null = null;
+    for (let i = currentIdx + 1; i < team.units.length; i++) {
+      const u = team.units[i];
+      if (u.isAlive && u.canAct) {
+        nextUnit = u;
+        break;
+      }
+    }
+
+    if (nextUnit) {
+      this.state.currentUnitId = nextUnit.id;
+    } else {
+      // 当前队伍所有单位行动完毕
+      this.state.currentUnitId = null;
       this.switchTeam();
     }
   }
   
   /**
-   * 切换行动方
+   * 切换行动方，并将 currentUnitId 指向新队伍第一个可行动单位。
    */
   private switchTeam(): void {
     const secondMover = this.state.firstMover === 'attacker' ? 'defender' : 'attacker';
@@ -503,11 +523,19 @@ export class BattleEngine {
     if (this.state.currentTeam === this.state.firstMover) {
       // 先手方行动完毕，切换到后手方
       this.state.currentTeam = secondMover;
-      this.state.currentUnitIndex = 0;
+      this.state.currentUnitId = this.getFirstActableUnitId(secondMover);
     } else {
       // 后手方行动完毕，回合结束
       this.processRoundEnd();
     }
+  }
+
+  /**
+   * 获取指定队伍第一个可行动单位的 ID，无则返回 null。
+   */
+  private getFirstActableUnitId(teamKey: 'attacker' | 'defender'): string | null {
+    const unit = this.state.teams[teamKey].units.find(u => u.isAlive && u.canAct);
+    return unit?.id ?? null;
   }
   
   /**
@@ -551,7 +579,7 @@ export class BattleEngine {
     // 开始新回合
     this.state.roundCount++;
     this.state.currentTeam = this.state.firstMover;
-    this.state.currentUnitIndex = 0;
+    this.state.currentUnitId = null;
     
     // 重新计算速度总和（可能因Buff变化）
     this.updateTeamSpeed();
