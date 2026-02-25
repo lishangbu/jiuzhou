@@ -171,7 +171,7 @@ function snapshotToCharacterData(
   return {
     user_id: userId,
     id: snapshot.characterId,
-    nickname: String(snapshot.characterId),
+    nickname: snapshot.nickname || '无名修士',
     realm: snapshot.realm,
     attribute_element: (a as { element?: string }).element ?? 'none',
     qixue: a.max_qixue ?? 0,

@@ -77,6 +77,8 @@ export interface AutoSkillSlot {
  */
 export interface SessionSnapshot {
   characterId: number;
+  /** 角色昵称（用于战斗日志中显示玩家名，而非 characterId） */
+  nickname: string;
   realm: string;
   baseAttrs: import('../../battle/types.js').BattleAttrs;
   skills: import('../../battle/types.js').BattleSkill[];

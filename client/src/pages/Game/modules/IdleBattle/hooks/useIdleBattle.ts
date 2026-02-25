@@ -19,8 +19,7 @@
  * 关键边界条件：
  *   1. 断线检测：监听 gameSocket 连接状态，断线超过 RECONNECT_PROGRESS_DELAY_MS 后
  *      自动调用 getIdleProgress 补全进度（避免频繁请求）
- *   2. 未查看会话检测：mount 时若 activeSession 为 null 但 history 中有 viewedAt=null 的记录，
- *      自动设置 selectedSession 触发回放弹窗
+ *   2. 不自动弹出未读回放弹窗，由玩家主动点击历史记录查看
  *   3. Socket 事件只更新内存状态，不重新请求 DB（减少服务端压力）
  *   4. saveConfig 与 startIdle 均为乐观更新：先更新本地状态，失败时回滚
  */
@@ -224,20 +223,6 @@ export function useIdleBattle(): UseIdleBattleReturn {
     return unsubscribeError;
   }, []);
 
-  // ============================================
-  // 未查看会话检测：mount 后检查历史中是否有未查看记录
-  // ============================================
-
-  useEffect(() => {
-    if (history.length === 0) return;
-    // 若当前无活跃会话，且历史中有未查看记录，自动选中最新一条触发回放弹窗
-    if (!activeSession) {
-      const unviewed = history.find((s) => s.viewedAt === null);
-      if (unviewed) {
-        setSelectedSession(unviewed);
-      }
-    }
-  }, [history, activeSession]);
 
   // ============================================
   // 配置管理

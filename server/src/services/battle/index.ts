@@ -2284,6 +2284,7 @@ export async function buildCharacterBattleSnapshot(characterId: number): Promise
   skills: BattleSkill[];
   setBonusEffects: BattleSetBonusEffect[];
   realm: string;
+  nickname: string;
 } | null> {
   const base = await getCharacterComputedByCharacterId(characterId);
   if (!base) return null;
@@ -2346,6 +2347,7 @@ export async function buildCharacterBattleSnapshot(characterId: number): Promise
     skills,
     setBonusEffects: characterData.setBonusEffects ?? [],
     realm: String(characterData.realm || '凡人'),
+    nickname: String(characterData.nickname || '无名修士'),
   };
 }
 

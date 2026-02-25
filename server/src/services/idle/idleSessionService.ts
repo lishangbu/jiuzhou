@@ -196,6 +196,7 @@ export async function startIdleSession(params: StartIdleSessionParams): Promise<
 
     const snapshot: SessionSnapshot = {
       characterId,
+      nickname: snapshotData.nickname,
       realm: snapshotData.realm,
       baseAttrs: snapshotData.baseAttrs,
       skills: snapshotData.skills,
