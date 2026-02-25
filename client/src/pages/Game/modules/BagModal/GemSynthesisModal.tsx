@@ -30,6 +30,92 @@ const clampSynthesizeTimes = (value: number, maxValue: number): number => {
   return Math.min(safeMax, Math.max(1, Math.floor(value)));
 };
 
+interface BatchEstimate {
+  /** 各等级预估产出/余量，level 升序；最后一项为目标等级产出，其余为中间余量 */
+  byLevel: Array<{ level: number; count: number }>;
+  /** 预估消耗银两 */
+  silver: number;
+  /** 预估消耗灵石 */
+  spiritStones: number;
+}
+
+const EMPTY_ESTIMATE: BatchEstimate = { byLevel: [], silver: 0, spiritStones: 0 };
+
+/**
+ * 预估快捷合成的产出数量与消耗
+ *
+ * 逐级模拟合成链：从1级到目标等级，每一步根据持有材料、货币、成功率计算期望产出，
+ * 上一步的产出会累加到下一步的可用材料中。
+ *
+ * 输入：该系列的配方列表、目标等级、当前钱包
+ * 输出：{ output: 预估产出数, silver: 预估银两消耗, spiritStones: 预估灵石消耗 }
+ *
+ * 边界：
+ * - 某一级配方缺失时链条中断，返回全0
+ * - 货币不足时会限制合成次数
+ */
+const estimateBatchOutput = (
+  seriesRecipes: GemSynthesisRecipeDto[],
+  targetLevel: number,
+  wallet: { silver: number; spiritStones: number } | null,
+): BatchEstimate => {
+  const zero: BatchEstimate = EMPTY_ESTIMATE;
+  if (!wallet || seriesRecipes.length === 0 || targetLevel < 2) return zero;
+
+  /* 构建 fromLevel → recipe 映射 */
+  const recipeByFromLevel = new Map<number, GemSynthesisRecipeDto>();
+  for (const r of seriesRecipes) {
+    if (!recipeByFromLevel.has(r.fromLevel)) {
+      recipeByFromLevel.set(r.fromLevel, r);
+    }
+  }
+
+  let carry = 0; /* 上一步产出的宝石数 */
+  let remainingSilver = wallet.silver;
+  let remainingSpiritStones = wallet.spiritStones;
+  let totalSilver = 0;
+  let totalSpiritStones = 0;
+  const byLevel: Array<{ level: number; count: number }> = [];
+
+  for (let fromLv = 1; fromLv < targetLevel; fromLv++) {
+    const recipe = recipeByFromLevel.get(fromLv);
+    if (!recipe) return EMPTY_ESTIMATE; /* 链条中断 */
+
+    const available = recipe.input.owned + carry;
+    const maxByGems = recipe.input.qty > 0 ? Math.floor(available / recipe.input.qty) : 0;
+    const maxBySilver = recipe.costs.silver > 0 ? Math.floor(remainingSilver / recipe.costs.silver) : maxByGems;
+    const maxBySpirit = recipe.costs.spiritStones > 0 ? Math.floor(remainingSpiritStones / recipe.costs.spiritStones) : maxByGems;
+    const times = Math.max(0, Math.min(maxByGems, maxBySilver, maxBySpirit));
+
+    /* 记录该等级消耗后的余量 */
+    const consumed = times * recipe.input.qty;
+    const remainder = available - consumed;
+    if (remainder > 0) {
+      byLevel.push({ level: fromLv, count: remainder });
+    }
+
+    const silverCost = times * recipe.costs.silver;
+    const spiritCost = times * recipe.costs.spiritStones;
+    remainingSilver -= silverCost;
+    remainingSpiritStones -= spiritCost;
+    totalSilver += silverCost;
+    totalSpiritStones += spiritCost;
+
+    /* 期望产出 = 次数 × 成功率 × 每次产出数量（保守取 floor） */
+    carry = Math.floor(times * recipe.successRate) * recipe.output.qty;
+    if (carry <= 0) {
+      return { byLevel, silver: totalSilver, spiritStones: totalSpiritStones };
+    }
+  }
+
+  /* 目标等级的产出 */
+  if (carry > 0) {
+    byLevel.push({ level: targetLevel, count: carry });
+  }
+
+  return { byLevel, silver: totalSilver, spiritStones: totalSpiritStones };
+};
+
 /**
  * 从配方列表中提取系列选项
  * 按 seriesKey 分组，取每组最低等级配方的输出名称去掉等级后缀作为系列显示名
@@ -162,6 +248,13 @@ const GemSynthesisModal: React.FC<GemSynthesisModalProps> = ({ open, onClose, on
     }
   }, [targetLevel, batchTargetLevelOptions]);
 
+  /* 预估能合成多少个目标等级宝石及消耗 */
+  const batchEstimate = useMemo((): BatchEstimate => {
+    if (!batchSeriesKey) return EMPTY_ESTIMATE;
+    const seriesRecipes = filteredRecipes.filter((r) => r.seriesKey === batchSeriesKey);
+    return estimateBatchOutput(seriesRecipes, targetLevel, wallet);
+  }, [batchSeriesKey, filteredRecipes, targetLevel, wallet]);
+
   /* ========== 单次合成派生数据 ========== */
 
   const selectedRecipe = useMemo(() => {
@@ -292,27 +385,21 @@ const GemSynthesisModal: React.FC<GemSynthesisModalProps> = ({ open, onClose, on
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无可用宝石配方" />
             ) : (
               <div className="bag-gem-quick-form">
-                <div className="bag-gem-quick-field">
-                  <span className="bag-gem-quick-label">宝石系列</span>
+                <div className="bag-gem-quick-row">
                   <Select
                     value={batchSeriesKey || undefined}
                     options={seriesOptions}
                     onChange={(value) => setBatchSeriesKey(String(value))}
                     placeholder="选择系列"
-                    style={{ width: 200 }}
+                    className="bag-gem-quick-series"
                   />
-                </div>
-                <div className="bag-gem-quick-field">
-                  <span className="bag-gem-quick-label">目标等级</span>
                   <Select
                     value={targetLevel}
                     options={batchTargetLevelOptions}
                     onChange={(value) => setTargetLevel(Number(value) || 2)}
                     placeholder="目标等级"
-                    style={{ width: 200 }}
+                    className="bag-gem-quick-target"
                   />
-                </div>
-                <div className="bag-gem-quick-field">
                   <Button
                     type="primary"
                     disabled={!canBatch}
@@ -322,6 +409,26 @@ const GemSynthesisModal: React.FC<GemSynthesisModalProps> = ({ open, onClose, on
                     快捷合成
                   </Button>
                 </div>
+                {batchSeriesKey && batchTargetLevelOptions.length > 0 ? (
+                  <div className="bag-gem-quick-estimate">
+                    <span className="bag-gem-quick-estimate-label">预估产出</span>
+                    <span className="bag-gem-quick-estimate-levels">
+                      {batchEstimate.byLevel.length > 0
+                        ? batchEstimate.byLevel.map((item) => (
+                            <span key={item.level} className={item.level === targetLevel ? 'is-target' : 'is-remainder'}>
+                              {item.level}级×{item.count}
+                            </span>
+                          ))
+                        : <span className="is-empty">无法合成</span>}
+                    </span>
+                    {batchEstimate.silver > 0 ? (
+                      <span>消耗银两 <strong>{batchEstimate.silver.toLocaleString()}</strong></span>
+                    ) : null}
+                    {batchEstimate.spiritStones > 0 ? (
+                      <span>消耗灵石 <strong>{batchEstimate.spiritStones.toLocaleString()}</strong></span>
+                    ) : null}
+                  </div>
+                ) : null}
                 <div className="bag-gem-quick-hint">
                   自动使用低级宝石逐级合成到目标等级，6级以上存在失败率。
                 </div>

@@ -1021,28 +1021,67 @@
 .bag-gem-quick-form {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   width: 100%;
-  max-width: 400px;
 }
 
-.bag-gem-quick-field {
+.bag-gem-quick-row {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
-.bag-gem-quick-label {
-  flex-shrink: 0;
+/* 桌面端：系列选择器撑满剩余空间，目标等级固定宽度 */
+.bag-gem-quick-series {
+  flex: 1;
+  min-width: 120px;
+}
+
+.bag-gem-quick-target {
+  width: 100px;
+}
+
+.bag-gem-quick-estimate {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
   font-size: 13px;
   color: var(--text-secondary);
-  width: 60px;
+
+  strong {
+    color: var(--text-color);
+  }
+}
+
+.bag-gem-quick-estimate-label {
+  flex-shrink: 0;
+}
+
+.bag-gem-quick-estimate-levels {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+
+  .is-target {
+    color: var(--text-color);
+    font-weight: 700;
+  }
+
+  .is-remainder {
+    color: var(--text-secondary);
+  }
+
+  .is-empty {
+    color: #ff7875;
+  }
 }
 
 .bag-gem-quick-hint {
   color: var(--text-secondary);
   font-size: 12px;
-  margin-top: 4px;
 }
 
 @media screen and (max-width: 768px) {
@@ -1079,5 +1118,28 @@
 
   .bag-gem-quick-form {
     max-width: 100%;
+  }
+
+  .bag-gem-quick-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* 移动端：覆盖桌面端固定宽度，两个 Select 都撑满 */
+  .bag-gem-quick-series,
+  .bag-gem-quick-target {
+    width: 100% !important;
+    min-width: 0;
+    flex: none;
+  }
+
+  .bag-gem-quick {
+    padding: 14px;
+    min-height: auto;
+  }
+
+  .bag-gem-quick-estimate {
+    gap: 8px;
+    font-size: 12px;
   }
 }
