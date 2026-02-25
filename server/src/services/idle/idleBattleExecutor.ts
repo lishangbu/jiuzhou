@@ -35,6 +35,7 @@ import { query } from '../../config/database.js';
 import { createPVEBattle, type CharacterData, type SkillData } from '../../battle/battleFactory.js';
 import { BattleEngine, type PlayerSkillSelector } from '../../battle/battleEngine.js';
 import { quickDistributeRewards, type BattleParticipant } from '../battleDropService.js';
+import { BATTLE_TICK_MS, BATTLE_START_COOLDOWN_MS } from '../battle/index.js';
 import { applyStaminaRecoveryByCharacterId } from '../staminaService.js';
 import { getGameServer } from '../../game/gameServer.js';
 import { getRoomInMap } from '../mapService.js';
@@ -53,12 +54,6 @@ import {
 // ============================================
 // 常量
 // ============================================
-
-/** 每场战斗开始前的冷却时间（ms）— 与正常战斗的 BATTLE_START_COOLDOWN_MS 对齐 */
-const BATTLE_START_COOLDOWN_MS = 3_000;
-
-/** 每回合耗时（ms）— 与正常战斗的 BATTLE_TICK_MS 对齐 */
-const BATTLE_TICK_MS = 650;
 
 /**
  * 缓冲区积累多少场后触发 flush（场数阈值）
