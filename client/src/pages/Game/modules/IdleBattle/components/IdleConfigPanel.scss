@@ -1,0 +1,177 @@
+/**
+ * IdleConfigPanel 样式
+ *
+ * 复用项目 CSS 变量体系（--panel-bg、--text-color、--border-color-soft 等）
+ * 深色主题通过 body.theme-dark 覆盖
+ */
+
+.idle-config-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  background: var(--panel-bg);
+  border-radius: 8px;
+  border: 1px solid var(--border-color-soft);
+  color: var(--text-color);
+}
+
+// ============================================
+// 行布局
+// ============================================
+
+.idle-config-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  &--skills {
+    gap: 8px;
+  }
+}
+
+.idle-config-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-color-secondary, #888);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.idle-config-label-hint {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-color-tertiary, #aaa);
+}
+
+.idle-config-select {
+  width: 100%;
+}
+
+// ============================================
+// 时长选择
+// ============================================
+
+.idle-config-duration {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.idle-config-duration-custom {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  // Slider 占满剩余空间
+  .ant-slider {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+// ============================================
+// 技能槽位
+// ============================================
+
+.idle-skill-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.idle-skill-slot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--panel-bg-soft, rgba(0, 0, 0, 0.03));
+  border: 1px solid var(--border-color-soft);
+  border-radius: 6px;
+}
+
+.idle-skill-slot-priority {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--primary-color, #1677ff);
+  min-width: 20px;
+  text-align: center;
+}
+
+.idle-skill-slot-id {
+  flex: 1;
+  min-width: 0;
+}
+
+.idle-skill-slot-prio {
+  width: 110px;
+  flex-shrink: 0;
+}
+
+// ============================================
+// Stamina 警告
+// ============================================
+
+.idle-config-stamina-warn {
+  font-size: 12px;
+  color: var(--color-warning, #faad14);
+  padding: 6px 10px;
+  background: var(--color-warning-bg, rgba(250, 173, 20, 0.08));
+  border: 1px solid var(--color-warning-border, rgba(250, 173, 20, 0.3));
+  border-radius: 6px;
+}
+
+// ============================================
+// 操作按钮区
+// ============================================
+
+.idle-config-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+// ============================================
+// 移动端适配
+// ============================================
+
+@media (max-width: 640px) {
+  .idle-config-panel {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .idle-config-duration-custom {
+    flex-direction: column;
+    align-items: stretch;
+
+    .ant-slider {
+      width: 100%;
+    }
+  }
+
+  .idle-skill-slot {
+    flex-wrap: wrap;
+  }
+
+  .idle-skill-slot-prio {
+    width: 100%;
+  }
+}
+
+// ============================================
+// 深色主题
+// ============================================
+
+body.theme-dark {
+  .idle-skill-slot {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .idle-config-stamina-warn {
+    background: rgba(250, 173, 20, 0.12);
+    border-color: rgba(250, 173, 20, 0.4);
+  }
+}

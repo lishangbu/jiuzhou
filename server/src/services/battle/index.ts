@@ -2227,3 +2227,104 @@ export async function onUserLeaveTeam(userId: number): Promise<void> {
   }
 }
 
+
+// ============================================
+// 离线挂机系统：角色战斗快照构建
+// ============================================
+
+/**
+ * 构建角色战斗快照（供 IdleSessionService 调用）
+ *
+ * 作用：
+ *   将角色当前属性、技能列表、套装效果打包为 SessionSnapshot 所需的字段。
+ *   复用 getCharacterBattleSkillData（内部函数）和 attachSetBonusEffectsToCharacterData，
+ *   不重复实现属性加载逻辑。
+ *
+ * 输入/输出：
+ *   - characterId: number — 角色 ID
+ *   返回：{ baseAttrs, skills, setBonusEffects, realm } 或 null（角色不存在）
+ *
+ * 关键边界条件：
+ *   1. 快照在 startIdleSession 时一次性生成，后续战斗均使用此快照，不随角色实时属性变化
+ *   2. setBonusEffects 包含套装效果和词缀效果（与在线战斗保持一致）
+ */
+export async function buildCharacterBattleSnapshot(characterId: number): Promise<{
+  baseAttrs: BattleAttrs;
+  skills: BattleSkill[];
+  setBonusEffects: BattleSetBonusEffect[];
+  realm: string;
+} | null> {
+  const base = await getCharacterComputedByCharacterId(characterId);
+  if (!base) return null;
+
+  const characterData = await attachSetBonusEffectsToCharacterData(characterId, base as CharacterData);
+  const skillDataList = await getCharacterBattleSkillData(characterId);
+
+  const baseAttrs: BattleAttrs = {
+    max_qixue: characterData.max_qixue,
+    max_lingqi: characterData.max_lingqi,
+    wugong: characterData.wugong,
+    fagong: characterData.fagong,
+    wufang: characterData.wufang,
+    fafang: characterData.fafang,
+    sudu: characterData.sudu,
+    mingzhong: characterData.mingzhong,
+    shanbi: characterData.shanbi,
+    zhaojia: characterData.zhaojia,
+    baoji: characterData.baoji,
+    baoshang: characterData.baoshang,
+    kangbao: characterData.kangbao,
+    zengshang: characterData.zengshang,
+    zhiliao: characterData.zhiliao,
+    jianliao: characterData.jianliao,
+    xixue: characterData.xixue,
+    lengque: characterData.lengque,
+    kongzhi_kangxing: characterData.kongzhi_kangxing,
+    jin_kangxing: characterData.jin_kangxing,
+    mu_kangxing: characterData.mu_kangxing,
+    shui_kangxing: characterData.shui_kangxing,
+    huo_kangxing: characterData.huo_kangxing,
+    tu_kangxing: characterData.tu_kangxing,
+    qixue_huifu: characterData.qixue_huifu,
+    lingqi_huifu: characterData.lingqi_huifu,
+    realm: normalizeRealmKeepingUnknown(characterData.realm, null),
+    element: characterData.attribute_element,
+  };
+
+  // 复用 convertSkillData 的转换逻辑（内联，因为 convertSkillData 未导出）
+  const skills: BattleSkill[] = skillDataList.map((data) => ({
+    id: data.id,
+    name: data.name,
+    source: 'innate' as const,
+    cost: {
+      lingqi: data.cost_lingqi || 0,
+      qixue: data.cost_qixue || 0,
+    },
+    cooldown: data.cooldown || 0,
+    targetType: (data.target_type || 'single_enemy') as BattleSkill['targetType'],
+    targetCount: data.target_count || 1,
+    damageType: data.damage_type as BattleSkill['damageType'],
+    element: data.element || 'none',
+    effects: data.effects || [],
+    triggerType: 'active' as const,
+    aiPriority: data.ai_priority || 50,
+  }));
+
+  return {
+    baseAttrs,
+    skills,
+    setBonusEffects: characterData.setBonusEffects ?? [],
+    realm: String(characterData.realm || '凡人'),
+  };
+}
+
+/**
+ * 解析怪物 ID 列表为战斗所需的 MonsterData[] 和 monsterSkillsMap
+ *
+ * 复用点：供 IdleBattleExecutor 构建战斗状态时使用，避免重复实现怪物解析逻辑。
+ * 输入：怪物 ID 字符串数组
+ * 输出：{ success, monsters, monsterSkillsMap } 或 { success: false, error }
+ */
+export function resolveMonsterDataForBattle(monsterIds: string[]): OrderedMonstersResolveResult {
+  return resolveOrderedMonsters(monsterIds);
+}

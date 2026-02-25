@@ -1,0 +1,141 @@
+/**
+ * IdleStatusIndicator 样式
+ * 设计为嵌入 game-header 右侧区域的紧凑型指示器
+ */
+
+.idle-status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color-soft);
+  background: var(--panel-bg-soft, rgba(0, 0, 0, 0.04));
+  color: var(--text-color);
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+
+  &:hover {
+    background: var(--panel-bg-hover, rgba(0, 0, 0, 0.08));
+    border-color: var(--primary-color, #1677ff);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color, #1677ff);
+    outline-offset: 2px;
+  }
+
+  &.is-stopping {
+    opacity: 0.7;
+    cursor: default;
+  }
+}
+
+.idle-status-icon {
+  font-size: 13px;
+  color: var(--primary-color, #1677ff);
+  display: flex;
+  align-items: center;
+}
+
+.idle-status-elapsed {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  min-width: 36px;
+}
+
+.idle-status-tag {
+  // 覆盖 antd Tag 默认 margin
+  margin: 0 !important;
+  font-size: 11px;
+  line-height: 18px;
+  padding: 0 5px;
+}
+
+.idle-status-stamina {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-color-secondary, #888);
+  font-size: 11px;
+}
+
+// 背包满警告红点
+.idle-status-bag-full {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-error, #ff4d4f);
+  flex-shrink: 0;
+}
+
+// ============================================
+// Tooltip 内容样式
+// ============================================
+
+.idle-status-tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+  font-size: 12px;
+}
+
+.idle-status-tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+
+  span:first-child {
+    color: rgba(255, 255, 255, 0.65);
+    flex-shrink: 0;
+  }
+
+  span:last-child {
+    color: #fff;
+    text-align: right;
+  }
+}
+
+.idle-status-tooltip-warn {
+  color: var(--color-warning, #faad14);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+// ============================================
+// 移动端适配
+// ============================================
+
+@media (max-width: 640px) {
+  .idle-status-indicator {
+    padding: 3px 6px;
+    gap: 4px;
+  }
+
+  .idle-status-elapsed {
+    min-width: 28px;
+  }
+
+  // 移动端隐藏 Stamina 数值，节省空间
+  .idle-status-stamina {
+    display: none;
+  }
+}
+
+// ============================================
+// 深色主题
+// ============================================
+
+body.theme-dark {
+  .idle-status-indicator {
+    background: rgba(255, 255, 255, 0.06);
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+  }
+}

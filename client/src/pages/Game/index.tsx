@@ -28,6 +28,7 @@ import SettingModal from './modules/SettingModal';
 import RealmModal from './modules/RealmModal';
 import WarehouseModal from './modules/WarehouseModal';
 import SignInModal from './modules/SignInModal';
+import { useIdleBattle, IdleBattlePanel, IdleBattleStatusBar } from './modules/IdleBattle';
 import { gameSocket, type CharacterData } from '../../services/gameSocket';
 import {
   acceptTaskFromNpc,
@@ -670,6 +671,10 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const [showSignInDot, setShowSignInDot] = useState(false);
   const [mailModalOpen, setMailModalOpen] = useState(false);
   const [settingModalOpen, setSettingModalOpen] = useState(false);
+  // 挂机面板 Modal 开关
+  const [idleModalOpen, setIdleModalOpen] = useState(false);
+  // 挂机状态 Hook（顶层单例，IdleBattlePanel 和 IdleBattleStatusBar 共享同一实例）
+  const idle = useIdleBattle();
   const [npcTalkOpen, setNpcTalkOpen] = useState(false);
   const [npcTalkNpcId, setNpcTalkNpcId] = useState('');
   const [npcTalkLoading, setNpcTalkLoading] = useState(false);
@@ -1636,6 +1641,12 @@ const Game: FC<GameProps> = ({ onLogout }) => {
 
         <div className="game-header-right">
           {gatherAction.running ? <GatherProgressHeader gatherAction={gatherAction} onStop={stopGatherLoop} /> : null}
+          {/* 挂机状态指示器：仅在活跃会话时显示 */}
+          <IdleBattleStatusBar
+            idle={idle}
+            stamina={character?.stamina ?? 0}
+            onOpenPanel={() => setIdleModalOpen(true)}
+          />
 
           <div className="game-header-currency">
             <img className="game-header-currency-icon" src={lingshi} alt="灵石" />
@@ -1854,6 +1865,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                   setAchievementModalOpen(true);
                   void refreshAchievementIndicator();
                 }
+                if (key === 'idle') setIdleModalOpen(true);
                 if (key === 'battle-report') setMobileChatDrawerOpen(true);
                 if (key === 'character') setPlayerInfoOpen(true);
               }}
@@ -2541,6 +2553,21 @@ const Game: FC<GameProps> = ({ onLogout }) => {
           }}
         />
       )}
+      {/* 挂机面板 Modal */}
+      <Modal
+        open={idleModalOpen}
+        onCancel={() => setIdleModalOpen(false)}
+        footer={null}
+        title="离线挂机"
+        width={560}
+        centered
+        destroyOnHidden
+      >
+        <IdleBattlePanel
+          idle={idle}
+          stamina={character?.stamina ?? 0}
+        />
+      </Modal>
     </div>
   );
 };

@@ -26,6 +26,7 @@ import mainQuestRoutes from '../routes/mainQuestRoutes.js';
 import arenaRoutes from '../routes/arenaRoutes.js';
 import achievementRoutes from '../routes/achievementRoutes.js';
 import titleRoutes from '../routes/titleRoutes.js';
+import idleRoutes from '../routes/idleRoutes.js';
 
 /**
  * 统一注册 HTTP 路由。
@@ -59,6 +60,7 @@ export const registerRoutes = (app: Express): void => {
   app.use('/api/arena', arenaRoutes);
   app.use('/api/achievement', achievementRoutes);
   app.use('/api/title', titleRoutes);
+  app.use('/api/idle', idleRoutes);
 
   app.get('/', (_req: Request, res: Response) => {
     res.json({

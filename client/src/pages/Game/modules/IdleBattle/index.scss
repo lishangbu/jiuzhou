@@ -1,0 +1,13 @@
+/**
+ * IdleBattleModule 模块级样式
+ */
+
+.idle-battle-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.idle-battle-error {
+  border-radius: 6px;
+}

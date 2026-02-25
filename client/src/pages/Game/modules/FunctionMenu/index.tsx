@@ -17,6 +17,7 @@ import {
   AppstoreOutlined,
   ExperimentOutlined,
   ToolOutlined,
+  ClockCircleOutlined,
 } from '@ant-design/icons';
 import { useMemo, useState } from 'react';
 import { useIsMobile } from '../../shared/responsive';
@@ -65,6 +66,7 @@ const FunctionMenu: React.FC<FunctionMenuProps> = ({ onAction, indicators }) => 
       { key: 'arena', icon: <TrophyOutlined />, label: '竞技' },
       { key: 'rank', icon: <BarChartOutlined />, label: '排行' },
       { key: 'achievement', icon: <CrownOutlined />, label: '成就' },
+      { key: 'idle', icon: <ClockCircleOutlined />, label: '挂机' },
     ];
     if (isMobile) {
       items.unshift({ key: 'battle-report', icon: <MessageOutlined />, label: '战况' });

@@ -129,6 +129,35 @@ export interface ChatMessageDto {
 type ChatMessageListener = (message: ChatMessageDto) => void;
 type ChatErrorListener = (error: { message: string }) => void;
 
+// ============================================
+// 挂机战斗 Socket 事件类型
+// ============================================
+
+/**
+ * idle:update — 每场战斗完成后服务端推送的收益摘要
+ * 复用点：useIdleBattle Hook 订阅此事件更新实时状态
+ */
+export interface IdleUpdatePayload {
+  sessionId: string;
+  batchIndex: number;
+  result: 'attacker_win' | 'defender_win' | 'draw';
+  expGained: number;
+  silverGained: number;
+  itemsGained: Array<{ itemDefId: string; itemName: string; quantity: number }>;
+  roundCount: number;
+}
+
+/**
+ * idle:finished — 挂机会话结束时推送（时长超限/Stamina 耗尽/用户停止）
+ */
+export interface IdleFinishedPayload {
+  sessionId: string;
+  reason: 'duration_exceeded' | 'stamina_exhausted' | 'user_stopped' | 'session_not_found';
+}
+
+type IdleUpdateListener = (data: IdleUpdatePayload) => void;
+type IdleFinishedListener = (data: IdleFinishedPayload) => void;
+
 export interface OnlinePlayerDto {
   id: number;
   nickname: string;
@@ -154,6 +183,8 @@ class GameSocketService {
   private chatMessageListeners: Set<ChatMessageListener> = new Set();
   private chatErrorListeners: Set<ChatErrorListener> = new Set();
   private onlinePlayersListeners: Set<OnlinePlayersListener> = new Set();
+  private idleUpdateListeners: Set<IdleUpdateListener> = new Set();
+  private idleFinishedListeners: Set<IdleFinishedListener> = new Set();
   private currentCharacter: CharacterData | null = null;
   private currentOnlinePlayers: OnlinePlayersPayloadDto | null = null;
   private isConnected = false;
@@ -215,6 +246,14 @@ class GameSocketService {
 
     this.socket.on('arena:update', (data: unknown) => {
       this.notifyArenaUpdateListeners(data);
+    });
+
+    this.socket.on('idle:update', (data: IdleUpdatePayload) => {
+      this.notifyIdleUpdateListeners(data);
+    });
+
+    this.socket.on('idle:finished', (data: IdleFinishedPayload) => {
+      this.notifyIdleFinishedListeners(data);
     });
 
     this.socket.on('chat:message', (data: ChatMessageDto) => {
@@ -325,6 +364,16 @@ class GameSocketService {
     return () => this.arenaUpdateListeners.delete(listener);
   }
 
+  onIdleUpdate(listener: IdleUpdateListener): () => void {
+    this.idleUpdateListeners.add(listener);
+    return () => this.idleUpdateListeners.delete(listener);
+  }
+
+  onIdleFinished(listener: IdleFinishedListener): () => void {
+    this.idleFinishedListeners.add(listener);
+    return () => this.idleFinishedListeners.delete(listener);
+  }
+
   onChatMessage(listener: ChatMessageListener): () => void {
     this.chatMessageListeners.add(listener);
     return () => this.chatMessageListeners.delete(listener);
@@ -416,6 +465,14 @@ class GameSocketService {
 
   private notifyArenaUpdateListeners(data: unknown): void {
     this.arenaUpdateListeners.forEach((listener) => listener(data));
+  }
+
+  private notifyIdleUpdateListeners(data: IdleUpdatePayload): void {
+    this.idleUpdateListeners.forEach((listener) => listener(data));
+  }
+
+  private notifyIdleFinishedListeners(data: IdleFinishedPayload): void {
+    this.idleFinishedListeners.forEach((listener) => listener(data));
   }
 
   private notifyChatMessageListeners(message: ChatMessageDto): void {

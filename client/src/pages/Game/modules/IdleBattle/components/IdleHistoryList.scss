@@ -1,0 +1,180 @@
+/**
+ * IdleHistoryList 样式
+ */
+
+.idle-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: var(--panel-bg);
+  border-radius: 8px;
+  border: 1px solid var(--border-color-soft);
+  overflow: hidden;
+}
+
+// ============================================
+// 标题栏
+// ============================================
+
+.idle-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-color-soft);
+}
+
+.idle-history-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+// ============================================
+// 空状态
+// ============================================
+
+.idle-history-empty {
+  padding: 24px 0;
+}
+
+// ============================================
+// 列表项
+// ============================================
+
+.idle-history-items {
+  display: flex;
+  flex-direction: column;
+}
+
+.idle-history-item {
+  position: relative;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-color-soft);
+  cursor: pointer;
+  transition: background 0.12s;
+  color: var(--text-color);
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:hover {
+    background: var(--panel-bg-hover, rgba(0, 0, 0, 0.04));
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary-color, #1677ff);
+    outline-offset: -2px;
+  }
+
+  // 未查看状态：左侧蓝色边框高亮
+  &.is-unviewed {
+    border-left: 3px solid var(--primary-color, #1677ff);
+    padding-left: 11px;
+  }
+}
+
+// 未查看角标
+.idle-history-unviewed-badge {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-size: 13px;
+  color: var(--primary-color, #1677ff);
+  opacity: 0.8;
+}
+
+// ============================================
+// 行布局
+// ============================================
+
+.idle-history-item-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+
+  &--stats {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+}
+
+.idle-history-status-tag {
+  margin: 0 !important;
+  font-size: 11px;
+  padding: 0 5px;
+  line-height: 18px;
+}
+
+.idle-history-date {
+  font-size: 12px;
+  color: var(--text-color-secondary, #888);
+  font-variant-numeric: tabular-nums;
+}
+
+.idle-history-duration {
+  font-size: 12px;
+  color: var(--text-color-secondary, #888);
+  margin-left: auto;
+}
+
+// ============================================
+// 统计数据
+// ============================================
+
+.idle-history-stat {
+  font-size: 12px;
+  color: var(--text-color-secondary, #888);
+
+  &--exp {
+    color: var(--color-success, #52c41a);
+  }
+
+  &--silver {
+    color: var(--color-gold, #d4a017);
+  }
+}
+
+.idle-history-stat-detail {
+  font-size: 11px;
+  color: var(--text-color-tertiary, #aaa);
+}
+
+// 背包满警告
+.idle-history-bag-warn {
+  font-size: 11px;
+  color: var(--color-warning, #faad14);
+  margin-top: 3px;
+}
+
+// ============================================
+// 移动端适配
+// ============================================
+
+@media (max-width: 640px) {
+  .idle-history-item {
+    padding: 10px 12px;
+  }
+
+  .idle-history-item-row--stats {
+    gap: 4px;
+  }
+}
+
+// ============================================
+// 深色主题
+// ============================================
+
+body.theme-dark {
+  .idle-history-item {
+    &:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+  }
+}

@@ -5,6 +5,7 @@ import { initTables } from '../models/initTables.js';
 import { initGameTimeService } from '../services/gameTimeService.js';
 import { recoverBattlesFromRedis } from '../domains/battle/index.js';
 import { cleanupUndefinedItemDataOnStartup } from '../services/itemDataCleanupService.js';
+import { recoverActiveIdleSessions } from '../services/idle/idleBattleExecutor.js';
 
 export interface StartServerOptions {
   httpServer: HttpServer;
@@ -36,6 +37,8 @@ export const startServerWithPipeline = async (options: StartServerOptions): Prom
     console.log('正在恢复战斗状态...');
     await recoverBattlesFromRedis();
   }
+
+  await recoverActiveIdleSessions();
 
   await new Promise<void>((resolve, reject) => {
     options.httpServer.listen(options.port, options.host, () => {
