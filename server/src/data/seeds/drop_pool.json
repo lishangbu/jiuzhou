@@ -1444,6 +1444,269 @@
         "dp-common-monster-jietai",
         "dp-common-monster-boss"
       ]
+    },
+    {
+      "_comment": "========== 炼神返虚·养神期怪物掉落池 =========="
+    },
+    {
+      "id": "dp-yangshen-void-phantom",
+      "name": "虚空残影掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-shenhun-ningjing",
+          "chance": 0.86,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-yangshen-dan",
+          "chance": 0.22,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ],
+      "common_pool_ids": [
+        "dp-common-monster-global",
+        "dp-common-monster-yangshen"
+      ]
+    },
+    {
+      "id": "dp-yangshen-soul-wisp",
+      "name": "神魂游丝掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-xuling-jinghua",
+          "chance": 0.74,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-yangshen-dan",
+          "chance": 0.26,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ],
+      "common_pool_ids": [
+        "dp-common-monster-global",
+        "dp-common-monster-yangshen"
+      ]
+    },
+    {
+      "id": "dp-yangshen-elite-realm-warden",
+      "name": "意境守卫掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-shenhun-ningjing",
+          "chance": 1,
+          "qty_min": 3,
+          "qty_max": 5,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-yangshen-dan",
+          "chance": 0.5,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        }
+      ],
+      "common_pool_ids": [
+        "dp-common-monster-global",
+        "dp-common-monster-yangshen",
+        "dp-common-monster-elite"
+      ]
+    },
+    {
+      "id": "dp-yangshen-elite-void-marshal",
+      "name": "虚渊幻将掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-xuling-jinghua",
+          "chance": 1,
+          "qty_min": 3,
+          "qty_max": 5,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-yangshen-dan",
+          "chance": 0.55,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        }
+      ],
+      "common_pool_ids": [
+        "dp-common-monster-global",
+        "dp-common-monster-yangshen",
+        "dp-common-monster-elite"
+      ]
+    },
+    {
+      "id": "dp-yangshen-boss-xuling-lord",
+      "name": "虚灵神主掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-yangshen-dan",
+          "chance": 1,
+          "qty_min": 3,
+          "qty_max": 5,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-xuling-jinghua",
+          "chance": 1,
+          "qty_min": 6,
+          "qty_max": 10,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "box-010",
+          "chance": 0.9,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-ningshen-weapon",
+          "chance": 0.14,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-ningshen-artifact",
+          "chance": 0.14,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-xuying-weapon",
+          "chance": 0.14,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-xuying-artifact",
+          "chance": 0.14,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ],
+      "common_pool_ids": [
+        "dp-common-monster-global",
+        "dp-common-monster-yangshen",
+        "dp-common-monster-boss"
+      ]
+    },
+    {
+      "_comment": "========== 养神期秘境掉落池 =========="
+    },
+    {
+      "id": "dp-dungeon-xuling-n",
+      "name": "虚灵神殿普通掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-shenhun-ningjing",
+          "chance": 0.8,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-xuling-jinghua",
+          "chance": 0.6,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ],
+      "common_pool_ids": []
+    },
+    {
+      "id": "dp-dungeon-xuling-h",
+      "name": "虚灵神殿困难掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-shenhun-ningjing",
+          "chance": 0.72,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-yangshen-dan",
+          "chance": 0.18,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-xuling-jinghua",
+          "chance": 0.65,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        }
+      ],
+      "common_pool_ids": []
+    },
+    {
+      "id": "dp-dungeon-xuling-nm",
+      "name": "虚灵神殿噩梦掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-shenhun-ningjing",
+          "chance": 0.7,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-yangshen-dan",
+          "chance": 0.22,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-xuling-jinghua",
+          "chance": 0.7,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-ningshen-head",
+          "chance": 0.03,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-xuying-head",
+          "chance": 0.03,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ],
+      "common_pool_ids": []
     }
   ]
 }

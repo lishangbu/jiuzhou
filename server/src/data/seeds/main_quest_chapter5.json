@@ -1,0 +1,191 @@
+{
+  "chapters": [
+    {
+      "id": "mq-chapter-5",
+      "chapter_num": 5,
+      "name": "第五章：神识觉醒",
+      "description": "结胎圆满后，你踏入神识修炼的新阶段，在神识荒原与虚灵神殿中锤炼神魂。",
+      "background": "结胎期后灵压开始向神识层面渗透，若无法凝聚神魂，修士将陷入意识涣散。你需在神识荒原探索虚空裂隙、在虚灵神殿证道，完成由结胎向养神的关键跨越。",
+      "min_realm": "炼炁化神·结胎期",
+      "chapter_rewards": {
+        "exp": 16800,
+        "silver": 21000,
+        "spirit_stones": 2100,
+        "items": [
+          { "item_def_id": "box-010", "quantity": 2 },
+          { "item_def_id": "mat-yangshen-dan", "quantity": 1 }
+        ]
+      },
+      "unlock_features": [
+        "map-shenshi-wasteland",
+        "dungeon-lianshen-xuling-shendian"
+      ],
+      "sort_weight": 800,
+      "enabled": true
+    }
+  ],
+  "sections": [
+    {
+      "id": "main-5-001",
+      "chapter_id": "mq-chapter-5",
+      "section_num": 1,
+      "name": "荒原初探",
+      "description": "你抵达神识荒原入口，与守望者确认虚空裂隙异变。",
+      "brief": "抵达神识荒原并与荒原守望者交谈。",
+      "npc_id": "npc-shenshi-watcher",
+      "map_id": "map-shenshi-wasteland",
+      "room_id": "room-shenshi-entrance",
+      "min_realm": "炼炁化神·结胎期",
+      "dialogue_id": "dlg-main-5-001",
+      "objectives": [
+        {
+          "id": "obj-1",
+          "type": "reach",
+          "text": "抵达神识荒原入口",
+          "target": 1,
+          "params": { "room_id": "room-shenshi-entrance" }
+        },
+        {
+          "id": "obj-2",
+          "type": "talk_npc",
+          "text": "与荒原守望者交谈",
+          "target": 1,
+          "params": { "npc_id": "npc-shenshi-watcher" }
+        }
+      ],
+      "rewards": {
+        "exp": 920,
+        "silver": 1200,
+        "spirit_stones": 100
+      },
+      "auto_accept": true,
+      "auto_complete": false,
+      "is_chapter_final": false,
+      "sort_weight": 800,
+      "enabled": true
+    },
+    {
+      "id": "main-5-002",
+      "chapter_id": "mq-chapter-5",
+      "section_num": 2,
+      "name": "虚空试炼",
+      "description": "在虚空裂隙中击败虚空残影与神魂游丝，证明你的神识已初步觉醒。",
+      "brief": "在神识荒原击败虚空残影5只、神魂游丝5只。",
+      "npc_id": "npc-shenshi-watcher",
+      "map_id": "map-shenshi-wasteland",
+      "room_id": "room-shenshi-void-rift",
+      "min_realm": "炼炁化神·结胎期",
+      "dialogue_id": "dlg-main-5-002",
+      "objectives": [
+        {
+          "id": "obj-1",
+          "type": "kill_monster",
+          "text": "击败虚空残影",
+          "target": 5,
+          "params": { "monster_def_id": "monster-yangshen-void-phantom" }
+        },
+        {
+          "id": "obj-2",
+          "type": "kill_monster",
+          "text": "击败神魂游丝",
+          "target": 5,
+          "params": { "monster_def_id": "monster-yangshen-soul-wisp" }
+        }
+      ],
+      "rewards": {
+        "exp": 1080,
+        "silver": 1400,
+        "spirit_stones": 120,
+        "items": [
+          { "item_def_id": "mat-shenhun-ningjing", "quantity": 3 }
+        ]
+      },
+      "auto_accept": true,
+      "auto_complete": false,
+      "is_chapter_final": false,
+      "sort_weight": 801,
+      "enabled": true
+    },
+    {
+      "id": "main-5-003",
+      "chapter_id": "mq-chapter-5",
+      "section_num": 3,
+      "name": "神殿证道",
+      "description": "进入虚灵神殿，通关普通难度以证明你已具备养神的资质。",
+      "brief": "通关虚灵神殿（普通难度）。",
+      "npc_id": "npc-shenshi-guide",
+      "map_id": "map-shenshi-wasteland",
+      "room_id": "room-shenshi-temple-gate",
+      "min_realm": "炼炁化神·结胎期",
+      "dialogue_id": "dlg-main-5-003",
+      "objectives": [
+        {
+          "id": "obj-1",
+          "type": "dungeon_clear",
+          "text": "通关虚灵神殿（普通）",
+          "target": 1,
+          "params": {
+            "dungeon_id": "dungeon-lianshen-xuling-shendian",
+            "difficulty_id": "dd-lianshen-xuling-n"
+          }
+        }
+      ],
+      "rewards": {
+        "exp": 1360,
+        "silver": 1800,
+        "spirit_stones": 160,
+        "items": [
+          { "item_def_id": "mat-yangshen-dan", "quantity": 1 }
+        ]
+      },
+      "auto_accept": true,
+      "auto_complete": false,
+      "is_chapter_final": false,
+      "sort_weight": 802,
+      "enabled": true
+    },
+    {
+      "id": "main-5-004",
+      "chapter_id": "mq-chapter-5",
+      "section_num": 4,
+      "name": "神魂凝聚",
+      "description": "收集足够的神魂凝晶，完成养神前的最后准备。",
+      "brief": "收集神魂凝晶10个，向荒原守望者复命。",
+      "npc_id": "npc-shenshi-watcher",
+      "map_id": "map-shenshi-wasteland",
+      "room_id": "room-shenshi-entrance",
+      "min_realm": "炼炁化神·结胎期",
+      "dialogue_id": "dlg-main-5-004",
+      "objectives": [
+        {
+          "id": "obj-1",
+          "type": "collect_item",
+          "text": "收集神魂凝晶",
+          "target": 10,
+          "params": { "item_def_id": "mat-shenhun-ningjing" }
+        },
+        {
+          "id": "obj-2",
+          "type": "talk_npc",
+          "text": "向荒原守望者复命",
+          "target": 1,
+          "params": { "npc_id": "npc-shenshi-watcher" }
+        }
+      ],
+      "rewards": {
+        "exp": 1600,
+        "silver": 2200,
+        "spirit_stones": 200,
+        "items": [
+          { "item_def_id": "mat-yangshen-dan", "quantity": 1 },
+          { "item_def_id": "mat-shenhun-ningjing", "quantity": 5 }
+        ]
+      },
+      "auto_accept": true,
+      "auto_complete": false,
+      "is_chapter_final": true,
+      "sort_weight": 803,
+      "enabled": true
+    }
+  ]
+}

@@ -236,6 +236,54 @@
       "elite_chance": 0.15,
       "req_realm_min": "炼炁化神·炼己期",
       "enabled": true
+    },
+    {
+      "_comment": "========== 神识荒原刷怪规则 =========="
+    },
+    {
+      "id": "spawn-shenshi-normal",
+      "area": "shenshi-field",
+      "pool_type": "monster",
+      "pool_entries": [
+        { "monster_def_id": "monster-yangshen-void-phantom", "weight": 50 },
+        { "monster_def_id": "monster-yangshen-soul-wisp", "weight": 50 }
+      ],
+      "max_alive": 14,
+      "respawn_sec": 55,
+      "elite_chance": 0.08,
+      "req_realm_min": "炼神返虚·养神期",
+      "enabled": true
+    },
+    {
+      "id": "spawn-shenshi-elite",
+      "area": "shenshi-elite",
+      "pool_type": "monster",
+      "pool_entries": [
+        { "monster_def_id": "monster-elite-yangshen-realm-warden", "weight": 50 },
+        { "monster_def_id": "monster-elite-yangshen-void-marshal", "weight": 50 }
+      ],
+      "max_alive": 2,
+      "respawn_sec": 200,
+      "elite_chance": 0.18,
+      "req_realm_min": "炼神返虚·养神期",
+      "enabled": true
+    },
+    {
+      "id": "spawn-shenshi-boss",
+      "area": "shenshi-boss",
+      "pool_type": "monster",
+      "pool_entries": [
+        { "monster_def_id": "monster-boss-yangshen-xuling-lord", "weight": 100 }
+      ],
+      "max_alive": 1,
+      "respawn_sec": 5400,
+      "elite_chance": 0,
+      "boss_window": {
+        "spawn_hours": [14, 22],
+        "announce_before_sec": 300
+      },
+      "req_realm_min": "炼神返虚·养神期",
+      "enabled": true
     }
   ]
 }

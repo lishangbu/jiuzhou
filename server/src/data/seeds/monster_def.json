@@ -3275,6 +3275,265 @@
       "silver_reward_min": 740,
       "silver_reward_max": 1100,
       "enabled": true
+    },
+    {
+      "_comment": "========== 炼神返虚·养神期怪物 =========="
+    },
+    {
+      "id": "monster-yangshen-void-phantom",
+      "code": "yangshen_void_phantom",
+      "name": "虚空残影",
+      "title": "神殿守御",
+      "realm": "炼神返虚·养神期",
+      "level": 45,
+      "avatar": "/assets/monster/rune_golem.png",
+      "kind": "normal",
+      "element": "暗",
+      "base_attrs": {
+        "qixue": 7800,
+        "max_qixue": 7800,
+        "lingqi": 620,
+        "max_lingqi": 620,
+        "wugong": 290,
+        "fagong": 212,
+        "wufang": 184,
+        "fafang": 172,
+        "mingzhong": 1.38,
+        "shanbi": 0.104,
+        "baoji": 0.198,
+        "baoshang": 2.44,
+        "sudu": 7,
+        "kongzhi_kangxing": 1.04
+      },
+      "attr_variance": 0.07,
+      "attr_multiplier_min": 1.18,
+      "attr_multiplier_max": 1.44,
+      "display_stats": [
+        { "label": "等级", "value": 45 },
+        { "label": "气血", "value": 7800 },
+        { "label": "物攻", "value": 290 },
+        { "label": "物防", "value": 184 },
+        { "label": "法防", "value": 172 }
+      ],
+      "ai_profile": {
+        "skills": ["sk-void-slash", "sk-shadow-bind"],
+        "skill_weights": { "sk-void-slash": 55, "sk-shadow-bind": 45 }
+      },
+      "drop_pool_id": "dp-yangshen-void-phantom",
+      "exp_reward": 1420,
+      "silver_reward_min": 380,
+      "silver_reward_max": 580,
+      "enabled": true
+    },
+    {
+      "id": "monster-yangshen-soul-wisp",
+      "code": "yangshen_soul_wisp",
+      "name": "神魂游丝",
+      "title": "神殿游魂",
+      "realm": "炼神返虚·养神期",
+      "level": 46,
+      "avatar": "/assets/monster/shadow_viper.png",
+      "kind": "normal",
+      "element": "光",
+      "base_attrs": {
+        "qixue": 6400,
+        "max_qixue": 6400,
+        "lingqi": 680,
+        "max_lingqi": 680,
+        "wugong": 196,
+        "fagong": 268,
+        "wufang": 148,
+        "fafang": 192,
+        "mingzhong": 1.42,
+        "shanbi": 0.11,
+        "baoji": 0.204,
+        "baoshang": 2.48,
+        "sudu": 8,
+        "kongzhi_kangxing": 0.96
+      },
+      "attr_variance": 0.07,
+      "attr_multiplier_min": 1.16,
+      "attr_multiplier_max": 1.42,
+      "display_stats": [
+        { "label": "等级", "value": 46 },
+        { "label": "气血", "value": 6400 },
+        { "label": "法攻", "value": 268 },
+        { "label": "物防", "value": 148 },
+        { "label": "法防", "value": 192 }
+      ],
+      "ai_profile": {
+        "skills": ["sk-soul-bolt", "sk-mind-drain"],
+        "skill_weights": { "sk-soul-bolt": 55, "sk-mind-drain": 45 }
+      },
+      "drop_pool_id": "dp-yangshen-soul-wisp",
+      "exp_reward": 1480,
+      "silver_reward_min": 400,
+      "silver_reward_max": 600,
+      "enabled": true
+    },
+    {
+      "id": "monster-elite-yangshen-realm-warden",
+      "code": "elite_yangshen_realm_warden",
+      "name": "意境守卫",
+      "title": "精英",
+      "realm": "炼神返虚·养神期",
+      "level": 47,
+      "avatar": "/assets/monster/storm_wolf_lord.png",
+      "kind": "elite",
+      "element": "土",
+      "base_attrs": {
+        "qixue": 20200,
+        "max_qixue": 20200,
+        "lingqi": 1060,
+        "max_lingqi": 1060,
+        "wugong": 388,
+        "fagong": 368,
+        "wufang": 254,
+        "fafang": 246,
+        "mingzhong": 1.52,
+        "shanbi": 0.106,
+        "baoji": 0.214,
+        "baoshang": 2.66,
+        "sudu": 7,
+        "kongzhi_kangxing": 1.12
+      },
+      "attr_variance": 0,
+      "attr_multiplier_min": 1.34,
+      "attr_multiplier_max": 1.62,
+      "display_stats": [
+        { "label": "等级", "value": 47 },
+        { "label": "气血", "value": 20200 },
+        { "label": "双攻", "value": 388 },
+        { "label": "物防", "value": 254 },
+        { "label": "法防", "value": 246 }
+      ],
+      "ai_profile": {
+        "skills": ["sk-realm-crush", "sk-void-shield", "sk-earth-bind"],
+        "skill_weights": { "sk-realm-crush": 40, "sk-void-shield": 30, "sk-earth-bind": 30 }
+      },
+      "drop_pool_id": "dp-yangshen-elite-realm-warden",
+      "exp_reward": 2080,
+      "silver_reward_min": 580,
+      "silver_reward_max": 880,
+      "enabled": true
+    },
+    {
+      "id": "monster-elite-yangshen-void-marshal",
+      "code": "elite_yangshen_void_marshal",
+      "name": "虚渊幻将",
+      "title": "精英",
+      "realm": "炼神返虚·养神期",
+      "level": 48,
+      "avatar": "/assets/monster/rune_golem.png",
+      "kind": "elite",
+      "element": "暗",
+      "base_attrs": {
+        "qixue": 21800,
+        "max_qixue": 21800,
+        "lingqi": 1120,
+        "max_lingqi": 1120,
+        "wugong": 396,
+        "fagong": 382,
+        "wufang": 262,
+        "fafang": 252,
+        "mingzhong": 1.56,
+        "shanbi": 0.108,
+        "baoji": 0.22,
+        "baoshang": 2.72,
+        "sudu": 7,
+        "kongzhi_kangxing": 1.16
+      },
+      "attr_variance": 0,
+      "attr_multiplier_min": 1.36,
+      "attr_multiplier_max": 1.66,
+      "display_stats": [
+        { "label": "等级", "value": 48 },
+        { "label": "气血", "value": 21800 },
+        { "label": "双攻", "value": 396 },
+        { "label": "物防", "value": 262 },
+        { "label": "法防", "value": 252 }
+      ],
+      "ai_profile": {
+        "skills": ["sk-void-pierce", "sk-phantom-fear", "sk-dark-heal"],
+        "skill_weights": { "sk-void-pierce": 36, "sk-phantom-fear": 34, "sk-dark-heal": 30 }
+      },
+      "drop_pool_id": "dp-yangshen-elite-void-marshal",
+      "exp_reward": 2240,
+      "silver_reward_min": 620,
+      "silver_reward_max": 940,
+      "enabled": true
+    },
+    {
+      "id": "monster-boss-yangshen-xuling-lord",
+      "code": "boss_yangshen_xuling_lord",
+      "name": "虚灵神主",
+      "title": "首领",
+      "realm": "炼神返虚·养神期",
+      "level": 50,
+      "avatar": "/assets/monster/withered_ent.png",
+      "kind": "boss",
+      "element": "暗",
+      "base_attrs": {
+        "qixue": 52000,
+        "max_qixue": 52000,
+        "lingqi": 2400,
+        "max_lingqi": 2400,
+        "wugong": 618,
+        "fagong": 608,
+        "wufang": 416,
+        "fafang": 398,
+        "mingzhong": 1.82,
+        "shanbi": 0.10,
+        "baoji": 0.24,
+        "baoshang": 2.92,
+        "sudu": 6,
+        "kongzhi_kangxing": 1.32
+      },
+      "attr_variance": 0,
+      "attr_multiplier_min": 1.42,
+      "attr_multiplier_max": 1.78,
+      "display_stats": [
+        { "label": "等级", "value": 50 },
+        { "label": "气血", "value": 52000 },
+        { "label": "双攻", "value": 618 },
+        { "label": "物防", "value": 416 },
+        { "label": "法防", "value": 398 }
+      ],
+      "ai_profile": {
+        "skills": ["sk-void-pierce", "sk-phantom-fear", "sk-soul-storm", "sk-dark-heal"],
+        "skill_weights": {
+          "sk-void-pierce": 30,
+          "sk-phantom-fear": 26,
+          "sk-soul-storm": 24,
+          "sk-dark-heal": 20
+        },
+        "phase_triggers": [
+          {
+            "hp_percent": 0.65,
+            "action": "enrage",
+            "effects": [
+              {
+                "type": "buff",
+                "buffId": "buff-zengshang-up",
+                "value": 0.28,
+                "duration": 99,
+                "stacks": 1
+              }
+            ]
+          },
+          {
+            "hp_percent": 0.32,
+            "action": "summon",
+            "summon_id": "monster-yangshen-soul-wisp",
+            "summon_count": 2
+          }
+        ]
+      },
+      "drop_pool_id": "dp-yangshen-boss-xuling-lord",
+      "exp_reward": 3200,
+      "silver_reward_min": 1060,
+      "silver_reward_max": 1580,
+      "enabled": true
     }
   ]
 }

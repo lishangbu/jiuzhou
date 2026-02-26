@@ -2051,6 +2051,206 @@
           "priority": 3
         }
       ]
+    },
+    {
+      "_comment": "========== 炼神返虚·养神期套装：凝神套装（物防/续航） =========="
+    },
+    {
+      "id": "set-ningshen",
+      "name": "凝神套装",
+      "description": "凝神以守护神魂为核心，受击时凝聚神识护壁，持续回复并削弱敌方。",
+      "quality_rank": 5,
+      "min_realm": "炼神返虚·养神期",
+      "pieces": [
+        { "equip_slot": "weapon", "item_def_id": "set-ningshen-weapon", "piece_key": "weapon" },
+        { "equip_slot": "head", "item_def_id": "set-ningshen-head", "piece_key": "head" },
+        { "equip_slot": "clothes", "item_def_id": "set-ningshen-clothes", "piece_key": "clothes" },
+        { "equip_slot": "gloves", "item_def_id": "set-ningshen-gloves", "piece_key": "gloves" },
+        { "equip_slot": "pants", "item_def_id": "set-ningshen-pants", "piece_key": "pants" },
+        { "equip_slot": "necklace", "item_def_id": "set-ningshen-necklace", "piece_key": "necklace" },
+        { "equip_slot": "accessory", "item_def_id": "set-ningshen-accessory", "piece_key": "accessory" },
+        { "equip_slot": "artifact", "item_def_id": "set-ningshen-artifact", "piece_key": "artifact" }
+      ],
+      "bonuses": [
+        {
+          "piece_count": 2,
+          "effect_defs": [
+            {
+              "trigger": "equip",
+              "target": "self",
+              "effect_type": "buff",
+              "params": { "attr_key": "wufang", "value": 20, "apply_type": "flat" }
+            },
+            {
+              "trigger": "on_be_hit",
+              "target": "self",
+              "effect_type": "heal",
+              "params": { "value": 0, "scale_key": "max_qixue", "scale_rate": 0.012, "chance": 0.35 }
+            }
+          ],
+          "priority": 0
+        },
+        {
+          "piece_count": 4,
+          "effect_defs": [
+            {
+              "trigger": "equip",
+              "target": "self",
+              "effect_type": "buff",
+              "params": { "attr_key": "max_qixue", "value": 380, "apply_type": "flat" }
+            },
+            {
+              "trigger": "on_be_hit",
+              "target": "enemy",
+              "effect_type": "damage",
+              "params": { "value": 0.26, "damage_type": "reflect", "chance": 0.32 }
+            }
+          ],
+          "priority": 1
+        },
+        {
+          "piece_count": 6,
+          "effect_defs": [
+            {
+              "trigger": "equip",
+              "target": "self",
+              "effect_type": "buff",
+              "params": { "attr_key": "zhaojia", "value": 0.024, "apply_type": "flat" }
+            },
+            {
+              "trigger": "on_be_hit",
+              "target": "enemy",
+              "effect_type": "debuff",
+              "duration_round": 1,
+              "params": { "attr_key": "wugong", "value": 28, "apply_type": "flat", "chance": 0.28 }
+            },
+            {
+              "trigger": "on_be_hit",
+              "target": "enemy",
+              "effect_type": "debuff",
+              "duration_round": 1,
+              "params": { "attr_key": "sudu", "value": 36, "apply_type": "flat", "chance": 0.32 }
+            }
+          ],
+          "priority": 2
+        },
+        {
+          "piece_count": 8,
+          "effect_defs": [
+            {
+              "trigger": "on_turn_start",
+              "target": "self",
+              "effect_type": "heal",
+              "params": { "value": 0, "scale_key": "max_qixue", "scale_rate": 0.04 }
+            },
+            {
+              "trigger": "on_be_hit",
+              "target": "self",
+              "effect_type": "buff",
+              "duration_round": 1,
+              "params": { "attr_key": "wufang", "value": 0.22, "apply_type": "percent", "chance": 0.2 }
+            }
+          ],
+          "priority": 3
+        }
+      ]
+    },
+    {
+      "_comment": "========== 炼神返虚·养神期套装：虚影套装（法攻/爆发） =========="
+    },
+    {
+      "id": "set-xuying",
+      "name": "虚影套装",
+      "description": "虚影以神识驱动法术，强化法攻爆发与虚空穿透，循环压制。",
+      "quality_rank": 5,
+      "min_realm": "炼神返虚·养神期",
+      "pieces": [
+        { "equip_slot": "weapon", "item_def_id": "set-xuying-weapon", "piece_key": "weapon" },
+        { "equip_slot": "head", "item_def_id": "set-xuying-head", "piece_key": "head" },
+        { "equip_slot": "clothes", "item_def_id": "set-xuying-clothes", "piece_key": "clothes" },
+        { "equip_slot": "gloves", "item_def_id": "set-xuying-gloves", "piece_key": "gloves" },
+        { "equip_slot": "pants", "item_def_id": "set-xuying-pants", "piece_key": "pants" },
+        { "equip_slot": "necklace", "item_def_id": "set-xuying-necklace", "piece_key": "necklace" },
+        { "equip_slot": "accessory", "item_def_id": "set-xuying-accessory", "piece_key": "accessory" },
+        { "equip_slot": "artifact", "item_def_id": "set-xuying-artifact", "piece_key": "artifact" }
+      ],
+      "bonuses": [
+        {
+          "piece_count": 2,
+          "effect_defs": [
+            {
+              "trigger": "equip",
+              "target": "self",
+              "effect_type": "buff",
+              "params": { "attr_key": "fagong", "value": 22, "apply_type": "flat" }
+            },
+            {
+              "trigger": "equip",
+              "target": "self",
+              "effect_type": "buff",
+              "params": { "attr_key": "baoji_rating", "value": 120, "apply_type": "flat" }
+            }
+          ],
+          "priority": 0
+        },
+        {
+          "piece_count": 4,
+          "effect_defs": [
+            {
+              "trigger": "equip",
+              "target": "self",
+              "effect_type": "buff",
+              "params": { "attr_key": "zengshang", "value": 0.06, "apply_type": "flat" }
+            },
+            {
+              "trigger": "on_skill",
+              "target": "enemy",
+              "effect_type": "debuff",
+              "duration_round": 1,
+              "params": { "attr_key": "fafang", "value": 18, "apply_type": "flat", "chance": 0.28 }
+            }
+          ],
+          "priority": 1
+        },
+        {
+          "piece_count": 6,
+          "effect_defs": [
+            {
+              "trigger": "equip",
+              "target": "self",
+              "effect_type": "buff",
+              "params": { "attr_key": "fagong", "value": 0.08, "apply_type": "percent" }
+            },
+            {
+              "trigger": "on_skill",
+              "target": "enemy",
+              "effect_type": "debuff",
+              "duration_round": 1,
+              "params": { "attr_key": "kongzhi_kangxing", "value": 0.022, "apply_type": "flat", "chance": 0.25 }
+            }
+          ],
+          "priority": 2
+        },
+        {
+          "piece_count": 8,
+          "effect_defs": [
+            {
+              "trigger": "on_turn_start",
+              "target": "self",
+              "effect_type": "shield",
+              "duration_round": 2,
+              "params": { "value": 160, "scale_key": "fagong", "scale_rate": 0.24, "absorb_type": "magic" }
+            },
+            {
+              "trigger": "equip",
+              "target": "self",
+              "effect_type": "buff",
+              "params": { "attr_key": "baoshang", "value": 0.18, "apply_type": "flat" }
+            }
+          ],
+          "priority": 3
+        }
+      ]
     }
   ]
 }

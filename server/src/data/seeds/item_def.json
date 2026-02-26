@@ -2193,6 +2193,112 @@
           }
         }
       ]
+    },
+    {
+      "_comment": "========== 炼神返虚·养神期材料 =========="
+    },
+    {
+      "id": "mat-shenhun-ningjing",
+      "name": "神魂凝晶",
+      "category": "material",
+      "sub_category": "technique",
+      "quality": "天",
+      "stack_max": 999,
+      "bind_type": "none",
+      "tradeable": true,
+      "icon": "/assets/items/xinmo_jinghua.png",
+      "description": "虚灵神殿中凝聚的高纯神识结晶，可稳固养神前后的功法运转。",
+      "long_desc": "晶体内封存了极度有序的神魂波动，适合作为高层功法与养神突破仪式的核心媒介。",
+      "tags": [
+        "材料",
+        "功法",
+        "养神期"
+      ],
+      "source_hint": [
+        "神识荒原采集",
+        "虚灵神殿",
+        "养神期周常"
+      ]
+    },
+    {
+      "id": "mat-yangshen-dan",
+      "name": "养神丹",
+      "category": "material",
+      "sub_category": "breakthrough",
+      "quality": "天",
+      "stack_max": 999,
+      "bind_type": "none",
+      "tradeable": true,
+      "icon": "/assets/items/lianji_dan.png",
+      "description": "用于结胎期冲击养神期的核心丹药，可显著降低神魂崩散风险。",
+      "long_desc": "药性以凝神、聚魂、护识为主，常与神魂凝晶配合用于养神仪式。",
+      "tags": [
+        "材料",
+        "突破",
+        "丹药",
+        "养神期"
+      ],
+      "source_hint": [
+        "第五章主线",
+        "虚灵神殿困难/噩梦",
+        "养神期周常"
+      ]
+    },
+    {
+      "id": "mat-xuling-jinghua",
+      "name": "虚灵精华",
+      "category": "material",
+      "sub_category": "forge",
+      "quality": "天",
+      "stack_max": 999,
+      "bind_type": "none",
+      "tradeable": true,
+      "icon": "/assets/items/kuangshi_jinghua.png",
+      "description": "虚灵神殿核心析出的高纯神识灵质，常用于养神期装备锻铸。",
+      "long_desc": "该精华兼具神识共振与承压性，是养神期套装部件与法宝的关键底材。",
+      "tags": [
+        "材料",
+        "锻造",
+        "养神期"
+      ],
+      "source_hint": [
+        "虚灵神殿",
+        "神识荒原精英/Boss",
+        "养神期周常"
+      ]
+    },
+    {
+      "id": "box-010",
+      "name": "养神宝石袋",
+      "category": "consumable",
+      "sub_category": "box",
+      "quality": "地",
+      "stack_max": 999,
+      "bind_type": "none",
+      "tradeable": true,
+      "icon": "/assets/items/Props-baodai-2.png",
+      "description": "打开后可随机获得1个3~5级宝石。",
+      "long_desc": "用于养神阶段强化构筑，产出范围高于结胎宝石袋。",
+      "tags": [
+        "宝箱",
+        "宝石",
+        "养神",
+        "随机"
+      ],
+      "use_type": "instant",
+      "effect_defs": [
+        {
+          "trigger": "use",
+          "target": "self",
+          "effect_type": "loot",
+          "params": {
+            "loot_type": "random_gem",
+            "min_level": 3,
+            "max_level": 5,
+            "gems_per_use": 1
+          }
+        }
+      ]
     }
   ]
 }

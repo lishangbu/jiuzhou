@@ -2823,6 +2823,143 @@
             }
           ],
           "items": [],
+          "portals": [
+            {
+              "target_map_id": "map-shenshi-wasteland",
+              "target_room_id": "room-shenshi-entrance",
+              "name": "神识荒原传送阵",
+              "req_realm_min": "炼炁化神·结胎期"
+            }
+          ],
+          "events": []
+        }
+      ]
+    },
+    {
+      "id": "map-shenshi-wasteland",
+      "code": "shenshi_wasteland",
+      "name": "神识荒原",
+      "description": "虚空裂隙外溢形成的荒芜之地，神识波动在此异常活跃，是养神修士的历练场。",
+      "background_image": "/assets/map/yanbing_rift.png",
+      "map_type": "field",
+      "parent_map_id": "map-jiutai-sanctum",
+      "region": "东洲",
+      "world_position": {
+        "x": 215,
+        "y": 238
+      },
+      "req_realm_min": "炼炁化神·结胎期",
+      "safe_zone": false,
+      "pk_mode": "normal",
+      "revive_map_id": "map-shenshi-wasteland",
+      "revive_room_id": "room-shenshi-entrance",
+      "sort_weight": 560,
+      "enabled": true,
+      "rooms": [
+        {
+          "id": "room-shenshi-entrance",
+          "name": "荒原入口",
+          "description": "荒原入口处灵纹闪烁，守望者在此甄别来者神识强度。",
+          "position": { "x": 0, "y": 0 },
+          "room_type": "safe",
+          "connections": [
+            {
+              "direction": "south",
+              "target_map_id": "map-jiutai-sanctum",
+              "target_room_id": "room-jiutai-core-hall"
+            },
+            { "direction": "north", "target_room_id": "room-shenshi-void-rift" },
+            { "direction": "east", "target_room_id": "room-shenshi-soul-lake" }
+          ],
+          "npcs": ["npc-shenshi-watcher", "npc-shenshi-merchant"],
+          "monsters": [],
+          "resources": [],
+          "items": [],
+          "portals": [],
+          "events": []
+        },
+        {
+          "id": "room-shenshi-void-rift",
+          "name": "虚空裂隙",
+          "description": "裂隙中虚空能量不断涌出，虚空残影与神魂游丝在此游荡。",
+          "position": { "x": 0, "y": 1 },
+          "room_type": "field",
+          "connections": [
+            { "direction": "south", "target_room_id": "room-shenshi-entrance" },
+            { "direction": "east", "target_room_id": "room-shenshi-realm-peak" }
+          ],
+          "npcs": [],
+          "monsters": [
+            { "monster_def_id": "monster-yangshen-void-phantom", "count": 3, "respawn_sec": 55 },
+            { "monster_def_id": "monster-yangshen-soul-wisp", "count": 2, "respawn_sec": 60 }
+          ],
+          "resources": [
+            { "resource_id": "mat-shenhun-ningjing", "count": 8, "collect_limit": 8, "respawn_sec": 300 }
+          ],
+          "items": [],
+          "portals": [],
+          "events": []
+        },
+        {
+          "id": "room-shenshi-soul-lake",
+          "name": "魂湖畔",
+          "description": "湖面映照着虚幻的神魂光影，游丝在湖畔密集出没。",
+          "position": { "x": 1, "y": 0 },
+          "room_type": "field",
+          "connections": [
+            { "direction": "west", "target_room_id": "room-shenshi-entrance" },
+            { "direction": "north", "target_room_id": "room-shenshi-realm-peak" }
+          ],
+          "npcs": [],
+          "monsters": [
+            { "monster_def_id": "monster-yangshen-soul-wisp", "count": 3, "respawn_sec": 55 },
+            { "monster_def_id": "monster-yangshen-void-phantom", "count": 2, "respawn_sec": 60 }
+          ],
+          "resources": [
+            { "resource_id": "mat-xuling-jinghua", "count": 8, "collect_limit": 8, "respawn_sec": 320 }
+          ],
+          "items": [],
+          "portals": [],
+          "events": []
+        },
+        {
+          "id": "room-shenshi-realm-peak",
+          "name": "意境之巅",
+          "description": "荒原最高处，精英守卫在此巡逻，虚灵神主偶尔现身。",
+          "position": { "x": 1, "y": 1 },
+          "room_type": "field",
+          "connections": [
+            { "direction": "south", "target_room_id": "room-shenshi-soul-lake" },
+            { "direction": "west", "target_room_id": "room-shenshi-void-rift" },
+            { "direction": "north", "target_room_id": "room-shenshi-temple-gate" }
+          ],
+          "npcs": [],
+          "monsters": [
+            { "monster_def_id": "monster-elite-yangshen-realm-warden", "count": 1, "respawn_sec": 200 },
+            { "monster_def_id": "monster-elite-yangshen-void-marshal", "count": 1, "respawn_sec": 220 }
+          ],
+          "resources": [
+            { "resource_id": "mat-shenhun-ningjing", "count": 5, "collect_limit": 5, "respawn_sec": 360 }
+          ],
+          "items": [],
+          "portals": [],
+          "events": []
+        },
+        {
+          "id": "room-shenshi-temple-gate",
+          "name": "神殿门前",
+          "description": "虚灵神殿的入口，秘境引导者在此等候有缘之人。",
+          "position": { "x": 1, "y": 2 },
+          "room_type": "safe",
+          "connections": [
+            { "direction": "south", "target_room_id": "room-shenshi-realm-peak" }
+          ],
+          "npcs": ["npc-shenshi-guide"],
+          "monsters": [],
+          "resources": [
+            { "resource_id": "mat-yangshen-dan", "count": 3, "collect_limit": 3, "respawn_sec": 480 }
+          ],
+          "items": [],
           "portals": [],
           "events": []
         }

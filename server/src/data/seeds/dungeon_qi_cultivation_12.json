@@ -1,0 +1,388 @@
+{
+  "version": 1,
+  "description": "秘境种子数据 - 养神期 - 虚灵神殿",
+  "dungeons": [
+    {
+      "def": {
+        "id": "dungeon-lianshen-xuling-shendian",
+        "name": "虚灵神殿",
+        "type": "trial",
+        "category": "境界",
+        "description": "古修士以神识构筑的试炼空间，只有神魂初凝者才能承受殿内的意识风暴。",
+        "icon": "/assets/dungeon/withered_altar.png",
+        "background": "/assets/dungeon/bg_withered_altar.png",
+        "min_players": 1,
+        "max_players": 4,
+        "min_realm": "炼神返虚·养神期",
+        "recommended_realm": "炼神返虚·养神期",
+        "unlock_condition": {},
+        "daily_limit": 0,
+        "weekly_limit": 0,
+        "stamina_cost": 22,
+        "time_limit_sec": 1320,
+        "revive_limit": 2,
+        "tags": ["养神期", "试炼", "虚灵神殿"],
+        "sort_weight": 107,
+        "enabled": true,
+        "version": 1
+      },
+      "difficulties": [
+        {
+          "id": "dd-lianshen-xuling-n",
+          "dungeon_id": "dungeon-lianshen-xuling-shendian",
+          "name": "普通",
+          "difficulty_rank": 1,
+          "monster_level_add": 0,
+          "monster_attr_mult": 1.32,
+          "reward_mult": 1,
+          "min_realm": "炼神返虚·养神期",
+          "unlock_prev_difficulty": false,
+          "first_clear_rewards": {
+            "items": [
+              { "item_def_id": "mat-yangshen-dan", "qty": 2 },
+              { "item_def_id": "mat-shenhun-ningjing", "qty": 5 },
+              { "item_def_id": "set-ningshen-head", "qty": 1 }
+            ],
+            "silver": 1400,
+            "exp": 1640
+          },
+          "drop_pool_id": "dp-dungeon-xuling-n",
+          "enabled": true,
+          "stages": [
+            {
+              "id": "ds-lianshen-xuling-n-1",
+              "difficulty_id": "dd-lianshen-xuling-n",
+              "stage_index": 1,
+              "name": "神殿前庭",
+              "type": "battle",
+              "description": "虚空残影与神魂游丝在前庭构筑持续压制。",
+              "time_limit_sec": 0,
+              "clear_condition": { "type": "kill_all" },
+              "fail_condition": {},
+              "events": [],
+              "waves": [
+                {
+                  "wave_index": 1,
+                  "spawn_delay_sec": 0,
+                  "monsters": [
+                    { "monster_def_id": "monster-yangshen-void-phantom", "count": 3 },
+                    { "monster_def_id": "monster-yangshen-soul-wisp", "count": 2 }
+                  ],
+                  "wave_rewards": {}
+                },
+                {
+                  "wave_index": 2,
+                  "spawn_delay_sec": 2,
+                  "monsters": [
+                    { "monster_def_id": "monster-yangshen-void-phantom", "count": 2 },
+                    { "monster_def_id": "monster-elite-yangshen-realm-warden", "count": 1 }
+                  ],
+                  "wave_rewards": {}
+                }
+              ]
+            },
+            {
+              "id": "ds-lianshen-xuling-n-2",
+              "difficulty_id": "dd-lianshen-xuling-n",
+              "stage_index": 2,
+              "name": "意境回廊",
+              "type": "battle",
+              "description": "回廊内神识共振，敌方技能冷却显著缩短。",
+              "time_limit_sec": 0,
+              "clear_condition": { "type": "kill_all" },
+              "fail_condition": {},
+              "events": [],
+              "waves": [
+                {
+                  "wave_index": 1,
+                  "spawn_delay_sec": 0,
+                  "monsters": [
+                    { "monster_def_id": "monster-yangshen-soul-wisp", "count": 3 },
+                    { "monster_def_id": "monster-yangshen-void-phantom", "count": 2 }
+                  ],
+                  "wave_rewards": {}
+                },
+                {
+                  "wave_index": 2,
+                  "spawn_delay_sec": 3,
+                  "monsters": [
+                    { "monster_def_id": "monster-elite-yangshen-void-marshal", "count": 1 },
+                    { "monster_def_id": "monster-yangshen-soul-wisp", "count": 2 }
+                  ],
+                  "wave_rewards": {}
+                }
+              ]
+            },
+            {
+              "id": "ds-lianshen-xuling-n-3",
+              "difficulty_id": "dd-lianshen-xuling-n",
+              "stage_index": 3,
+              "name": "虚灵核心",
+              "type": "boss",
+              "description": "虚灵神主降临，战斗进入多阶段压制。",
+              "time_limit_sec": 0,
+              "clear_condition": { "type": "kill_all" },
+              "fail_condition": {},
+              "events": [],
+              "waves": [
+                {
+                  "wave_index": 1,
+                  "spawn_delay_sec": 0,
+                  "monsters": [
+                    { "monster_def_id": "monster-elite-yangshen-realm-warden", "count": 1 }
+                  ],
+                  "wave_rewards": {}
+                },
+                {
+                  "wave_index": 2,
+                  "spawn_delay_sec": 4,
+                  "monsters": [
+                    { "monster_def_id": "monster-boss-yangshen-xuling-lord", "count": 1 }
+                  ],
+                  "wave_rewards": {}
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "dd-lianshen-xuling-h",
+          "dungeon_id": "dungeon-lianshen-xuling-shendian",
+          "name": "困难",
+          "difficulty_rank": 2,
+          "monster_level_add": 2,
+          "monster_attr_mult": 1.52,
+          "reward_mult": 1.45,
+          "min_realm": "炼神返虚·养神期",
+          "unlock_prev_difficulty": true,
+          "first_clear_rewards": {
+            "items": [
+              { "item_def_id": "mat-yangshen-dan", "qty": 3 },
+              { "item_def_id": "mat-shenhun-ningjing", "qty": 8 },
+              { "item_def_id": "set-xuying-weapon", "qty": 1 }
+            ],
+            "silver": 1800,
+            "exp": 2100
+          },
+          "drop_pool_id": "dp-dungeon-xuling-h",
+          "enabled": true,
+          "stages": [
+            {
+              "id": "ds-lianshen-xuling-h-1",
+              "difficulty_id": "dd-lianshen-xuling-h",
+              "stage_index": 1,
+              "name": "神殿前庭·极",
+              "type": "battle",
+              "description": "前庭神识风暴翻倍，敌方高频连携启动。",
+              "time_limit_sec": 0,
+              "clear_condition": { "type": "kill_all" },
+              "fail_condition": {},
+              "events": [],
+              "waves": [
+                {
+                  "wave_index": 1,
+                  "spawn_delay_sec": 0,
+                  "monsters": [
+                    { "monster_def_id": "monster-yangshen-void-phantom", "count": 4 },
+                    { "monster_def_id": "monster-yangshen-soul-wisp", "count": 2 }
+                  ],
+                  "wave_rewards": {}
+                },
+                {
+                  "wave_index": 2,
+                  "spawn_delay_sec": 2,
+                  "monsters": [
+                    { "monster_def_id": "monster-elite-yangshen-realm-warden", "count": 1 },
+                    { "monster_def_id": "monster-yangshen-soul-wisp", "count": 2 }
+                  ],
+                  "wave_rewards": {}
+                }
+              ]
+            },
+            {
+              "id": "ds-lianshen-xuling-h-2",
+              "difficulty_id": "dd-lianshen-xuling-h",
+              "stage_index": 2,
+              "name": "意境回廊·极",
+              "type": "battle",
+              "description": "回廊阵波叠加，精英轮转压场。",
+              "time_limit_sec": 0,
+              "clear_condition": { "type": "kill_all" },
+              "fail_condition": {},
+              "events": [],
+              "waves": [
+                {
+                  "wave_index": 1,
+                  "spawn_delay_sec": 0,
+                  "monsters": [
+                    { "monster_def_id": "monster-yangshen-soul-wisp", "count": 3 },
+                    { "monster_def_id": "monster-yangshen-void-phantom", "count": 2 }
+                  ],
+                  "wave_rewards": {}
+                },
+                {
+                  "wave_index": 2,
+                  "spawn_delay_sec": 3,
+                  "monsters": [
+                    { "monster_def_id": "monster-elite-yangshen-void-marshal", "count": 1 },
+                    { "monster_def_id": "monster-elite-yangshen-realm-warden", "count": 1 }
+                  ],
+                  "wave_rewards": {}
+                }
+              ]
+            },
+            {
+              "id": "ds-lianshen-xuling-h-3",
+              "difficulty_id": "dd-lianshen-xuling-h",
+              "stage_index": 3,
+              "name": "虚灵核心·极",
+              "type": "boss",
+              "description": "虚灵神主完全激活，战斗压力持续攀升。",
+              "time_limit_sec": 0,
+              "clear_condition": { "type": "kill_all" },
+              "fail_condition": {},
+              "events": [],
+              "waves": [
+                {
+                  "wave_index": 1,
+                  "spawn_delay_sec": 0,
+                  "monsters": [
+                    { "monster_def_id": "monster-elite-yangshen-void-marshal", "count": 1 }
+                  ],
+                  "wave_rewards": {}
+                },
+                {
+                  "wave_index": 2,
+                  "spawn_delay_sec": 4,
+                  "monsters": [
+                    { "monster_def_id": "monster-boss-yangshen-xuling-lord", "count": 1 }
+                  ],
+                  "wave_rewards": {}
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "dd-lianshen-xuling-nm",
+          "dungeon_id": "dungeon-lianshen-xuling-shendian",
+          "name": "噩梦",
+          "difficulty_rank": 3,
+          "monster_level_add": 4,
+          "monster_attr_mult": 1.78,
+          "reward_mult": 1.95,
+          "min_realm": "炼神返虚·养神期",
+          "unlock_prev_difficulty": true,
+          "first_clear_rewards": {
+            "items": [
+              { "item_def_id": "mat-yangshen-dan", "qty": 4 },
+              { "item_def_id": "mat-shenhun-ningjing", "qty": 12 },
+              { "item_def_id": "set-ningshen-clothes", "qty": 1 },
+              { "item_def_id": "set-xuying-clothes", "qty": 1 }
+            ],
+            "silver": 2400,
+            "exp": 2800
+          },
+          "drop_pool_id": "dp-dungeon-xuling-nm",
+          "enabled": true,
+          "stages": [
+            {
+              "id": "ds-lianshen-xuling-nm-1",
+              "difficulty_id": "dd-lianshen-xuling-nm",
+              "stage_index": 1,
+              "name": "神殿前庭·噩",
+              "type": "battle",
+              "description": "怪潮规模进一步扩大，输出窗口极短。",
+              "time_limit_sec": 0,
+              "clear_condition": { "type": "kill_all" },
+            "fail_condition": {},
+              "events": [],
+              "waves": [
+                {
+                  "wave_index": 1,
+                  "spawn_delay_sec": 0,
+                  "monsters": [
+                    { "monster_def_id": "monster-yangshen-void-phantom", "count": 4 },
+                    { "monster_def_id": "monster-yangshen-soul-wisp", "count": 3 }
+                  ],
+                  "wave_rewards": {}
+                },
+                {
+                  "wave_index": 2,
+                  "spawn_delay_sec": 2,
+                  "monsters": [
+                    { "monster_def_id": "monster-elite-yangshen-realm-warden", "count": 1 },
+                    { "monster_def_id": "monster-elite-yangshen-void-marshal", "count": 1 }
+                  ],
+                  "wave_rewards": {}
+                }
+              ]
+            },
+            {
+              "id": "ds-lianshen-xuling-nm-2",
+              "difficulty_id": "dd-lianshen-xuling-nm",
+              "stage_index": 2,
+              "name": "意境回廊·噩",
+              "type": "battle",
+              "description": "双精英轮换压制，持续考验续航能力。",
+              "time_limit_sec": 0,
+              "clear_condition": { "type": "kill_all" },
+              "fail_condition": {},
+              "events": [],
+              "waves": [
+                {
+                  "wave_index": 1,
+                  "spawn_delay_sec": 0,
+                  "monsters": [
+                    { "monster_def_id": "monster-yangshen-soul-wisp", "count": 4 },
+                    { "monster_def_id": "monster-yangshen-void-phantom", "count": 2 }
+                  ],
+                  "wave_rewards": {}
+                },
+                {
+                  "wave_index": 2,
+                  "spawn_delay_sec": 3,
+                  "monsters": [
+                    { "monster_def_id": "monster-elite-yangshen-void-marshal", "count": 1 },
+                    { "monster_def_id": "monster-elite-yangshen-realm-warden", "count": 1 }
+                  ],
+                  "wave_rewards": {}
+                }
+              ]
+            },
+            {
+              "id": "ds-lianshen-xuling-nm-3",
+              "difficulty_id": "dd-lianshen-xuling-nm",
+              "stage_index": 3,
+              "name": "虚灵核心·噩",
+              "type": "boss",
+              "description": "最终阶段会触发多次召唤与高额增伤。",
+              "time_limit_sec": 0,
+              "clear_condition": { "type": "kill_all" },
+              "fail_condition": {},
+              "events": [],
+              "waves": [
+                {
+                  "wave_index": 1,
+                  "spawn_delay_sec": 0,
+                  "monsters": [
+                    { "monster_def_id": "monster-elite-yangshen-void-marshal", "count": 1 }
+                  ],
+                  "wave_rewards": {}
+                },
+                {
+                  "wave_index": 2,
+                  "spawn_delay_sec": 4,
+                  "monsters": [
+                    { "monster_def_id": "monster-boss-yangshen-xuling-lord", "count": 1 }
+                  ],
+                  "wave_rewards": {}
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

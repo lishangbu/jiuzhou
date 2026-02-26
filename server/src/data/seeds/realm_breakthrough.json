@@ -373,46 +373,68 @@
       "to": "炼神返虚·养神期",
       "requirements": [
         {
-          "id": "version-lock-yangshen",
-          "type": "version_locked",
-          "title": "境界开放进度",
-          "reason": "炼炁化神·采药期及以上境界暂未开放"
-        },
-        {
           "id": "exp",
           "type": "exp_min",
-          "min": 2300000,
+          "min": 2500000,
           "title": "修为经验"
         },
         {
-          "id": "tech-count-4-layer-7",
+          "id": "tech-count-4-layer-8",
           "type": "techniques_count_min_layer",
           "minCount": 4,
-          "minLayer": 7,
-          "title": "功法底蕴"
+          "minLayer": 8,
+          "title": "功法八重圆满"
         },
         {
-          "id": "dungeon-clear-any-15",
+          "id": "dungeon-clear-xuling-hard-3",
           "type": "dungeon_clear_min",
-          "minCount": 15,
-          "title": "秘境轮转历练"
+          "dungeonId": "dungeon-lianshen-xuling-shendian",
+          "difficultyId": "dd-lianshen-xuling-h",
+          "minCount": 3,
+          "title": "虚灵神殿困难通关"
         },
         {
-          "id": "dungeon-clear-frost-abyss-6",
-          "type": "dungeon_clear_min",
-          "dungeonId": "dungeon-qiqi-frost-abyss",
-          "minCount": 6,
-          "title": "寒渊道心淬炼"
+          "id": "main-quest-chapter-5",
+          "type": "main_quest_chapter_completed",
+          "chapterId": "mq-chapter-5",
+          "title": "完成第五章主线"
+        },
+        {
+          "id": "item-shenhun-ningjing-15",
+          "type": "item_qty_min",
+          "itemDefId": "mat-shenhun-ningjing",
+          "qty": 15,
+          "title": "神魂凝晶储备"
+        },
+        {
+          "id": "item-yangshen-dan-3",
+          "type": "item_qty_min",
+          "itemDefId": "mat-yangshen-dan",
+          "qty": 3,
+          "title": "养神丹准备"
         }
       ],
       "costs": [
         {
           "type": "spirit_stones",
-          "amount": 8200
+          "amount": 9600
         },
         {
           "type": "exp",
-          "amount": 2300000
+          "amount": 2500000
+        },
+        {
+          "type": "items",
+          "items": [
+            {
+              "itemDefId": "mat-shenhun-ningjing",
+              "qty": 10
+            },
+            {
+              "itemDefId": "mat-yangshen-dan",
+              "qty": 2
+            }
+          ]
         }
       ],
       "rewards": {
