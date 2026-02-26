@@ -145,16 +145,14 @@ export interface IdleUpdatePayload {
   silverGained: number;
   itemsGained: Array<{ itemDefId: string; itemName: string; quantity: number }>;
   roundCount: number;
-  /** 实时体力值（每场战斗后从 Redis 缓存读取），null 表示缓存未命中 */
-  stamina: number | null;
 }
 
 /**
- * idle:finished — 挂机会话结束时推送（时长超限/Stamina 耗尽/用户停止）
+ * idle:finished — 挂机会话结束时推送（时长超限/用户停止）
  */
 export interface IdleFinishedPayload {
   sessionId: string;
-  reason: 'duration_exceeded' | 'stamina_exhausted' | 'user_stopped' | 'session_not_found';
+  reason: 'duration_exceeded' | 'user_stopped' | 'session_not_found';
 }
 
 type IdleUpdateListener = (data: IdleUpdatePayload) => void;
@@ -251,10 +249,6 @@ class GameSocketService {
     });
 
     this.socket.on('idle:update', (data: IdleUpdatePayload) => {
-      // 实时同步体力值到角色数据（服务端每场战斗后从 Redis 缓存读取）
-      if (data.stamina !== null && data.stamina !== undefined) {
-        this.updateCharacterLocal({ stamina: data.stamina });
-      }
       this.notifyIdleUpdateListeners(data);
     });
 

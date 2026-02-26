@@ -9,9 +9,8 @@
  *
  * 输入/输出：
  *   IdleBattlePanel:
- *     - stamina: 当前 Stamina 值（来自 character 数据）
+ *     （无额外 props，idle 由父组件传入）
  *   IdleBattleStatusBar:
- *     - stamina: 当前 Stamina 值
  *     - onOpenPanel: 点击指示器时打开面板的回调
  *
  * 数据流：
@@ -47,14 +46,13 @@ export type { UseIdleBattleReturn };
 
 interface IdleBattlePanelProps {
   idle: UseIdleBattleReturn;
-  stamina: number;
 }
 
 /**
  * 完整挂机面板：配置区 + 历史列表 + 回放弹窗
  * 由父组件传入 idle（useIdleBattle 返回值），避免重复创建 Hook 实例
  */
-export const IdleBattlePanel: React.FC<IdleBattlePanelProps> = ({ idle, stamina }) => {
+export const IdleBattlePanel: React.FC<IdleBattlePanelProps> = ({ idle }) => {
   const {
     activeSession,
     isLoading,
@@ -106,7 +104,6 @@ export const IdleBattlePanel: React.FC<IdleBattlePanelProps> = ({ idle, stamina 
             children: (
               <IdleConfigPanel
                 config={config}
-                stamina={stamina}
                 isActive={activeSession !== null && !isStopping}
                 isStopping={isStopping}
                 isLoading={isLoading}
@@ -150,7 +147,6 @@ export const IdleBattlePanel: React.FC<IdleBattlePanelProps> = ({ idle, stamina 
 
 interface IdleBattleStatusBarProps {
   idle: UseIdleBattleReturn;
-  stamina: number;
   onOpenPanel?: () => void;
 }
 
@@ -160,7 +156,6 @@ interface IdleBattleStatusBarProps {
  */
 export const IdleBattleStatusBar: React.FC<IdleBattleStatusBarProps> = ({
   idle,
-  stamina,
   onOpenPanel,
 }) => {
   if (!idle.activeSession) return null;
@@ -168,7 +163,6 @@ export const IdleBattleStatusBar: React.FC<IdleBattleStatusBarProps> = ({
   return (
     <IdleStatusIndicator
       activeSession={idle.activeSession}
-      stamina={stamina}
       onOpenPanel={onOpenPanel}
     />
   );

@@ -8,7 +8,6 @@
  *
  * 输入/输出：
  *   - config: 当前配置草稿
- *   - stamina: 当前 Stamina 值（用于禁用判断）
  *   - isActive: 是否有活跃会话（有则禁用配置修改）
  *   - onConfigChange: 配置变更回调
  *   - onStart: 开始挂机回调
@@ -19,14 +18,13 @@
  *   用户操作 → onConfigChange → useIdleBattle.setConfig → 重新渲染
  *
  * 关键边界条件：
- *   1. stamina <= 0 时"开始挂机"按钮 disabled，显示 Stamina 不足提示
- *   2. isActive = true 时地图/房间/时长/技能策略均不可修改（只读展示）
+ *   1. isActive = true 时地图/房间/时长/技能策略均不可修改（只读展示）
  *   3. 技能槽位最多 6 个，超出时"添加槽位"按钮 disabled
  */
 
 import React, { useEffect, useState } from 'react';
-import { Button, Popover, Select, Slider, Tag, Tooltip } from 'antd';
-import { PlusOutlined, DeleteOutlined, QuestionCircleOutlined } from '@ant-design/icons';
+import { Button, Select, Slider, Tag, Tooltip } from 'antd';
+import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import { getEnabledMaps, getMapDetail, type MapDefLite, type MapRoom } from '../../../../../services/api/world';
 import { getCharacterTechniqueStatus } from '../../../../../services/api/technique';
 import { gameSocket } from '../../../../../services/gameSocket';
@@ -62,7 +60,6 @@ const DURATION_PRESETS: Array<{ label: string; value: number }> = [
 
 interface IdleConfigPanelProps {
   config: IdleConfigDto;
-  stamina: number;
   isActive: boolean;
   isStopping: boolean;
   isLoading: boolean;
@@ -78,7 +75,6 @@ interface IdleConfigPanelProps {
 
 const IdleConfigPanel: React.FC<IdleConfigPanelProps> = ({
   config,
-  stamina,
   isActive,
   isStopping,
   isLoading,
@@ -231,7 +227,7 @@ const IdleConfigPanel: React.FC<IdleConfigPanelProps> = ({
     label: m.name ?? m.monster_def_id,
   }));
 
-  const canStart = stamina > 0 && !!config.mapId && !!config.roomId && !!config.targetMonsterDefId && !isActive;
+  const canStart = !!config.mapId && !!config.roomId && !!config.targetMonsterDefId && !isActive;
   const durationMinutes = Math.round(config.maxDurationMs / 60_000);
 
   return (
@@ -361,33 +357,6 @@ const IdleConfigPanel: React.FC<IdleConfigPanelProps> = ({
         </div>
       </div>
 
-      {/* 体力规则说明 */}
-      <div className="idle-config-section idle-config-stamina-info">
-        <label className="idle-config-label">
-          体力说明
-          <Popover
-            trigger="hover"
-            placement="topLeft"
-            content={
-              <ul className="idle-config-stamina-rules">
-                <li>每场战斗消耗 <strong>1 点</strong>体力，无论胜负</li>
-                <li>体力上限 <strong>100 点</strong>，最多可挂机 100 场</li>
-                <li>体力耗尽后挂机自动结束</li>
-              </ul>
-            }
-          >
-            <QuestionCircleOutlined className="idle-config-stamina-icon" />
-          </Popover>
-        </label>
-      </div>
-
-      {/* Stamina 提示 */}
-      {stamina <= 0 && (
-        <div className="idle-config-stamina-warn">
-          体力不足，无法开始挂机
-        </div>
-      )}
-
       {/* 操作按钮 */}
       <div className="idle-config-actions">
         {!isActive && !isStopping ? (
@@ -395,7 +364,7 @@ const IdleConfigPanel: React.FC<IdleConfigPanelProps> = ({
             <Button onClick={onSave} disabled={isLoading}>
               保存配置
             </Button>
-            <Tooltip title={stamina <= 0 ? '体力不足' : (!config.mapId || !config.roomId) ? '请先选择地图和房间' : !config.targetMonsterDefId ? '请选择挂机怪物' : ''}>
+            <Tooltip title={(!config.mapId || !config.roomId) ? '请先选择地图和房间' : !config.targetMonsterDefId ? '请选择挂机怪物' : ''}>
               <Button
                 type="primary"
                 onClick={onStart}

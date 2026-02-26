@@ -1644,7 +1644,6 @@ const Game: FC<GameProps> = ({ onLogout }) => {
           {/* 挂机状态指示器：仅在活跃会话时显示 */}
           <IdleBattleStatusBar
             idle={idle}
-            stamina={character?.stamina ?? 0}
             onOpenPanel={() => setIdleModalOpen(true)}
           />
 
@@ -2565,7 +2564,6 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       >
         <IdleBattlePanel
           idle={idle}
-          stamina={character?.stamina ?? 0}
         />
       </Modal>
     </div>

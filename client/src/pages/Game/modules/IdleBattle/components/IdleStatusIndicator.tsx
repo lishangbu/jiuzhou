@@ -8,7 +8,6 @@
  *
  * 输入/输出：
  *   - activeSession: 当前活跃会话（null 时组件不渲染）
- *   - stamina: 当前 Stamina 值（用于展示剩余体力）
  *   - onOpenPanel: 点击指示器时打开挂机面板的回调
  *
  * 数据流：
@@ -51,7 +50,6 @@ const formatElapsed = (ms: number): string => {
 
 interface IdleStatusIndicatorProps {
   activeSession: IdleSessionDto;
-  stamina: number;
   onOpenPanel?: () => void;
 }
 
@@ -61,7 +59,6 @@ interface IdleStatusIndicatorProps {
 
 const IdleStatusIndicator: React.FC<IdleStatusIndicatorProps> = ({
   activeSession,
-  stamina,
   onOpenPanel,
 }) => {
   // 实时已挂机时长（每秒更新）
@@ -134,10 +131,6 @@ const IdleStatusIndicator: React.FC<IdleStatusIndicatorProps> = ({
         <span>{activeSession.totalBattles}（胜 {activeSession.winCount} / 败 {activeSession.loseCount}）</span>
       </div>
       <div className="idle-status-tooltip-row">
-        <span>消耗体力</span>
-        <span>{activeSession.totalBattles}</span>
-      </div>
-      <div className="idle-status-tooltip-row">
         <span>累计修为</span>
         <span>+{activeSession.totalExp.toLocaleString()}</span>
       </div>
@@ -184,12 +177,6 @@ const IdleStatusIndicator: React.FC<IdleStatusIndicatorProps> = ({
         ) : (
           <Tag color="success" className="idle-status-tag">挂机中</Tag>
         )}
-
-        {/* Stamina */}
-        <span className="idle-status-stamina">
-          <ThunderboltOutlined style={{ fontSize: 10 }} />
-          {stamina}
-        </span>
 
         {/* 背包满警告点 */}
         {activeSession.bagFullFlag && (

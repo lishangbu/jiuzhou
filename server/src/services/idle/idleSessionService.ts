@@ -30,8 +30,6 @@
 import { randomUUID } from 'crypto';
 import { query, pool } from '../../config/database.js';
 import { redis } from '../../config/redis.js';
-import { applyStaminaRecoveryTx } from '../staminaService.js';
-import { setCachedStamina } from '../staminaCacheService.js';
 import { buildCharacterBattleSnapshot } from '../battle/index.js';
 import type {
   IdleConfigDto,
@@ -128,12 +126,11 @@ export interface StartIdleSessionResult {
  *
  * 步骤：
  *   1. Redis SET NX EX 互斥锁检查（原子性，防并发）
- *   2. 事务内：Stamina 检查（> 0）、角色行锁、快照构建、DB 写入
+ *   2. 事务内：角色行锁、快照构建、DB 写入
  *   3. 返回新会话 ID
  *
  * 失败场景：
  *   - 已有活跃会话 → success: false, error: '已有活跃挂机会话', existingSessionId
- *   - Stamina = 0 → success: false, error: 'Stamina 不足'
  *   - 角色不存在 → success: false, error: '角色不存在'
  */
 export async function startIdleSession(params: StartIdleSessionParams): Promise<StartIdleSessionResult> {
@@ -166,7 +163,7 @@ export async function startIdleSession(params: StartIdleSessionParams): Promise<
   try {
     await client.query('BEGIN');
 
-    // 2. 角色行锁（防止并发修改 Stamina）
+    // 2. 角色行锁（防止并发修改）
     const charRes = await client.query(
       `SELECT id FROM characters WHERE id = $1 FOR UPDATE`,
       [characterId]
@@ -177,20 +174,9 @@ export async function startIdleSession(params: StartIdleSessionParams): Promise<
       return { success: false, error: '角色不存在' };
     }
 
-    // 3. Stamina 检查（含恢复计算）
-    const staminaState = await applyStaminaRecoveryTx(client, characterId);
-    if (!staminaState || staminaState.stamina <= 0) {
-      await client.query('ROLLBACK');
-      await redis.del(lockKey);
-      return { success: false, error: 'Stamina 不足，无法开始挂机' };
-    }
-
-    // 4. 构建角色快照（在事务外调用，避免长事务；快照基于当前计算属性）
+    // 3. 构建角色快照（在事务外调用，避免长事务；快照基于当前计算属性）
     await client.query('COMMIT');
     client.release();
-
-    // 事务提交后同步体力缓存，保证挂机执行循环能从缓存读到准确值
-    await setCachedStamina(characterId, staminaState.stamina, staminaState.staminaRecoverAt);
 
     const snapshotData = await buildCharacterBattleSnapshot(characterId);
     if (!snapshotData) {
