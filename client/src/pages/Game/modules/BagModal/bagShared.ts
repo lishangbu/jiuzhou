@@ -1127,6 +1127,22 @@ const formatSetEffectLine = (raw: unknown): string | null => {
   const chance = toFiniteNumber(params.chance);
   const durationRound = toFiniteNumber(row.duration_round);
 
+  // 缩放描述：当 value 为 0 或很小但有 scale_key+scale_rate 时，用百分比属性描述
+  const scaleKey = typeof params.scale_key === "string" ? params.scale_key : "";
+  const scaleRate = toFiniteNumber(params.scale_rate);
+  const formatScalePart = (): string => {
+    if (!scaleKey || scaleRate === null || scaleRate <= 0) return "";
+    const scaleLabel = attrLabel[scaleKey] ?? scaleKey;
+    return `${formatPercent(scaleRate)}${scaleLabel}`;
+  };
+  const formatValueWithScale = (baseValue: number, prefix: string): string => {
+    const scalePart = formatScalePart();
+    const hasBase = baseValue > 0;
+    if (hasBase && scalePart) return `${prefix} ${Math.floor(baseValue)}+${scalePart}`;
+    if (scalePart) return `${prefix} ${scalePart}`;
+    return `${prefix} ${Math.floor(baseValue)}`;
+  };
+
   let main = "";
   if (effectType === "buff" || effectType === "debuff") {
     const attrKey = typeof params.attr_key === "string" ? params.attr_key : "";
@@ -1147,10 +1163,22 @@ const formatSetEffectLine = (raw: unknown): string | null => {
     }
   } else if (effectType === "damage") {
     const value = toFiniteNumber(params.value) ?? 0;
-    main = `额外伤害 ${Math.floor(value)}`;
+    const damageType = typeof params.damage_type === "string" ? params.damage_type : "";
+    if (damageType === "reflect") {
+      // 反弹伤害：value 是比例（如 0.22 = 22%）
+      main = `反弹 ${formatPercent(value)}伤害`;
+    } else {
+      main = formatValueWithScale(value, "额外伤害");
+    }
   } else if (effectType === "heal") {
     const value = toFiniteNumber(params.value) ?? 0;
-    main = `恢复气血 ${Math.floor(value)}`;
+    main = formatValueWithScale(value, "恢复气血");
+  } else if (effectType === "shield") {
+    const value = toFiniteNumber(params.value) ?? 0;
+    const absorbTypeRaw = typeof params.absorb_type === "string" ? params.absorb_type : "";
+    const absorbLabel: Record<string, string> = { magic: "法术", physical: "物理", all: "全部" };
+    const absorbText = absorbLabel[absorbTypeRaw] ? `（${absorbLabel[absorbTypeRaw]}吸收）` : "";
+    main = `${formatValueWithScale(value, "护盾")}${absorbText}`;
   } else if (effectType === "resource") {
     const value = toFiniteNumber(params.value) ?? 0;
     const resource =
