@@ -3145,6 +3145,330 @@
       "ai_priority": 73,
       "sort_weight": 364,
       "enabled": true
+    },
+    {
+      "id": "sk-void-slash",
+      "code": "sk_void_slash",
+      "name": "虚空斩",
+      "description": "凝聚虚空裂隙之力劈出一刀，造成暗属性物理伤害并短暂降低目标法防。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 18,
+      "cost_qixue": 0,
+      "cooldown": 2,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "physical",
+      "element": "an",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "wugong",
+          "scaleRate": 1.45
+        },
+        {
+          "type": "debuff",
+          "buffId": "debuff-fafang-down",
+          "duration": 2,
+          "value": 0.18
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 78,
+      "sort_weight": 401,
+      "enabled": true
+    },
+    {
+      "id": "sk-shadow-bind",
+      "code": "sk_shadow_bind",
+      "name": "暗影缚",
+      "description": "暗影蔓延束缚目标，造成少量暗属性法术伤害并有概率定身。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 20,
+      "cost_qixue": 0,
+      "cooldown": 4,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "an",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 0.85
+        },
+        {
+          "type": "control",
+          "controlType": "root",
+          "duration": 1,
+          "chance": 0.28
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 74,
+      "sort_weight": 402,
+      "enabled": true
+    },
+    {
+      "id": "sk-soul-bolt",
+      "code": "sk_soul_bolt",
+      "name": "神魂弹",
+      "description": "凝聚神魂之力射出光弹，造成光属性法术伤害。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 16,
+      "cost_qixue": 0,
+      "cooldown": 2,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "guang",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 1.5
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 76,
+      "sort_weight": 403,
+      "enabled": true
+    },
+    {
+      "id": "sk-mind-drain",
+      "code": "sk_mind_drain",
+      "name": "噬神吸",
+      "description": "侵蚀目标神识，造成光属性法术伤害并吸取灵气。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 20,
+      "cost_qixue": 0,
+      "cooldown": 4,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "guang",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 1.15
+        },
+        {
+          "type": "drain_lingqi",
+          "value": 12
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 72,
+      "sort_weight": 404,
+      "enabled": true
+    },
+    {
+      "id": "sk-realm-crush",
+      "code": "sk_realm_crush",
+      "name": "意境碾压",
+      "description": "以意境之力碾压单体，造成土属性物理伤害并降低目标物防。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 22,
+      "cost_qixue": 0,
+      "cooldown": 3,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "physical",
+      "element": "tu",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "wugong",
+          "scaleRate": 1.72
+        },
+        {
+          "type": "debuff",
+          "buffId": "debuff-wufang-down",
+          "duration": 2,
+          "value": 0.24
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 82,
+      "sort_weight": 405,
+      "enabled": true
+    },
+    {
+      "id": "sk-void-shield",
+      "code": "sk_void_shield",
+      "name": "虚空壁障",
+      "description": "凝聚虚空之力形成护盾，吸收伤害并短暂提升物防。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 24,
+      "cost_qixue": 0,
+      "cooldown": 5,
+      "target_type": "self",
+      "target_count": 1,
+      "damage_type": "none",
+      "element": "an",
+      "effects": [
+        {
+          "type": "shield",
+          "valueType": "scale",
+          "scaleAttr": "max_qixue",
+          "scaleRate": 0.14,
+          "absorbType": "all",
+          "duration": 3
+        },
+        {
+          "type": "buff",
+          "buffId": "buff-wufang-up",
+          "duration": 3,
+          "value": 0.22
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 70,
+      "sort_weight": 406,
+      "enabled": true
+    },
+    {
+      "id": "sk-earth-bind",
+      "code": "sk_earth_bind",
+      "name": "地缚术",
+      "description": "大地之力束缚全体敌人，造成土属性法术伤害并减速。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 26,
+      "cost_qixue": 0,
+      "cooldown": 5,
+      "target_type": "all_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "tu",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 0.68
+        },
+        {
+          "type": "debuff",
+          "buffId": "debuff-sudu-down",
+          "duration": 2,
+          "value": 2.4
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 76,
+      "sort_weight": 407,
+      "enabled": true
+    },
+    {
+      "id": "sk-void-pierce",
+      "code": "sk_void_pierce",
+      "name": "虚空穿刺",
+      "description": "虚空之力贯穿目标，造成暗属性法术伤害并降低增伤抗性。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 24,
+      "cost_qixue": 0,
+      "cooldown": 3,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "an",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 1.68
+        },
+        {
+          "type": "debuff",
+          "buffId": "debuff-fafang-down",
+          "duration": 2,
+          "value": 0.22
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 84,
+      "sort_weight": 408,
+      "enabled": true
+    },
+    {
+      "id": "sk-phantom-fear",
+      "code": "sk_phantom_fear",
+      "name": "幻影恐惧",
+      "description": "释放虚幻恐惧侵蚀敌方神识，造成暗属性法术伤害并有概率恐惧。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 26,
+      "cost_qixue": 0,
+      "cooldown": 5,
+      "target_type": "all_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "an",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 0.72
+        },
+        {
+          "type": "control",
+          "controlType": "fear",
+          "duration": 1,
+          "chance": 0.22
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 80,
+      "sort_weight": 409,
+      "enabled": true
+    },
+    {
+      "id": "sk-soul-storm",
+      "code": "sk_soul_storm",
+      "name": "神魂风暴",
+      "description": "虚灵神主专属终极技，神魂之力席卷全场，造成暗属性法术伤害并降低全体法防。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 30,
+      "cost_qixue": 0,
+      "cooldown": 6,
+      "target_type": "all_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "an",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 0.96
+        },
+        {
+          "type": "debuff",
+          "buffId": "debuff-fafang-down",
+          "duration": 2,
+          "value": 0.26
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 86,
+      "sort_weight": 410,
+      "enabled": true
     }
   ]
 }
