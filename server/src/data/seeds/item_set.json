@@ -2079,13 +2079,13 @@
               "trigger": "equip",
               "target": "self",
               "effect_type": "buff",
-              "params": { "attr_key": "wufang", "value": 20, "apply_type": "flat" }
+              "params": { "attr_key": "fafang", "value": 22, "apply_type": "flat" }
             },
             {
-              "trigger": "on_be_hit",
+              "trigger": "on_turn_start",
               "target": "self",
               "effect_type": "heal",
-              "params": { "value": 0, "scale_key": "max_qixue", "scale_rate": 0.012, "chance": 0.35 }
+              "params": { "value": 0, "scale_key": "max_qixue", "scale_rate": 0.015 }
             }
           ],
           "priority": 0
@@ -2097,13 +2097,14 @@
               "trigger": "equip",
               "target": "self",
               "effect_type": "buff",
-              "params": { "attr_key": "max_qixue", "value": 380, "apply_type": "flat" }
+              "params": { "attr_key": "kongzhi_kangxing_rating", "value": 350, "apply_type": "flat" }
             },
             {
               "trigger": "on_be_hit",
               "target": "enemy",
-              "effect_type": "damage",
-              "params": { "value": 0.26, "damage_type": "reflect", "chance": 0.32 }
+              "effect_type": "debuff",
+              "duration_round": 2,
+              "params": { "attr_key": "fagong", "value": 22, "apply_type": "flat", "chance": 0.3 }
             }
           ],
           "priority": 1
@@ -2115,21 +2116,21 @@
               "trigger": "equip",
               "target": "self",
               "effect_type": "buff",
-              "params": { "attr_key": "zhaojia", "value": 0.024, "apply_type": "flat" }
+              "params": { "attr_key": "max_qixue", "value": 500, "apply_type": "flat" }
             },
             {
               "trigger": "on_be_hit",
-              "target": "enemy",
-              "effect_type": "debuff",
+              "target": "self",
+              "effect_type": "buff",
               "duration_round": 1,
-              "params": { "attr_key": "wugong", "value": 28, "apply_type": "flat", "chance": 0.28 }
+              "params": { "attr_key": "fafang", "value": 0.18, "apply_type": "percent", "chance": 0.25 }
             },
             {
-              "trigger": "on_be_hit",
+              "trigger": "on_turn_start",
               "target": "enemy",
               "effect_type": "debuff",
               "duration_round": 1,
-              "params": { "attr_key": "sudu", "value": 36, "apply_type": "flat", "chance": 0.32 }
+              "params": { "attr_key": "baoji_rating", "value": 200, "apply_type": "flat", "chance": 0.3 }
             }
           ],
           "priority": 2
@@ -2141,14 +2142,14 @@
               "trigger": "on_turn_start",
               "target": "self",
               "effect_type": "heal",
-              "params": { "value": 0, "scale_key": "max_qixue", "scale_rate": 0.04 }
+              "params": { "value": 0, "scale_key": "max_qixue", "scale_rate": 0.035 }
             },
             {
               "trigger": "on_be_hit",
               "target": "self",
               "effect_type": "buff",
-              "duration_round": 1,
-              "params": { "attr_key": "wufang", "value": 0.22, "apply_type": "percent", "chance": 0.2 }
+              "duration_round": 2,
+              "params": { "attr_key": "kangbao_rating", "value": 500, "apply_type": "flat", "chance": 0.22 }
             }
           ],
           "priority": 3
