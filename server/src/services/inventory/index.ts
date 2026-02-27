@@ -56,6 +56,9 @@ import {
   isGemItemDefinition,
   resolveGemTypeFromItemDefinition,
 } from '../shared/gemItemSemantics.js';
+import {
+  getRealmRankOneBasedStrict,
+} from '../shared/realmRules.js';
 
 // 背包位置类型
 export type InventoryLocation = 'bag' | 'warehouse' | 'equipped';
@@ -1718,6 +1721,33 @@ export const equipItem = async (
     if (item.location !== 'bag' && item.location !== 'warehouse') {
       await client.query('ROLLBACK');
       return { success: false, message: '该物品当前位置不可装备' };
+    }
+
+    const equipRequiredRealm = typeof itemDef.equip_req_realm === 'string' ? itemDef.equip_req_realm.trim() : '';
+    if (equipRequiredRealm) {
+      const characterRealmResult = await client.query(
+        `
+          SELECT realm, sub_realm
+          FROM characters
+          WHERE id = $1
+          FOR UPDATE
+          LIMIT 1
+        `,
+        [characterId]
+      );
+
+      if (characterRealmResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return { success: false, message: '角色不存在' };
+      }
+
+      const characterRealm = characterRealmResult.rows[0] as { realm: string; sub_realm: string | null };
+      const characterRealmRank = getRealmRankOneBasedStrict(characterRealm.realm, characterRealm.sub_realm);
+      const equipRequiredRealmRank = getEquipRealmRankForReroll(equipRequiredRealm);
+      if (characterRealmRank < equipRequiredRealmRank) {
+        await client.query('ROLLBACK');
+        return { success: false, message: `境界不足，需达到${equipRequiredRealm}` };
+      }
     }
 
     const newItemDelta = await getEquipmentAttrDeltaByInstanceIdTx(client, characterId, itemInstanceId);
