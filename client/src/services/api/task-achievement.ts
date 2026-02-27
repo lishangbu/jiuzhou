@@ -284,6 +284,7 @@ export type TitleInfoDto = {
   effects: Record<string, number>;
   isEquipped: boolean;
   obtainedAt: string;
+  expiresAt: string | null;
 };
 
 export type TitleListResponse = {

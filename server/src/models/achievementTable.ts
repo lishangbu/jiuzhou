@@ -1,4 +1,5 @@
 import { query } from '../config/database.js';
+import { runDbMigrationOnce } from './migrationHistoryTable.js';
 
 const characterAchievementTableSQL = `
 CREATE TABLE IF NOT EXISTS character_achievement (
@@ -50,21 +51,64 @@ CREATE TABLE IF NOT EXISTS character_title (
   title_id VARCHAR(64) NOT NULL,
   is_equipped BOOLEAN NOT NULL DEFAULT FALSE,
   obtained_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(character_id, title_id)
 );
 
 COMMENT ON TABLE character_title IS '角色称号拥有与装备状态';
+COMMENT ON COLUMN character_title.expires_at IS '称号过期时间；NULL表示永久有效';
 
 CREATE INDEX IF NOT EXISTS idx_character_title_character
   ON character_title(character_id, obtained_at DESC);
 CREATE INDEX IF NOT EXISTS idx_character_title_equipped
   ON character_title(character_id, is_equipped);
+CREATE INDEX IF NOT EXISTS idx_character_title_active_validity
+  ON character_title(character_id, is_equipped, expires_at);
+CREATE INDEX IF NOT EXISTS idx_character_title_expires_at
+  ON character_title(expires_at)
+  WHERE expires_at IS NOT NULL;
 `;
+
+/**
+ * 一次性迁移：为已有库补齐限时称号过期字段与索引。
+ *
+ * 作用：
+ * 1. 为旧版本 character_title 表追加 expires_at 字段；
+ * 2. 增加“有效称号读取”与“过期清理”所需索引，降低周结算与称号列表查询开销。
+ *
+ * 输入：
+ * - 无（直接对当前数据库结构执行 DDL）
+ *
+ * 输出：
+ * - 结构迁移完成后，character_title 具备限时称号所需字段与索引。
+ *
+ * 数据流：
+ * - initAchievementTables -> runDbMigrationOnce -> 执行本函数。
+ *
+ * 关键边界条件与坑点：
+ * 1. 旧库可能已手动创建列或索引，因此所有 DDL 都必须使用 IF NOT EXISTS。
+ * 2. COMMENT 语句需要在列存在后执行，否则会直接失败中断初始化。
+ */
+const migrateCharacterTitleExpiresAt = async (): Promise<void> => {
+  await query('ALTER TABLE character_title ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ');
+  await query(`COMMENT ON COLUMN character_title.expires_at IS '称号过期时间；NULL表示永久有效'`);
+  await query(
+    'CREATE INDEX IF NOT EXISTS idx_character_title_active_validity ON character_title(character_id, is_equipped, expires_at)',
+  );
+  await query(
+    'CREATE INDEX IF NOT EXISTS idx_character_title_expires_at ON character_title(expires_at) WHERE expires_at IS NOT NULL',
+  );
+};
 
 export const initAchievementTables = async (): Promise<void> => {
   await query(characterAchievementTableSQL);
   await query(characterAchievementPointsTableSQL);
   await query(characterTitleTableSQL);
+  await runDbMigrationOnce({
+    migrationKey: 'character_title_expires_at_v1',
+    description: '角色称号表增加 expires_at 字段与有效期查询索引',
+    execute: migrateCharacterTitleExpiresAt,
+  });
   console.log('✓ 成就与称号系统表检测完成');
 };

@@ -52,9 +52,37 @@ CREATE INDEX IF NOT EXISTS idx_arena_battle_opponent_time ON arena_battle(oppone
 CREATE INDEX IF NOT EXISTS idx_arena_battle_status_time ON arena_battle(status, created_at DESC);
 `;
 
+const arenaWeeklySettlementTableSQL = `
+CREATE TABLE IF NOT EXISTS arena_weekly_settlement (
+  week_start_local_date DATE PRIMARY KEY,
+  week_end_local_date DATE NOT NULL,
+  window_start_at TIMESTAMPTZ NOT NULL,
+  window_end_at TIMESTAMPTZ NOT NULL,
+  champion_character_id INTEGER REFERENCES characters(id) ON DELETE SET NULL,
+  runnerup_character_id INTEGER REFERENCES characters(id) ON DELETE SET NULL,
+  third_character_id INTEGER REFERENCES characters(id) ON DELETE SET NULL,
+  settled_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+COMMENT ON TABLE arena_weekly_settlement IS '竞技场周结算记录（幂等控制：每周仅结算一次）';
+COMMENT ON COLUMN arena_weekly_settlement.week_start_local_date IS '结算周起始日期（Asia/Shanghai，周一）';
+COMMENT ON COLUMN arena_weekly_settlement.week_end_local_date IS '结算周结束日期（Asia/Shanghai，下周一）';
+COMMENT ON COLUMN arena_weekly_settlement.window_start_at IS '结算窗口开始时间（UTC存储）';
+COMMENT ON COLUMN arena_weekly_settlement.window_end_at IS '结算窗口结束时间（UTC存储）';
+COMMENT ON COLUMN arena_weekly_settlement.champion_character_id IS '周结算第1名角色ID';
+COMMENT ON COLUMN arena_weekly_settlement.runnerup_character_id IS '周结算第2名角色ID';
+COMMENT ON COLUMN arena_weekly_settlement.third_character_id IS '周结算第3名角色ID';
+COMMENT ON COLUMN arena_weekly_settlement.settled_at IS '结算写入时间';
+COMMENT ON COLUMN arena_weekly_settlement.updated_at IS '最近更新时间';
+
+CREATE INDEX IF NOT EXISTS idx_arena_weekly_settlement_settled_at
+  ON arena_weekly_settlement(settled_at DESC);
+`;
+
 export const initArenaTables = async (): Promise<void> => {
   await query(arenaRatingTableSQL);
   await query(arenaBattleTableSQL);
+  await query(arenaWeeklySettlementTableSQL);
   console.log('✓ 竞技场系统表检测完成');
 };
-

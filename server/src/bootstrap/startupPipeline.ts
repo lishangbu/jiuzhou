@@ -6,6 +6,7 @@ import { initGameTimeService } from '../services/gameTimeService.js';
 import { recoverBattlesFromRedis } from '../domains/battle/index.js';
 import { cleanupUndefinedItemDataOnStartup } from '../services/itemDataCleanupService.js';
 import { recoverActiveIdleSessions, flushAllBuffers } from '../services/idle/idleBattleExecutor.js';
+import { initArenaWeeklySettlementService } from '../services/arenaWeeklySettlementService.js';
 
 export interface StartServerOptions {
   httpServer: HttpServer;
@@ -32,6 +33,7 @@ export const startServerWithPipeline = async (options: StartServerOptions): Prom
   await initTables();
   await cleanupUndefinedItemDataOnStartup();
   await initGameTimeService();
+  await initArenaWeeklySettlementService();
 
   if (redisConnected) {
     console.log('正在恢复战斗状态...');
@@ -85,4 +87,3 @@ export const registerGracefulShutdown = (httpServer: HttpServer): void => {
   process.on('SIGTERM', () => void gracefulShutdown('SIGTERM'));
   process.on('SIGINT', () => void gracefulShutdown('SIGINT'));
 };
-

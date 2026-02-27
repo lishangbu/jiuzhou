@@ -62,6 +62,54 @@
       "enabled": true,
       "sort_weight": 40,
       "version": 1
+    },
+    {
+      "id": "title-pvp-weekly-champion",
+      "name": "问鼎三界",
+      "description": "竞技场周结算冠军专属称号（限时7天）",
+      "color": "#fadb14",
+      "effects": {
+        "wugong": 20,
+        "fagong": 20,
+        "max_qixue": 120
+      },
+      "source_type": "pvp_weekly_rank",
+      "source_id": "pvp-weekly-rank-1",
+      "enabled": true,
+      "sort_weight": 100,
+      "version": 1
+    },
+    {
+      "id": "title-pvp-weekly-runnerup",
+      "name": "盖世无双",
+      "description": "竞技场周结算亚军专属称号（限时7天）",
+      "color": "#bfbfbf",
+      "effects": {
+        "wugong": 15,
+        "fagong": 15,
+        "max_qixue": 90
+      },
+      "source_type": "pvp_weekly_rank",
+      "source_id": "pvp-weekly-rank-2",
+      "enabled": true,
+      "sort_weight": 99,
+      "version": 1
+    },
+    {
+      "id": "title-pvp-weekly-third",
+      "name": "锋芒毕露",
+      "description": "竞技场周结算季军专属称号（限时7天）",
+      "color": "#d48806",
+      "effects": {
+        "wugong": 10,
+        "fagong": 10,
+        "max_qixue": 60
+      },
+      "source_type": "pvp_weekly_rank",
+      "source_id": "pvp-weekly-rank-3",
+      "enabled": true,
+      "sort_weight": 98,
+      "version": 1
     }
   ]
 }

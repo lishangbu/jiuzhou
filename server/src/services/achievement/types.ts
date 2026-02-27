@@ -160,6 +160,7 @@ export interface TitleInfo {
   effects: Record<string, number>;
   isEquipped: boolean;
   obtainedAt: string;
+  expiresAt: string | null;
 }
 
 export interface TitleListResult {

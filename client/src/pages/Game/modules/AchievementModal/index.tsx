@@ -217,6 +217,32 @@ const formatTitleEffects = (effects: Record<string, number>): string => {
   return rows.map((item) => item.text).join('，');
 };
 
+const pad2 = (value: number): string => String(value).padStart(2, '0');
+
+const formatTitleExpireAt = (expiresAt: string): string => {
+  const date = new Date(expiresAt);
+  const year = date.getFullYear();
+  const month = pad2(date.getMonth() + 1);
+  const day = pad2(date.getDate());
+  const hour = pad2(date.getHours());
+  const minute = pad2(date.getMinutes());
+  return `${year}-${month}-${day} ${hour}:${minute}`;
+};
+
+const formatTitleRemaining = (expiresAt: string, nowMs: number): string => {
+  const deltaMs = new Date(expiresAt).getTime() - nowMs;
+  if (deltaMs <= 0) return '已过期';
+
+  const totalMinutes = Math.floor(deltaMs / 60_000);
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) return `${days}天${hours}小时${minutes}分`;
+  if (hours > 0) return `${hours}小时${minutes}分`;
+  return `${minutes}分`;
+};
+
 const AchievementModal: React.FC<AchievementModalProps> = ({ open, onClose, onChanged }) => {
   const { message } = App.useApp();
 
@@ -233,6 +259,7 @@ const AchievementModal: React.FC<AchievementModalProps> = ({ open, onClose, onCh
   const [claimingId, setClaimingId] = useState('');
   const [claimingPointThreshold, setClaimingPointThreshold] = useState<number | null>(null);
   const [equippingTitleId, setEquippingTitleId] = useState('');
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
 
   const refreshData = useCallback(async () => {
     setLoading(true);
@@ -278,6 +305,20 @@ const AchievementModal: React.FC<AchievementModalProps> = ({ open, onClose, onCh
     if (!open) return;
     void refreshData();
   }, [open, refreshData]);
+
+  /**
+   * 称号剩余时间按分钟刷新即可，避免逐秒刷新导致不必要的重渲染。
+   */
+  useEffect(() => {
+    if (!open) return;
+    setNowMs(Date.now());
+    const intervalId = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 60 * 1000);
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [open]);
 
   const overall = useMemo(() => {
     const total = achievements.length;
@@ -569,6 +610,12 @@ const AchievementModal: React.FC<AchievementModalProps> = ({ open, onClose, onCh
                         </div>
                         <div className="achievement-item-desc">{title.description}</div>
                         <div className="achievement-item-desc">{effectsText || '无属性加成'}</div>
+                        <div className="achievement-title-expire-line">
+                          有效期：{title.expiresAt ? formatTitleExpireAt(title.expiresAt) : '永久'}
+                        </div>
+                        <div className="achievement-title-expire-line">
+                          剩余：{title.expiresAt ? formatTitleRemaining(title.expiresAt, nowMs) : '永久'}
+                        </div>
                       </div>
                       <div className="achievement-item-right">
                         <Button

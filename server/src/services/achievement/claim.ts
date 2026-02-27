@@ -23,6 +23,7 @@ import {
   getItemDefinitionsByIds,
   getTitleDefinitions,
 } from '../staticConfigLoader.js';
+import { grantPermanentTitleTx } from './titleOwnership.js';
 
 const asRewardType = (value: unknown): 'silver' | 'spirit_stones' | 'exp' | 'item' | null => {
   const raw = asNonEmptyString(value);
@@ -149,16 +150,7 @@ const grantTitleTx = async (
   if (!id) return undefined;
   const titleDef = getTitleDefinitions().find((entry) => entry.id === id && entry.enabled !== false);
   if (!titleDef) return undefined;
-
-  await client.query(
-    `
-      INSERT INTO character_title (character_id, title_id, is_equipped, obtained_at, updated_at)
-      VALUES ($1, $2, false, NOW(), NOW())
-      ON CONFLICT (character_id, title_id)
-      DO UPDATE SET updated_at = NOW()
-    `,
-    [characterId, id],
-  );
+  await grantPermanentTitleTx(client, characterId, id);
 
   return getTitleInfo(id, client);
 };

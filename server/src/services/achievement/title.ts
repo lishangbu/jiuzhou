@@ -40,9 +40,11 @@ export const getTitleList = async (characterId: number): Promise<TitleListResult
       SELECT
         ct.title_id,
         ct.is_equipped,
-        ct.obtained_at
+        ct.obtained_at,
+        ct.expires_at
       FROM character_title ct
       WHERE ct.character_id = $1
+        AND (ct.expires_at IS NULL OR ct.expires_at > NOW())
       ORDER BY ct.is_equipped DESC, ct.obtained_at ASC, ct.id ASC
     `,
     [cid],
@@ -74,6 +76,7 @@ export const getTitleList = async (characterId: number): Promise<TitleListResult
       effects: normalizeTitleEffects(def.effects),
       isEquipped,
       obtainedAt: row.obtained_at ? new Date(String(row.obtained_at)).toISOString() : new Date(0).toISOString(),
+      expiresAt: row.expires_at ? new Date(String(row.expires_at)).toISOString() : null,
     });
   }
 
@@ -102,6 +105,7 @@ export const equipTitle = async (characterId: number, titleId: string): Promise<
         FROM character_title
         WHERE character_id = $1
           AND title_id = $2
+          AND (expires_at IS NULL OR expires_at > NOW())
         LIMIT 1
         FOR UPDATE
       `,
@@ -122,6 +126,7 @@ export const equipTitle = async (characterId: number, titleId: string): Promise<
         FROM character_title
         WHERE character_id = $1
           AND is_equipped = true
+          AND (expires_at IS NULL OR expires_at > NOW())
         LIMIT 1
         FOR UPDATE
       `,

@@ -720,6 +720,7 @@ const loadEquippedTitleEffects = async (characterId: number): Promise<Record<str
       FROM character_title ct
       WHERE ct.character_id = $1
         AND ct.is_equipped = true
+        AND (ct.expires_at IS NULL OR ct.expires_at > NOW())
       LIMIT 1
     `,
     [characterId],
