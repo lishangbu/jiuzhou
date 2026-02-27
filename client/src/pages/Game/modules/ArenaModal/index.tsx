@@ -11,7 +11,6 @@ import {
   type ArenaRecordDto,
   type ArenaStatusDto,
 } from '../../../../services/api';
-import { getUnifiedApiErrorMessage } from '../../../../services/api';
 import { useIsMobile } from '../../shared/responsive';
 import './index.scss';
 
@@ -63,13 +62,13 @@ const ArenaModal: React.FC<ArenaModalProps> = ({ open, onClose, character, onSta
     try {
       const res = await getArenaOpponents(10);
       if (!res.success) {
-        message.error(getUnifiedApiErrorMessage(res, '获取对手失败'));
+        void 0;
         setOpponents([]);
         return;
       }
       setOpponents(res.data ?? []);
     } catch (e) {
-      message.error(getUnifiedApiErrorMessage(e, '获取对手失败'));
+      void 0;
       setOpponents([]);
     }
   }, [message]);
@@ -78,13 +77,13 @@ const ArenaModal: React.FC<ArenaModalProps> = ({ open, onClose, character, onSta
     try {
       const res = await getArenaStatus();
       if (!res.success) {
-        message.error(getUnifiedApiErrorMessage(res, '获取竞技场状态失败'));
+        void 0;
         setStatus(null);
         return;
       }
       setStatus(res.data ?? null);
     } catch (e) {
-      message.error(getUnifiedApiErrorMessage(e, '获取竞技场状态失败'));
+      void 0;
       setStatus(null);
     }
   }, [message]);
@@ -93,13 +92,13 @@ const ArenaModal: React.FC<ArenaModalProps> = ({ open, onClose, character, onSta
     try {
       const res = await getArenaRecords(50);
       if (!res.success) {
-        message.error(getUnifiedApiErrorMessage(res, '获取战报失败'));
+        void 0;
         setRecords([]);
         return;
       }
       setRecords(res.data ?? []);
     } catch (e) {
-      message.error(getUnifiedApiErrorMessage(e, '获取战报失败'));
+      void 0;
       setRecords([]);
     }
   }, [message]);
@@ -164,7 +163,7 @@ const ArenaModal: React.FC<ArenaModalProps> = ({ open, onClose, character, onSta
         try {
           const res = await arenaMatch();
           if (!res?.success || !res.data?.battleId) {
-            message.error(getUnifiedApiErrorMessage(res, '匹配失败'));
+            void 0;
             stopMatching();
             return;
           }
@@ -172,7 +171,7 @@ const ArenaModal: React.FC<ArenaModalProps> = ({ open, onClose, character, onSta
           onClose();
           onStartBattle?.(res.data.battleId);
         } catch (e) {
-          message.error(getUnifiedApiErrorMessage(e, '匹配失败'));
+          void 0;
           stopMatching();
         }
       })();
@@ -184,13 +183,13 @@ const ArenaModal: React.FC<ArenaModalProps> = ({ open, onClose, character, onSta
       try {
         const res = await arenaChallenge(opp.id);
         if (!res?.success || !res.data?.battleId) {
-          message.error(getUnifiedApiErrorMessage(res, '挑战失败'));
+          void 0;
           return;
         }
         onClose();
         onStartBattle?.(res.data.battleId);
       } catch (e) {
-        message.error(getUnifiedApiErrorMessage(e, '挑战失败'));
+        void 0;
       }
     },
     [message, onClose, onStartBattle],

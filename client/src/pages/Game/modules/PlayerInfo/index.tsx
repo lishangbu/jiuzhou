@@ -4,13 +4,13 @@ import { UserOutlined, LoadingOutlined, MinusOutlined, PlusOutlined } from '@ant
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { gameSocket, type CharacterData } from '../../../../services/gameSocket';
 import { SERVER_BASE, getRealmOverview, uploadAvatar, addAttributePoint, removeAttributePoint, type RealmOverviewDto } from '../../../../services/api';
-import { getUnifiedApiErrorMessage } from '../../../../services/api';
 import { formatPercent, formatRecovery } from '../../shared/formatAttr';
 import './index.scss';
 
 const staminaMaxFromEnv = Number(import.meta.env.VITE_STAMINA_MAX);
 const STAMINA_DISPLAY_MAX = Number.isFinite(staminaMaxFromEnv) && staminaMaxFromEnv > 0 ? Math.floor(staminaMaxFromEnv) : 100;
 const CHARACTER_REFRESH_INTERVAL_MS = 30_000;
+const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
 
 const PlayerInfo: React.FC = () => {
   const { message } = App.useApp();
@@ -52,7 +52,7 @@ const PlayerInfo: React.FC = () => {
   useEffect(() => {
     if (!character?.realm) return;
     let cancelled = false;
-    getRealmOverview()
+    getRealmOverview(SILENT_REQUEST_CONFIG)
       .then((res) => {
         if (cancelled) return;
         if (res?.success && res.data) {
@@ -118,10 +118,10 @@ const PlayerInfo: React.FC = () => {
         // 刷新角色数据
         gameSocket.refreshCharacter();
       } else {
-        message.error(getUnifiedApiErrorMessage(result, '上传失败'));
+        void 0;
       }
     } catch {
-      message.error('上传失败');
+      void 0;
     } finally {
       setUploading(false);
     }
@@ -137,10 +137,10 @@ const PlayerInfo: React.FC = () => {
       if (result.success) {
         gameSocket.refreshCharacter();
       } else {
-        message.error(getUnifiedApiErrorMessage(result, '加点失败'));
+        void 0;
       }
     } catch {
-      message.error('加点失败');
+      void 0;
     } finally {
       setProcessingPoint(null);
     }
@@ -156,10 +156,10 @@ const PlayerInfo: React.FC = () => {
       if (result.success) {
         gameSocket.refreshCharacter();
       } else {
-        message.error(getUnifiedApiErrorMessage(result, '减点失败'));
+        void 0;
       }
     } catch {
-      message.error('减点失败');
+      void 0;
     } finally {
       setProcessingPoint(null);
     }

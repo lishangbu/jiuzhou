@@ -22,6 +22,7 @@ const typeLabel: Record<RoomObjectType, { text: string; color: string }> = {
 };
 
 const typeOrder: Record<RoomObjectType, number> = { npc: 0, monster: 1, item: 2, player: 3 };
+const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
 
 const calcShichen = (hour: number): string => {
   const h = Math.floor(hour);
@@ -114,7 +115,7 @@ const RoomObjects: React.FC<RoomObjectsProps> = ({ mapId, roomId, onSelect }) =>
     let cancelled = false;
 
     const fetchTime = () => {
-      getGameTime()
+      getGameTime(SILENT_REQUEST_CONFIG)
         .then((res) => {
           if (cancelled) return;
           if (!res?.success || !res.data) return;
@@ -153,7 +154,7 @@ const RoomObjects: React.FC<RoomObjectsProps> = ({ mapId, roomId, onSelect }) =>
       if (cancelled) return;
       setLoading(true);
       setError('');
-      getRoomObjects(mapId, roomId)
+      getRoomObjects(mapId, roomId, SILENT_REQUEST_CONFIG)
         .then((res) => {
           if (cancelled) return;
           if (!res?.success || !res.data) {

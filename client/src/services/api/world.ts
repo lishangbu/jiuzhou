@@ -1,4 +1,7 @@
+import type { AxiosRequestConfig } from 'axios';
 import api from './core';
+
+type RequestConfig = AxiosRequestConfig;
 
 export type GridPosition = 'NW' | 'N' | 'NE' | 'W' | 'C' | 'E' | 'SW' | 'S' | 'SE';
 
@@ -122,8 +125,8 @@ export interface MapsResponse {
   data?: { maps: MapDefLite[] };
 }
 
-export const getEnabledMaps = (): Promise<MapsResponse> => {
-  return api.get('/map/maps');
+export const getEnabledMaps = (requestConfig?: RequestConfig): Promise<MapsResponse> => {
+  return api.get('/map/maps', requestConfig);
 };
 
 export type MapRoom = {
@@ -153,8 +156,8 @@ export interface MapDetailResponse {
   data?: { map: Record<string, unknown>; rooms: MapRoom[] };
 }
 
-export const getMapDetail = (mapId: string): Promise<MapDetailResponse> => {
-  return api.get(`/map/${mapId}`);
+export const getMapDetail = (mapId: string, requestConfig?: RequestConfig): Promise<MapDetailResponse> => {
+  return api.get(`/map/${mapId}`, requestConfig);
 };
 
 export interface RoomObjectsResponse {
@@ -163,8 +166,8 @@ export interface RoomObjectsResponse {
   data?: { mapId: string; roomId: string; objects: MapObjectDto[] };
 }
 
-export const getRoomObjects = (mapId: string, roomId: string): Promise<RoomObjectsResponse> => {
-  return api.get(`/map/${mapId}/rooms/${roomId}/objects`);
+export const getRoomObjects = (mapId: string, roomId: string, requestConfig?: RequestConfig): Promise<RoomObjectsResponse> => {
+  return api.get(`/map/${mapId}/rooms/${roomId}/objects`, requestConfig);
 };
 
 export interface GameTimeSnapshotDto {
@@ -183,8 +186,8 @@ export interface GameTimeSnapshotDto {
   game_elapsed_ms: number;
 }
 
-export const getGameTime = (): Promise<{ success: boolean; message?: string; data?: GameTimeSnapshotDto }> => {
-  return api.get('/time');
+export const getGameTime = (requestConfig?: RequestConfig): Promise<{ success: boolean; message?: string; data?: GameTimeSnapshotDto }> => {
+  return api.get('/time', requestConfig);
 };
 
 export interface GatherRoomResourceResponse {
@@ -243,8 +246,11 @@ export const getDungeonList = (params?: {
   type?: DungeonType;
   q?: string;
   realm?: string;
-}): Promise<DungeonListResponse> => {
-  return api.get('/dungeon/list', { params });
+}, requestConfig?: RequestConfig): Promise<DungeonListResponse> => {
+  return api.get('/dungeon/list', {
+    ...requestConfig,
+    params: { ...(requestConfig?.params ?? {}), ...params },
+  });
 };
 
 export interface DungeonPreviewResponse {
@@ -298,8 +304,11 @@ export interface DungeonPreviewResponse {
   };
 }
 
-export const getDungeonPreview = (dungeonId: string, rank?: number): Promise<DungeonPreviewResponse> => {
-  return api.get(`/dungeon/preview/${dungeonId}`, { params: { rank } });
+export const getDungeonPreview = (dungeonId: string, rank?: number, requestConfig?: RequestConfig): Promise<DungeonPreviewResponse> => {
+  return api.get(`/dungeon/preview/${dungeonId}`, {
+    ...requestConfig,
+    params: { ...(requestConfig?.params ?? {}), rank },
+  });
 };
 
 export interface DungeonWeeklyTargetDto {
@@ -403,6 +412,10 @@ export interface InfoTargetDetailResponse {
   data?: { target: MapObjectDto };
 }
 
-export const getInfoTargetDetail = (type: MapObjectDto['type'], id: string): Promise<InfoTargetDetailResponse> => {
-  return api.get(`/info/${type}/${id}`);
+export const getInfoTargetDetail = (
+  type: MapObjectDto['type'],
+  id: string,
+  requestConfig?: RequestConfig,
+): Promise<InfoTargetDetailResponse> => {
+  return api.get(`/info/${type}/${id}`, requestConfig);
 };

@@ -1,3 +1,4 @@
+import type { AxiosRequestConfig } from 'axios';
 import api, { API_BASE } from './core';
 
 export interface AuthResponse {
@@ -86,8 +87,12 @@ export const getCharacterInfo = (): Promise<CharacterResponse> => {
   return api.get('/character/info');
 };
 
-export const updateCharacterPosition = (currentMapId: string, currentRoomId: string): Promise<{ success: boolean; message: string }> => {
-  return api.post('/character/updatePosition', { currentMapId, currentRoomId });
+export const updateCharacterPosition = (
+  currentMapId: string,
+  currentRoomId: string,
+  requestConfig?: AxiosRequestConfig,
+): Promise<{ success: boolean; message: string }> => {
+  return api.post('/character/updatePosition', { currentMapId, currentRoomId }, requestConfig);
 };
 
 export const updateCharacterPositionKeepalive = (currentMapId: string, currentRoomId: string): void => {

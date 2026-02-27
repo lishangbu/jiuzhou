@@ -1,4 +1,7 @@
+import type { AxiosRequestConfig } from 'axios';
 import api from './core';
+
+type RequestConfig = AxiosRequestConfig;
 
 export type BountyClaimPolicyDto = 'unique' | 'limited' | 'unlimited';
 export type BountySourceTypeDto = 'daily' | 'player';
@@ -31,8 +34,14 @@ export interface BountyBoardResponse {
   data?: { bounties: BountyBoardRowDto[]; today: string };
 }
 
-export const getBountyBoard = (pool: 'daily' | 'player' | 'all' = 'daily'): Promise<BountyBoardResponse> => {
-  return api.get('/bounty/board', { params: { pool } });
+export const getBountyBoard = (
+  pool: 'daily' | 'player' | 'all' = 'daily',
+  requestConfig?: RequestConfig,
+): Promise<BountyBoardResponse> => {
+  return api.get('/bounty/board', {
+    ...requestConfig,
+    params: { ...(requestConfig?.params ?? {}), pool },
+  });
 };
 
 export const claimBounty = (
@@ -59,9 +68,13 @@ export type BountyItemDefSearchRowDto = { id: string; name: string; icon: string
 
 export const searchBountyItemDefs = (
   keyword: string,
-  limit: number = 20
+  limit: number = 20,
+  requestConfig?: RequestConfig,
 ): Promise<{ success: boolean; message?: string; data?: { items: BountyItemDefSearchRowDto[] } }> => {
-  return api.get('/bounty/items/search', { params: { keyword, limit } });
+  return api.get('/bounty/items/search', {
+    ...requestConfig,
+    params: { ...(requestConfig?.params ?? {}), keyword, limit },
+  });
 };
 
 export const submitBountyMaterials = (

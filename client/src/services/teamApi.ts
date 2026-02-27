@@ -1,4 +1,5 @@
 import api from './api';
+import type { AxiosRequestConfig } from 'axios';
 
 /**
  * 九州修仙录 - 组队系统 API
@@ -86,8 +87,11 @@ interface ApiResponse<T = unknown> {
 export type GetMyTeamResponse = ApiResponse<TeamInfo | null> & { role?: 'leader' | 'member' };
 
 // 获取角色当前队伍
-export const getMyTeam = (characterId: number): Promise<GetMyTeamResponse> => {
-  return api.get('/team/my', { params: { characterId } });
+export const getMyTeam = (characterId: number, requestConfig?: AxiosRequestConfig): Promise<GetMyTeamResponse> => {
+  return api.get('/team/my', {
+    ...requestConfig,
+    params: { ...(requestConfig?.params ?? {}), characterId },
+  });
 };
 
 // 获取队伍详情
@@ -128,9 +132,13 @@ export const applyToTeam = (
 // 获取队伍申请列表
 export const getTeamApplications = (
   teamId: string,
-  characterId: number
+  characterId: number,
+  requestConfig?: AxiosRequestConfig,
 ): Promise<ApiResponse<TeamApplication[]>> => {
-  return api.get(`/team/applications/${teamId}`, { params: { characterId } });
+  return api.get(`/team/applications/${teamId}`, {
+    ...requestConfig,
+    params: { ...(requestConfig?.params ?? {}), characterId },
+  });
 };
 
 // 处理入队申请
@@ -164,18 +172,26 @@ export const updateTeamSettings = (
 // 获取附近队伍
 export const getNearbyTeams = (
   characterId: number,
-  mapId?: string
+  mapId?: string,
+  requestConfig?: AxiosRequestConfig,
 ): Promise<ApiResponse<TeamEntry[]>> => {
-  return api.get('/team/nearby/list', { params: { characterId, mapId } });
+  return api.get('/team/nearby/list', {
+    ...requestConfig,
+    params: { ...(requestConfig?.params ?? {}), characterId, mapId },
+  });
 };
 
 // 获取队伍大厅
 export const getLobbyTeams = (
   characterId: number,
   search?: string,
-  limit?: number
+  limit?: number,
+  requestConfig?: AxiosRequestConfig,
 ): Promise<ApiResponse<TeamEntry[]>> => {
-  return api.get('/team/lobby/list', { params: { characterId, search, limit } });
+  return api.get('/team/lobby/list', {
+    ...requestConfig,
+    params: { ...(requestConfig?.params ?? {}), characterId, search, limit },
+  });
 };
 
 // 邀请玩家入队
@@ -188,8 +204,11 @@ export const inviteToTeam = (
 };
 
 // 获取收到的邀请
-export const getReceivedInvitations = (characterId: number): Promise<ApiResponse<TeamInvitation[]>> => {
-  return api.get('/team/invitations/received', { params: { characterId } });
+export const getReceivedInvitations = (characterId: number, requestConfig?: AxiosRequestConfig): Promise<ApiResponse<TeamInvitation[]>> => {
+  return api.get('/team/invitations/received', {
+    ...requestConfig,
+    params: { ...(requestConfig?.params ?? {}), characterId },
+  });
 };
 
 // 处理入队邀请

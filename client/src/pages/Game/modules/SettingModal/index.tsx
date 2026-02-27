@@ -286,7 +286,7 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
       message.success('自动分解设置已保存');
     } catch (error) {
       rollback();
-      message.error(getUnifiedApiErrorMessage(error, '设置保存失败'));
+      void 0;
     } finally {
       setAutoDisassembleSaving(false);
     }

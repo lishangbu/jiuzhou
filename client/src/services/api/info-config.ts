@@ -1,3 +1,4 @@
+import type { AxiosRequestConfig } from 'axios';
 import api from './core';
 
 /**
@@ -42,6 +43,6 @@ export interface GameItemTaxonomyResponse {
   };
 }
 
-export const getGameItemTaxonomy = (): Promise<GameItemTaxonomyResponse> => {
-  return api.get('/info/item-taxonomy');
+export const getGameItemTaxonomy = (requestConfig?: AxiosRequestConfig): Promise<GameItemTaxonomyResponse> => {
+  return api.get('/info/item-taxonomy', requestConfig);
 };

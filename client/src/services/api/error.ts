@@ -37,6 +37,13 @@ export interface ErrorNotifier {
   error: (content: string) => unknown;
 }
 
+export const API_ERROR_TOAST_EVENT = 'api:error-toast';
+
+export interface ApiErrorToastDetail {
+  message: string;
+  error: UnifiedApiError;
+}
+
 const DEFAULT_FALLBACK_MESSAGE = '网络错误';
 
 const toNonEmptyString = (value: unknown): string | null => {
@@ -175,4 +182,13 @@ export const notifyUnifiedApiError = (
   const normalized = toUnifiedApiError(error, fallback);
   notifier?.error(normalized.message);
   return normalized;
+};
+
+export const shouldAutoErrorToast = (config?: { meta?: { autoErrorToast?: boolean } } | null): boolean => {
+  return config?.meta?.autoErrorToast !== false;
+};
+
+export const emitApiErrorToast = (detail: ApiErrorToastDetail): void => {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent<ApiErrorToastDetail>(API_ERROR_TOAST_EVENT, { detail }));
 };

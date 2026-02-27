@@ -115,7 +115,7 @@ const BattlePassModal: React.FC<BattlePassModalProps> = ({ open, onClose }) => {
       setWeeklyTasks((res.data.weekly ?? []).map(toTask));
       setSeasonTasks((res.data.season ?? []).map(toTask));
     } catch (error: unknown) {
-      message.error(getUnifiedApiErrorMessage(error, '加载战令任务失败'));
+      void 0;
       setDailyTasks([]);
       setWeeklyTasks([]);
       setSeasonTasks([]);
@@ -153,14 +153,14 @@ const BattlePassModal: React.FC<BattlePassModalProps> = ({ open, onClose }) => {
     try {
       const res = await claimBattlePassReward(lv, 'free');
       if (!res.success) {
-        message.error(getUnifiedApiErrorMessage(res, '领取失败'));
+        void 0;
         return;
       }
       message.success(`领取成功！`);
       // 刷新状态以更新领取记录
       await refreshStatus();
     } catch (error: unknown) {
-      message.error(getUnifiedApiErrorMessage(error, '领取失败'));
+      void 0;
     } finally {
       setClaimingLevel(null);
     }
@@ -179,14 +179,14 @@ const BattlePassModal: React.FC<BattlePassModalProps> = ({ open, onClose }) => {
     try {
       const res = await completeBattlePassTask(task.id);
       if (!res.success) {
-        message.error(getUnifiedApiErrorMessage(res, '任务完成失败'));
+        void 0;
         return;
       }
       const gainedExp = Number(res.data?.gainedExp ?? task.exp);
       message.success(`任务完成，获得 ${gainedExp} 经验`);
       await Promise.all([refreshStatus(), refreshTasks()]);
     } catch (error: unknown) {
-      message.error(getUnifiedApiErrorMessage(error, '任务完成失败'));
+      void 0;
     } finally {
       setCompletingTaskId(null);
     }

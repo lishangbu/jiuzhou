@@ -9,7 +9,6 @@ import {
   type BattleRewardsDto,
   type BattleStateDto,
 } from '../../../../services/api';
-import { getUnifiedApiErrorMessage } from '../../../../services/api';
 import { gameSocket } from '../../../../services/gameSocket';
 import {
   FAST_BATTLE_LOG_SYSTEM_LINES,
@@ -565,7 +564,7 @@ const BattleArea: React.FC<BattleAreaProps> = ({
           return;
         }
         if (!res?.success || !res.data?.battleId || !res.data?.state) {
-          message.error(getUnifiedApiErrorMessage(res, '战斗发起失败'));
+          void 0;
           setBattleId(null);
           setBattleState(null);
           setResult('idle');
@@ -579,7 +578,7 @@ const BattleArea: React.FC<BattleAreaProps> = ({
           teamMemberCount: res.data.teamMemberCount,
         });
       } catch (e) {
-        message.error(getUnifiedApiErrorMessage(e, '战斗发起失败'));
+        void 0;
         setBattleId(null);
         setBattleState(null);
         setResult('idle');
@@ -1041,7 +1040,7 @@ const BattleArea: React.FC<BattleAreaProps> = ({
           void pollBattleState();
           return false;
         }
-        message.error(getUnifiedApiErrorMessage(res, '释放失败'));
+        void 0;
         return false;
       }
       syncBattleCooldownMeta(res.data);

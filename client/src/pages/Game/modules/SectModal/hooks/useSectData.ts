@@ -30,7 +30,6 @@ import {
   searchSects,
   submitSectQuest,
   transferSectLeader,
-  getUnifiedApiErrorMessage,
   type SectInfoDto,
   type SectMemberDto,
   type SectMyApplicationDto,
@@ -273,7 +272,7 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
         }))
       );
     } catch (error) {
-      message.error(getUnifiedApiErrorMessage(error, '获取宗门列表失败'));
+      void 0;
       setSects([]);
     } finally {
       setListLoading(false);
@@ -291,7 +290,7 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
       setMySectInfo(data);
       return data;
     } catch (error) {
-      message.error(getUnifiedApiErrorMessage(error, '获取我的宗门失败'));
+      void 0;
       setMySectInfo(null);
       return null;
     }
@@ -305,7 +304,7 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
       setMyApplications(data);
       return data;
     } catch (error) {
-      message.error(getUnifiedApiErrorMessage(error, '获取我的申请失败'));
+      void 0;
       setMyApplications([]);
       return [];
     } finally {
@@ -346,7 +345,7 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
       request,
       setLoading,
       setRows,
-      errorFallback,
+      errorFallback: _errorFallback,
     }: {
       enabled: boolean;
       request: () => Promise<SectListApiResponse<Row>>;
@@ -363,7 +362,7 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
         const res = await request();
         setRows(res.success && res.data ? res.data : []);
       } catch (error) {
-        message.error(getUnifiedApiErrorMessage(error, errorFallback));
+        void 0;
         setRows([]);
       } finally {
         setLoading(false);
@@ -424,7 +423,7 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
         await Promise.all([refreshList(), refreshJoinContext(false)]);
         notifyChanged();
       } catch (error) {
-        message.error(getUnifiedApiErrorMessage(error, '申请加入失败'));
+        void 0;
       } finally {
         setActionLoadingKey(null);
       }
@@ -443,7 +442,7 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
         await Promise.all([refreshList(), refreshJoinContext(false)]);
         notifyChanged();
       } catch (error) {
-        message.error(getUnifiedApiErrorMessage(error, '取消申请失败'));
+        void 0;
       } finally {
         setActionLoadingKey(null);
       }
@@ -460,7 +459,7 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
       await Promise.all([refreshList(), refreshJoinContext(true)]);
       notifyChanged();
     } catch (error) {
-      message.error(getUnifiedApiErrorMessage(error, '退出宗门失败'));
+      void 0;
     } finally {
       setActionLoadingKey(null);
     }
@@ -488,7 +487,7 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
       await Promise.all([refreshList(), refreshJoinContext(true)]);
       notifyChanged();
     } catch (error) {
-      message.error(getUnifiedApiErrorMessage(error, '创建宗门失败'));
+      void 0;
     } finally {
       setActionLoadingKey(null);
     }
@@ -511,7 +510,7 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
       await Promise.all([loadMySectInfo(), fetchLogs()]);
       notifyChanged();
     } catch (error) {
-      message.error(getUnifiedApiErrorMessage(error, '捐献失败'));
+      void 0;
     } finally {
       setActionLoadingKey(null);
     }
@@ -527,7 +526,7 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
         message.success(res.message || '升级成功');
         await Promise.all([loadMySectInfo(), fetchLogs()]);
       } catch (error) {
-        message.error(getUnifiedApiErrorMessage(error, '升级建筑失败'));
+        void 0;
       } finally {
         setActionLoadingKey(null);
       }
@@ -546,7 +545,7 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
         message.success(res.message || '兑换成功');
         await Promise.all([fetchShop(), loadMySectInfo()]);
       } catch (error) {
-        message.error(getUnifiedApiErrorMessage(error, '兑换失败'));
+        void 0;
       } finally {
         setActionLoadingKey(null);
       }
@@ -564,7 +563,7 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
         message.success(res.message || '接取成功');
         await fetchQuests();
       } catch (error) {
-        message.error(getUnifiedApiErrorMessage(error, '接取任务失败'));
+        void 0;
       } finally {
         setActionLoadingKey(null);
       }
@@ -582,7 +581,7 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
         message.success(res.message || '提交成功');
         await Promise.all([fetchQuests(), loadMySectInfo()]);
       } catch (error) {
-        message.error(getUnifiedApiErrorMessage(error, '提交任务失败'));
+        void 0;
       } finally {
         setActionLoadingKey(null);
       }
@@ -600,7 +599,7 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
         message.success(res.message || '领取成功');
         await Promise.all([fetchQuests(), loadMySectInfo()]);
       } catch (error) {
-        message.error(getUnifiedApiErrorMessage(error, '领取任务奖励失败'));
+        void 0;
       } finally {
         setActionLoadingKey(null);
       }
@@ -619,7 +618,7 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
         await Promise.all([fetchApplications(), loadMySectInfo(), fetchLogs()]);
         notifyChanged();
       } catch (error) {
-        message.error(getUnifiedApiErrorMessage(error, '处理入门申请失败'));
+        void 0;
       } finally {
         setActionLoadingKey(null);
       }
@@ -636,7 +635,7 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
       setAnnouncementOpen(false);
       await Promise.all([loadMySectInfo(), fetchLogs()]);
     } catch (error) {
-      message.error(getUnifiedApiErrorMessage(error, '更新公告失败'));
+      void 0;
     } finally {
       setActionLoadingKey(null);
     }
@@ -651,7 +650,7 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
         message.success(res.message || '任命成功');
         await Promise.all([loadMySectInfo(), fetchLogs()]);
       } catch (error) {
-        message.error(getUnifiedApiErrorMessage(error, '任命职位失败'));
+        void 0;
       } finally {
         setActionLoadingKey(null);
       }
@@ -670,7 +669,7 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
         await Promise.all([loadMySectInfo(), fetchApplications(), fetchLogs()]);
         notifyChanged();
       } catch (error) {
-        message.error(getUnifiedApiErrorMessage(error, '踢出成员失败'));
+        void 0;
       } finally {
         setActionLoadingKey(null);
       }
@@ -688,7 +687,7 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
         setMemberActionOpen(false);
         await Promise.all([loadMySectInfo(), fetchApplications(), fetchLogs()]);
       } catch (error) {
-        message.error(getUnifiedApiErrorMessage(error, '转让宗主失败'));
+        void 0;
       } finally {
         setActionLoadingKey(null);
       }
@@ -705,7 +704,7 @@ export const useSectData = ({ open, spiritStones, playerName, onChanged }: UseSe
       await Promise.all([refreshList(), refreshJoinContext(true)]);
       notifyChanged();
     } catch (error) {
-      message.error(getUnifiedApiErrorMessage(error, '解散宗门失败'));
+      void 0;
     } finally {
       setActionLoadingKey(null);
     }

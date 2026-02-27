@@ -2,7 +2,6 @@ import { App, Avatar, Button, Form, Input, InputNumber, Modal, Select, Table, Ta
 import { UserOutlined } from '@ant-design/icons';
 import { useEffect, useRef, useState } from 'react';
 import {
-  getUnifiedApiErrorMessage,
   SERVER_BASE,
   claimBounty,
   getBountyBoard,
@@ -91,6 +90,7 @@ const resolveAvatarUrl = (avatar?: string | null) => {
   if (avatar.startsWith('/')) return avatar;
   return `${SERVER_BASE}/${avatar}`;
 };
+const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
 
 const InfoModal: React.FC<InfoModalProps> = ({ open, target, onClose, onAction }) => {
   const { message } = App.useApp();
@@ -160,7 +160,7 @@ const InfoModal: React.FC<InfoModalProps> = ({ open, target, onClose, onAction }
     }
 
     setLoading(true);
-    getInfoTargetDetail(target.type, target.id)
+    getInfoTargetDetail(target.type, target.id, SILENT_REQUEST_CONFIG)
       .then((res) => {
         if (cancelled) return;
         if (requestSeqRef.current !== seq) return;
@@ -199,7 +199,7 @@ const InfoModal: React.FC<InfoModalProps> = ({ open, target, onClose, onAction }
     setBoardPool('daily');
     setBoardTabKey('daily');
     setBoardLoading(true);
-    getBountyBoard('daily')
+    getBountyBoard('daily', SILENT_REQUEST_CONFIG)
       .then((res) => {
         if (cancelled) return;
         if (!res?.success) return;
@@ -234,7 +234,7 @@ const InfoModal: React.FC<InfoModalProps> = ({ open, target, onClose, onAction }
   const fetchBoard = async (pool: 'daily' | 'player') => {
     setBoardLoading(true);
     try {
-      const res = await getBountyBoard(pool);
+      const res = await getBountyBoard(pool, SILENT_REQUEST_CONFIG);
       if (!res?.success) return;
       setBoardRows(Array.isArray(res.data?.bounties) ? res.data!.bounties : []);
     } finally {
@@ -253,7 +253,7 @@ const InfoModal: React.FC<InfoModalProps> = ({ open, target, onClose, onAction }
       }
       setItemSearching(true);
       try {
-        const res = await searchBountyItemDefs(lastItemKeywordRef.current, 20);
+        const res = await searchBountyItemDefs(lastItemKeywordRef.current, 20, SILENT_REQUEST_CONFIG);
         if (!res?.success) return;
         setItemOptions(Array.isArray(res.data?.items) ? res.data!.items : []);
       } finally {
@@ -511,7 +511,7 @@ const InfoModal: React.FC<InfoModalProps> = ({ open, target, onClose, onAction }
                                             message.success('接取成功');
                                             await fetchBoard(boardPool);
                                           } catch (e: unknown) {
-                                            message.error(getUnifiedApiErrorMessage(e, '接取失败'));
+                                            void 0;
                                           } finally {
                                             setBoardClaimingId(null);
                                           }
@@ -595,7 +595,7 @@ const InfoModal: React.FC<InfoModalProps> = ({ open, target, onClose, onAction }
                                             message.success('接取成功');
                                             await fetchBoard(boardPool);
                                           } catch (e: unknown) {
-                                            message.error(getUnifiedApiErrorMessage(e, '接取失败'));
+                                            void 0;
                                           } finally {
                                             setBoardClaimingId(null);
                                           }
@@ -685,7 +685,7 @@ const InfoModal: React.FC<InfoModalProps> = ({ open, target, onClose, onAction }
                                   publishForm.resetFields();
                                   setPublishFeePreview({ spiritFee: 0, silverFee: 0, spiritCost: 0, silverCost: 0 });
                                 } catch (e: unknown) {
-                                  message.error(getUnifiedApiErrorMessage(e, '发布失败'));
+                                  void 0;
                                 } finally {
                                   setPublishLoading(false);
                                 }

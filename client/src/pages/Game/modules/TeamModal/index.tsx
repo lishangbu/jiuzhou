@@ -3,7 +3,6 @@ import { SearchOutlined, UserOutlined } from '@ant-design/icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import coin01 from '../../../../assets/images/ui/sh_icon_0006_jinbi_02.png';
 import { gameSocket, type CharacterData } from '../../../../services/gameSocket';
-import { getUnifiedApiErrorMessage } from '../../../../services/api';
 import {
   applyToTeam,
   createTeam,
@@ -169,7 +168,7 @@ const TeamModal: React.FC<TeamModalProps> = ({ open, onClose, playerName = '我'
     try {
       const res = await getMyTeam(cid);
       if (!res.success) {
-        messageRef.current.error(getUnifiedApiErrorMessage(res, '获取队伍失败'));
+        void 0;
         setTeamInfo(null);
         setTeamRole(null);
         return;
@@ -178,7 +177,7 @@ const TeamModal: React.FC<TeamModalProps> = ({ open, onClose, playerName = '我'
       if (res.role === 'leader' || res.role === 'member') setTeamRole(res.role);
       else setTeamRole(null);
     } catch {
-      messageRef.current.error('获取队伍失败');
+      void 0;
       setTeamInfo(null);
       setTeamRole(null);
     }
@@ -192,13 +191,13 @@ const TeamModal: React.FC<TeamModalProps> = ({ open, onClose, playerName = '我'
     try {
       const res = await getTeamApplications(t.id, cid);
       if (!res.success) {
-        messageRef.current.error(getUnifiedApiErrorMessage(res, '获取申请列表失败'));
+        void 0;
         setApplications([]);
         return;
       }
       setApplications(res.data ?? []);
     } catch {
-      messageRef.current.error('获取申请列表失败');
+      void 0;
       setApplications([]);
     }
   }, []);
@@ -207,13 +206,13 @@ const TeamModal: React.FC<TeamModalProps> = ({ open, onClose, playerName = '我'
     try {
       const res = await getReceivedInvitations(cid);
       if (!res.success) {
-        messageRef.current.error(getUnifiedApiErrorMessage(res, '获取邀请失败'));
+        void 0;
         setInvitations([]);
         return;
       }
       setInvitations(res.data ?? []);
     } catch {
-      messageRef.current.error('获取邀请失败');
+      void 0;
       setInvitations([]);
     }
   }, []);
@@ -222,13 +221,13 @@ const TeamModal: React.FC<TeamModalProps> = ({ open, onClose, playerName = '我'
     try {
       const res = await getNearbyTeams(cid, mapId);
       if (!res.success) {
-        messageRef.current.error(getUnifiedApiErrorMessage(res, '获取附近队伍失败'));
+        void 0;
         setNearbyTeams([]);
         return;
       }
       setNearbyTeams(res.data ?? []);
     } catch {
-      messageRef.current.error('获取附近队伍失败');
+      void 0;
       setNearbyTeams([]);
     }
   }, []);
@@ -237,13 +236,13 @@ const TeamModal: React.FC<TeamModalProps> = ({ open, onClose, playerName = '我'
     try {
       const res = await getLobbyTeams(cid, search || undefined, 50);
       if (!res.success) {
-        messageRef.current.error(getUnifiedApiErrorMessage(res, '获取队伍大厅失败'));
+        void 0;
         setLobbyTeams([]);
         return;
       }
       setLobbyTeams(res.data ?? []);
     } catch {
-      messageRef.current.error('获取队伍大厅失败');
+      void 0;
       setLobbyTeams([]);
     }
   }, []);
@@ -320,14 +319,14 @@ const TeamModal: React.FC<TeamModalProps> = ({ open, onClose, playerName = '我'
     try {
       const res = await createTeam(characterId, `${playerName}的小队`);
       if (!res.success) {
-        messageRef.current.error(getUnifiedApiErrorMessage(res, '创建队伍失败'));
+        void 0;
         return;
       }
       messageRef.current.success(res.message || '队伍创建成功');
       void refreshAll();
       setPanel('my');
     } catch {
-      messageRef.current.error('创建队伍失败');
+      void 0;
     } finally {
       setLoadingKey(null);
     }
@@ -339,14 +338,14 @@ const TeamModal: React.FC<TeamModalProps> = ({ open, onClose, playerName = '我'
     try {
       const res = await leaveTeam(characterId);
       if (!res.success) {
-        messageRef.current.error(getUnifiedApiErrorMessage(res, '退出队伍失败'));
+        void 0;
         return;
       }
       messageRef.current.success(res.message || '已退出队伍');
       void refreshAll();
       setPanel('my');
     } catch {
-      messageRef.current.error('退出队伍失败');
+      void 0;
     } finally {
       setLoadingKey(null);
     }
@@ -358,14 +357,14 @@ const TeamModal: React.FC<TeamModalProps> = ({ open, onClose, playerName = '我'
     try {
       const res = await disbandTeam(characterId, teamInfo.id);
       if (!res.success) {
-        messageRef.current.error(getUnifiedApiErrorMessage(res, '解散队伍失败'));
+        void 0;
         return;
       }
       messageRef.current.success(res.message || '队伍已解散');
       void refreshAll();
       setPanel('my');
     } catch {
-      messageRef.current.error('解散队伍失败');
+      void 0;
     } finally {
       setLoadingKey(null);
     }
@@ -377,7 +376,7 @@ const TeamModal: React.FC<TeamModalProps> = ({ open, onClose, playerName = '我'
     try {
       const res = await applyToTeam(characterId, t.id);
       if (!res.success) {
-        messageRef.current.error(getUnifiedApiErrorMessage(res, '申请失败'));
+        void 0;
         return;
       }
       messageRef.current.success(res.message || '申请已提交');
@@ -386,7 +385,7 @@ const TeamModal: React.FC<TeamModalProps> = ({ open, onClose, playerName = '我'
         setPanel('my');
       }
     } catch {
-      messageRef.current.error('申请失败');
+      void 0;
     } finally {
       setLoadingKey(null);
     }
@@ -398,13 +397,13 @@ const TeamModal: React.FC<TeamModalProps> = ({ open, onClose, playerName = '我'
     try {
       const res = await handleApplication(characterId, applicationId, approve);
       if (!res.success) {
-        messageRef.current.error(getUnifiedApiErrorMessage(res, '处理申请失败'));
+        void 0;
         return;
       }
       messageRef.current.success(res.message || '已处理');
       void refreshAll();
     } catch {
-      messageRef.current.error('处理申请失败');
+      void 0;
     } finally {
       setLoadingKey(null);
     }
@@ -416,14 +415,14 @@ const TeamModal: React.FC<TeamModalProps> = ({ open, onClose, playerName = '我'
     try {
       const res = await handleInvitation(characterId, invitationId, accept);
       if (!res.success) {
-        messageRef.current.error(getUnifiedApiErrorMessage(res, '处理邀请失败'));
+        void 0;
         return;
       }
       messageRef.current.success(res.message || '已处理');
       void refreshAll();
       if (accept) setPanel('my');
     } catch {
-      messageRef.current.error('处理邀请失败');
+      void 0;
     } finally {
       setLoadingKey(null);
     }
@@ -436,13 +435,13 @@ const TeamModal: React.FC<TeamModalProps> = ({ open, onClose, playerName = '我'
       try {
         const res = await kickMember(characterId, targetCharacterId);
         if (!res.success) {
-          messageRef.current.error(getUnifiedApiErrorMessage(res, '踢出失败'));
+          void 0;
           return;
         }
         messageRef.current.success(res.message || '已踢出成员');
         void refreshAll();
       } catch {
-        messageRef.current.error('踢出失败');
+        void 0;
       } finally {
         setLoadingKey(null);
       }
@@ -505,14 +504,14 @@ const TeamModal: React.FC<TeamModalProps> = ({ open, onClose, playerName = '我'
       };
       const res = await updateTeamSettings(characterId, teamInfo.id, settings);
       if (!res.success) {
-        messageRef.current.error(getUnifiedApiErrorMessage(res, '保存失败'));
+        void 0;
         return;
       }
 
       if (draftTransferLeaderId && Number.isFinite(draftTransferLeaderId)) {
         const tr = await transferLeader(characterId, draftTransferLeaderId);
         if (!tr.success) {
-          messageRef.current.error(getUnifiedApiErrorMessage(tr, '转让队长失败'));
+          void 0;
           return;
         }
       }
@@ -521,7 +520,7 @@ const TeamModal: React.FC<TeamModalProps> = ({ open, onClose, playerName = '我'
       setSettingsOpen(false);
       void refreshAll();
     } catch {
-      messageRef.current.error('保存失败');
+      void 0;
     } finally {
       setLoadingKey(null);
     }

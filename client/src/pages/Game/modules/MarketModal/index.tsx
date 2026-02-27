@@ -12,7 +12,6 @@ import {
   getMyMarketListings,
   SERVER_BASE,
 } from '../../../../services/api';
-import { getUnifiedApiErrorMessage } from '../../../../services/api';
 import type { MarketListingDto, MarketTradeRecordDto } from '../../../../services/api';
 import { gameSocket, type CharacterData } from '../../../../services/gameSocket';
 import { useIsMobile } from '../../shared/responsive';
@@ -475,7 +474,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
         setSelectedBagId((prev) => (prev !== null && next.some((b) => b.id === prev) ? prev : next[0]?.id ?? null));
       }
     } catch (error: unknown) {
-      messageRef.current.error(getUnifiedApiErrorMessage(error, '获取背包物品失败'));
+      void 0;
       setBagItems([]);
       setSelectedBagId(null);
     } finally {
@@ -501,7 +500,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
         setMarketListings(res.data.listings.map(buildListingItem));
         setMarketTotal(Number(res.data.total) || 0);
       } catch (error: unknown) {
-        messageRef.current.error(getUnifiedApiErrorMessage(error, '获取坊市列表失败'));
+        void 0;
         setMarketListings([]);
         setMarketTotal(0);
       } finally {
@@ -520,7 +519,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
         setMyListings(res.data.listings.map(buildListingItem));
         setMyTotal(Number(res.data.total) || 0);
       } catch (error: unknown) {
-        messageRef.current.error(getUnifiedApiErrorMessage(error, '获取我的上架失败'));
+        void 0;
         setMyListings([]);
         setMyTotal(0);
       } finally {
@@ -539,7 +538,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
         setRecords(res.data.records.map(buildTradeRecord));
         setRecordsTotal(Number(res.data.total) || 0);
       } catch (error: unknown) {
-        messageRef.current.error(getUnifiedApiErrorMessage(error, '获取交易记录失败'));
+        void 0;
         setRecords([]);
         setRecordsTotal(0);
       } finally {
@@ -645,7 +644,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
         messageRef.current.success('购买成功');
         await Promise.all([refreshMarket(marketPage), refreshBag(), refreshMy(myPage), refreshRecords(recordPage)]);
       } catch (error: unknown) {
-        messageRef.current.error(getUnifiedApiErrorMessage(error, '购买失败'));
+        void 0;
       }
     },
     [characterId, marketPage, myPage, recordPage, refreshBag, refreshMarket, refreshMy, refreshRecords],
@@ -659,7 +658,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
         messageRef.current.success('下架成功');
         await Promise.all([refreshMarket(marketPage), refreshBag(), refreshMy(myPage)]);
       } catch (error: unknown) {
-        messageRef.current.error(getUnifiedApiErrorMessage(error, '下架失败'));
+        void 0;
       }
     },
     [marketPage, myPage, refreshBag, refreshMarket, refreshMy],
@@ -685,7 +684,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
       setListQty('1');
       await Promise.all([refreshMarket(marketPage), refreshBag(), refreshMy(myPage)]);
     } catch (error: unknown) {
-      messageRef.current.error(getUnifiedApiErrorMessage(error, '上架失败'));
+      void 0;
     }
   }, [listPrice, listQty, marketPage, myPage, refreshBag, refreshMarket, refreshMy, selectedBagItem]);
 

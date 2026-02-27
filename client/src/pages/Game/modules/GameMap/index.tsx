@@ -17,6 +17,7 @@ type RoomNode = {
   y: number;
   connections: Array<{ targetRoomId: string; targetMapId?: string }>;
 };
+const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
 
 const normalizeRooms = (rooms: MapRoom[]): RoomNode[] => {
   const withPos = rooms.map((r, idx) => {
@@ -62,7 +63,7 @@ const GameMap: React.FC<GameMapProps> = ({ currentMapId, currentRoomId, trackedR
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    getMapDetail(currentMapId)
+    getMapDetail(currentMapId, SILENT_REQUEST_CONFIG)
       .then((res) => {
         if (cancelled) return;
         if (!res?.success || !res.data) {

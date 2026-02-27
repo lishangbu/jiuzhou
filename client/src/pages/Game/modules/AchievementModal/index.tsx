@@ -14,7 +14,6 @@ import {
   type AchievementRewardView,
   type TitleInfoDto,
 } from '../../../../services/api';
-import { getUnifiedApiErrorMessage } from '../../../../services/api';
 import coin01 from '../../../../assets/images/ui/sh_icon_0006_jinbi_02.png';
 import lingshiIcon from '../../../../assets/images/ui/lingshi.png';
 import tongqianIcon from '../../../../assets/images/ui/tongqian.png';
@@ -335,14 +334,14 @@ const AchievementModal: React.FC<AchievementModalProps> = ({ open, onClose, onCh
       try {
         const res = await claimAchievementReward(id);
         if (!res.success) {
-          message.error(getUnifiedApiErrorMessage(res, '领取失败'));
+          void 0;
           return;
         }
         message.success('领取成功');
         await refreshData();
         onChanged?.();
       } catch {
-        message.error('领取失败');
+        void 0;
       } finally {
         setClaimingId('');
       }
@@ -356,14 +355,14 @@ const AchievementModal: React.FC<AchievementModalProps> = ({ open, onClose, onCh
       try {
         const res = await claimAchievementPointsReward(threshold);
         if (!res.success) {
-          message.error(getUnifiedApiErrorMessage(res, '领取失败'));
+          void 0;
           return;
         }
         message.success('点数奖励领取成功');
         await refreshData();
         onChanged?.();
       } catch {
-        message.error('领取失败');
+        void 0;
       } finally {
         setClaimingPointThreshold(null);
       }
@@ -378,14 +377,14 @@ const AchievementModal: React.FC<AchievementModalProps> = ({ open, onClose, onCh
       try {
         const res = await equipTitle(titleId);
         if (!res.success) {
-          message.error(getUnifiedApiErrorMessage(res, '装备失败'));
+          void 0;
           return;
         }
         message.success('已装备称号');
         await refreshData();
         onChanged?.();
       } catch {
-        message.error('装备失败');
+        void 0;
       } finally {
         setEquippingTitleId('');
       }

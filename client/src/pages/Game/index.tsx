@@ -118,6 +118,7 @@ const EQUIP_QUALITY_COLOR: Record<string, string> = {
   玄: 'var(--rarity-xuan)',
   黄: 'var(--rarity-huang)',
 };
+const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
 
 const EQUIP_QUALITY_TEXT: Record<string, string> = {
   天: '天品',
@@ -851,7 +852,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
         } catch (error: unknown) {
           if (gatherActionKeyRef.current !== key) return;
           stopGatherLoop();
-          messageRef.current.error(getUnifiedApiErrorMessage(error, '采集失败'));
+          void 0;
         }
       };
 
@@ -903,7 +904,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     try {
       const res = await nextDungeonInstance(dungeonInstanceId);
       if (!res?.success || !res.data) {
-        messageRef.current.error(getUnifiedApiErrorMessage(res, '推进秘境失败'));
+        void 0;
         return;
       }
 
@@ -935,7 +936,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       }
       setDungeonBattleId(nextBattleId);
     } catch (e) {
-      messageRef.current.error(getUnifiedApiErrorMessage(e, '推进秘境失败'));
+      void 0;
     }
   }, [dungeonInstanceId]);
 
@@ -1010,7 +1011,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       setNpcTalkData(data);
       return data;
     } catch (e: unknown) {
-      messageRef.current.error(getUnifiedApiErrorMessage(e, '对话失败'));
+      void 0;
       setNpcTalkData(null);
       return null;
     } finally {
@@ -1150,7 +1151,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
         messageRef.current.success(res.message || '卸下成功');
         window.dispatchEvent(new Event('inventory:changed'));
       } catch (error: unknown) {
-        messageRef.current.error(getUnifiedApiErrorMessage(error, '卸下失败'));
+        void 0;
       } finally {
         setUnequippingId(null);
       }
@@ -1177,7 +1178,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
         const res = await updateCharacterAutoCastSkills(next);
         if (!res.success) {
           setAutoMode(!next);
-          messageRef.current.error(getUnifiedApiErrorMessage(res, '设置保存失败'));
+          void 0;
         }
       })();
     },
@@ -1187,7 +1188,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const refreshTeamData = useCallback(async () => {
     if (!characterId) return;
     try {
-      const res = await getMyTeam(characterId);
+      const res = await getMyTeam(characterId, SILENT_REQUEST_CONFIG);
       if (!res.success) {
         setTeamInfo(null);
         setIsTeamLeader(false);
@@ -1206,7 +1207,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
         return;
       }
 
-      const appsRes = await getTeamApplications(nextTeamId, characterId);
+      const appsRes = await getTeamApplications(nextTeamId, characterId, SILENT_REQUEST_CONFIG);
       if (!appsRes.success) {
         setTeamApplicationUnread(0);
         return;
@@ -1232,7 +1233,10 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     }
 
     try {
-      const [mySectRes, myAppsRes] = await Promise.all([getMySect(), getMySectApplications()]);
+      const [mySectRes, myAppsRes] = await Promise.all([
+        getMySect(SILENT_REQUEST_CONFIG),
+        getMySectApplications(SILENT_REQUEST_CONFIG),
+      ]);
       const mySectInfo = mySectRes.success ? (mySectRes.data ?? null) : null;
       const myPendingApplications = myAppsRes.success && myAppsRes.data ? Math.max(0, Math.floor(myAppsRes.data.length)) : 0;
       setSectMyApplicationCount(myPendingApplications);
@@ -1250,7 +1254,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
         return;
       }
 
-      const appsRes = await getSectApplications();
+      const appsRes = await getSectApplications(SILENT_REQUEST_CONFIG);
       if (!appsRes.success || !appsRes.data) {
         setSectPendingApplicationCount(0);
         return;
@@ -1371,7 +1375,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     try {
       const res = await leaveTeam(characterId);
       if (!res.success) {
-        messageRef.current.error(getUnifiedApiErrorMessage(res, '退出队伍失败'));
+        void 0;
         return;
       }
       messageRef.current.success(res.message || '已退出队伍');
@@ -1390,7 +1394,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       setBattleActiveUnitId(null);
       void refreshTeamData();
     } catch {
-      messageRef.current.error('退出队伍失败');
+      void 0;
     }
   }, [characterId, refreshTeamData]);
 
@@ -1409,7 +1413,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     const nextMapId = String(mapId || '').trim();
     const nextRoomId = String(roomId || '').trim();
     if (!nextMapId || !nextRoomId) return;
-    void updateCharacterPosition(nextMapId, nextRoomId).catch(() => undefined);
+    void updateCharacterPosition(nextMapId, nextRoomId, SILENT_REQUEST_CONFIG).catch(() => undefined);
   }, []);
 
   const flushPendingPosition = useCallback((keepalive: boolean) => {
@@ -1431,7 +1435,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       lastKeepalivePositionKeyRef.current = key;
       updateCharacterPositionKeepalive(nextMapId, nextRoomId);
     }
-    else void updateCharacterPosition(nextMapId, nextRoomId).catch(() => undefined);
+    else void updateCharacterPosition(nextMapId, nextRoomId, SILENT_REQUEST_CONFIG).catch(() => undefined);
   }, []);
 
   const scheduleSavePosition = useCallback((mapId: string, roomId: string) => {
@@ -1607,7 +1611,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
             messageRef.current.info(res?.message || '什么都没捡到');
           }
         } catch (e: unknown) {
-          messageRef.current.error(getUnifiedApiErrorMessage(e, '拾取失败'));
+          void 0;
         }
       })();
       return;
@@ -2038,10 +2042,10 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                             setMainQuestDialogueState(res.data.dialogueState);
                             setNpcTalkPhase('mainQuestDialogue');
                           } else {
-                            messageRef.current.error(getUnifiedApiErrorMessage(res, '开始对话失败'));
+                            void 0;
                           }
                         } catch {
-                          messageRef.current.error('开始对话失败');
+                          void 0;
                         } finally {
                           setMainQuestDialogueLoading(false);
                         }
@@ -2070,10 +2074,10 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                             await refreshTrackedRoomIds();
                             window.dispatchEvent(new Event('room:objects:changed'));
                           } else {
-                            messageRef.current.error(getUnifiedApiErrorMessage(res, '完成任务失败'));
+                            void 0;
                           }
                         } catch {
-                          messageRef.current.error('完成任务失败');
+                          void 0;
                         } finally {
                           setMainQuestDialogueLoading(false);
                         }
@@ -2173,7 +2177,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                       window.dispatchEvent(new Event('room:objects:changed'));
                     }
                   } catch (e: unknown) {
-                    messageRef.current.error(getUnifiedApiErrorMessage(e, '接取失败'));
+                    void 0;
                   } finally {
                     setNpcTalkActionKey('');
                   }
@@ -2191,7 +2195,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                     await refreshTrackedRoomIds();
                     window.dispatchEvent(new Event('room:objects:changed'));
                   } catch (e: unknown) {
-                    messageRef.current.error(getUnifiedApiErrorMessage(e, '提交失败'));
+                    void 0;
                   } finally {
                     setNpcTalkActionKey('');
                   }
@@ -2211,7 +2215,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                     await refreshTrackedRoomIds();
                     window.dispatchEvent(new Event('room:objects:changed'));
                   } catch (e: unknown) {
-                    messageRef.current.error(getUnifiedApiErrorMessage(e, '领取失败'));
+                    void 0;
                   } finally {
                     setNpcTalkActionKey('');
                   }
@@ -2266,10 +2270,10 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                         window.dispatchEvent(new Event('room:objects:changed'));
                       }
                     } else {
-                      messageRef.current.error(getUnifiedApiErrorMessage(res, '推进对话失败'));
+                      void 0;
                     }
                   } catch {
-                    messageRef.current.error('推进对话失败');
+                    void 0;
                   } finally {
                     setMainQuestDialogueLoading(false);
                   }
@@ -2289,10 +2293,10 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                         window.dispatchEvent(new Event('room:objects:changed'));
                       }
                     } else {
-                      messageRef.current.error(getUnifiedApiErrorMessage(res, '选择失败'));
+                      void 0;
                     }
                   } catch {
-                    messageRef.current.error('选择失败');
+                    void 0;
                   } finally {
                     setMainQuestDialogueLoading(false);
                   }
@@ -2419,14 +2423,14 @@ const Game: FC<GameProps> = ({ onLogout }) => {
           try {
             const createRes = await createDungeonInstance(dungeonId, rank);
             if (!createRes?.success || !createRes.data?.instanceId) {
-              messageRef.current.error(getUnifiedApiErrorMessage(createRes, '创建秘境失败'));
+              void 0;
               return;
             }
 
             const instanceId = String(createRes.data.instanceId);
             const startRes = await startDungeonInstance(instanceId);
             if (!startRes?.success || !startRes.data?.battleId) {
-              messageRef.current.error(getUnifiedApiErrorMessage(startRes, '开始秘境失败'));
+              void 0;
               return;
             }
 
@@ -2437,7 +2441,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
             setViewMode('battle');
             gameSocket.refreshCharacter();
           } catch (e) {
-            messageRef.current.error(getUnifiedApiErrorMessage(e, '进入秘境失败'));
+            void 0;
             setDungeonBattleId(null);
             setDungeonInstanceId(null);
           }

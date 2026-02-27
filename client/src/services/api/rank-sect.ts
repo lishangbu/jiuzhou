@@ -1,3 +1,4 @@
+import type { AxiosRequestConfig } from 'axios';
 import api from './core';
 
 export type RealmRankRowDto = {
@@ -138,8 +139,8 @@ export interface GetMySectResponse {
   data?: SectInfoDto | null;
 }
 
-export const getMySect = (): Promise<GetMySectResponse> => {
-  return api.get('/sect/me');
+export const getMySect = (requestConfig?: AxiosRequestConfig): Promise<GetMySectResponse> => {
+  return api.get('/sect/me', requestConfig);
 };
 
 export const searchSects = (keyword?: string, page: number = 1, limit: number = 20): Promise<SectSearchResponse> => {
@@ -264,12 +265,12 @@ export interface SectLogsResponse {
   data?: SectLogDto[];
 }
 
-export const getSectApplications = (): Promise<SectApplicationsResponse> => {
-  return api.get('/sect/applications/list');
+export const getSectApplications = (requestConfig?: AxiosRequestConfig): Promise<SectApplicationsResponse> => {
+  return api.get('/sect/applications/list', requestConfig);
 };
 
-export const getMySectApplications = (): Promise<MySectApplicationsResponse> => {
-  return api.get('/sect/applications/mine');
+export const getMySectApplications = (requestConfig?: AxiosRequestConfig): Promise<MySectApplicationsResponse> => {
+  return api.get('/sect/applications/mine', requestConfig);
 };
 
 export const handleSectApplication = (

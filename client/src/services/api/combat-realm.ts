@@ -1,3 +1,4 @@
+import type { AxiosRequestConfig } from 'axios';
 import api from './core';
 
 export type BattleStateDto = {
@@ -259,8 +260,8 @@ export interface GetRealmOverviewResponse {
   data?: RealmOverviewDto;
 }
 
-export const getRealmOverview = (): Promise<GetRealmOverviewResponse> => {
-  return api.get('/realm/overview');
+export const getRealmOverview = (requestConfig?: AxiosRequestConfig): Promise<GetRealmOverviewResponse> => {
+  return api.get('/realm/overview', requestConfig);
 };
 
 export interface RealmBreakthroughResult {

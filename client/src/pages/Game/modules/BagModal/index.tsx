@@ -138,7 +138,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
       setInfo(infoRes.data);
       setItems(nextItems);
     } catch (error: unknown) {
-      message.error(getUnifiedApiErrorMessage(error, '获取背包数据失败'));
+      void 0;
       setInfo(null);
       setItems([]);
       setActiveId(null);
@@ -375,7 +375,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
       await refresh();
       window.dispatchEvent(new Event('inventory:changed'));
     } catch (error: unknown) {
-      message.error(getUnifiedApiErrorMessage(error, '操作失败'));
+      void 0;
       setLoading(false);
     }
   }, [activeItem, message, refresh]);
@@ -461,7 +461,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
       await refresh();
       window.dispatchEvent(new Event('inventory:changed'));
     } catch (error: unknown) {
-      message.error(getUnifiedApiErrorMessage(error, '设置锁定状态失败'));
+      void 0;
       setLoading(false);
     }
   }, [activeItem, message, refresh]);
@@ -613,12 +613,12 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
         message.success(res.message || '强化成功');
       } else {
         if ((res.message || '') === '强化失败') message.warning(res.message || '强化失败');
-        else message.error(getUnifiedApiErrorMessage(res, '强化失败'));
+        else void 0;
       }
       await refresh();
       window.dispatchEvent(new Event('inventory:changed'));
     } catch (error: unknown) {
-      message.error(getUnifiedApiErrorMessage(error, '强化失败'));
+      void 0;
     } finally {
       setEnhanceSubmitting(false);
     }
@@ -636,12 +636,12 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
         message.success(res.message || '精炼成功');
       } else {
         if ((res.message || '') === '精炼失败') message.warning(res.message || '精炼失败');
-        else message.error(getUnifiedApiErrorMessage(res, '精炼失败'));
+        else void 0;
       }
       await refresh();
       window.dispatchEvent(new Event('inventory:changed'));
     } catch (error: unknown) {
-      message.error(getUnifiedApiErrorMessage(error, '精炼失败'));
+      void 0;
     } finally {
       setRefineSubmitting(false);
     }
@@ -668,7 +668,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
       setSelectedGemItemId(undefined);
       setSocketSlot(undefined);
     } catch (error: unknown) {
-      message.error(getUnifiedApiErrorMessage(error, '镶嵌失败'));
+      void 0;
     } finally {
       setSocketSubmitting(false);
     }
@@ -714,7 +714,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
         lockIndexes,
       });
       if (!res.success) {
-        message.error(getUnifiedApiErrorMessage(res, '洗炼失败'));
+        void 0;
         return;
       }
       message.success(res.message || '洗炼成功');
@@ -727,7 +727,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
       await refresh();
       window.dispatchEvent(new Event('inventory:changed'));
     } catch (error: unknown) {
-      message.error(getUnifiedApiErrorMessage(error, '洗炼失败'));
+      void 0;
     } finally {
       setRerollSubmitting(false);
     }
@@ -961,7 +961,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
                     if (!res.success) throw new Error(getUnifiedApiErrorMessage(res, '整理失败'));
                     await refresh();
                   } catch (error: unknown) {
-                    message.error(getUnifiedApiErrorMessage(error, '整理失败'));
+                    void 0;
                   } finally {
                     setLoading(false);
                   }
@@ -1751,7 +1751,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
                   await refresh();
                   setBatchOpen(false);
                 } catch (error: unknown) {
-                  message.error(getUnifiedApiErrorMessage(error, '操作失败'));
+                  void 0;
                 } finally {
                   setBatchSubmitting(false);
                 }

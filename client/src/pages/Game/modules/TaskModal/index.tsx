@@ -7,7 +7,6 @@ import tongqianIcon from '../../../../assets/images/ui/tongqian.png';
 import {
   resolveAssetUrl,
   claimTaskReward,
-  getUnifiedApiErrorMessage,
   getBountyTaskOverview,
   getDungeonWeeklyTargets,
   getTaskOverview,
@@ -322,7 +321,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
         setWeeklyPeriod(null);
       }
     } catch (e: unknown) {
-      message.error(getUnifiedApiErrorMessage(e, '加载任务失败'));
+      void 0;
       setTasks([]);
       setWeeklyTargets([]);
       setWeeklySummary(null);
@@ -414,7 +413,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
       message.success(nextTracked ? '已追踪' : '已取消追踪');
       onTrackedChange?.();
     } catch (e: unknown) {
-      message.error(getUnifiedApiErrorMessage(e, '更新追踪失败'));
+      void 0;
     }
   }, [activeTask?.id, activeTask?.tracked, message, onTrackedChange]);
 
@@ -427,7 +426,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
       appendSystemChat(`【任务】领取奖励：${task.title}${rewardText ? `（${rewardText}）` : ''}`);
       await refresh();
     } catch (e: unknown) {
-      message.error(getUnifiedApiErrorMessage(e, '领取失败'));
+      void 0;
     }
   }, [appendSystemChat, formatTaskRewardsToText, message, refresh]);
 
@@ -445,7 +444,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
       appendSystemChat(`【任务】已完成：${task.title}`);
       await refresh();
     } catch (e: unknown) {
-      message.error(getUnifiedApiErrorMessage(e, '完成失败'));
+      void 0;
     }
   }, [appendSystemChat, message, refresh]);
 
@@ -459,7 +458,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
         appendSystemChat(`【悬赏】已提交材料：${task.title}`);
         await refresh();
       } catch (e: unknown) {
-        message.error(getUnifiedApiErrorMessage(e, '提交失败'));
+        void 0;
       } finally {
         setSubmittingTaskId('');
       }

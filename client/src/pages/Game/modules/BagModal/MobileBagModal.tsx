@@ -699,12 +699,12 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
       if (res.success) message.success(res.message || '强化成功');
       else {
         if (res.message === '强化失败') message.warning(res.message);
-        else message.error(getUnifiedApiErrorMessage(res, '强化失败'));
+        else void 0;
       }
       await onDone();
       window.dispatchEvent(new Event('inventory:changed'));
     } catch (e) {
-      message.error(getUnifiedApiErrorMessage(e, '强化失败'));
+      void 0;
     } finally {
       setSubmitting(false);
     }
@@ -717,12 +717,12 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
       if (res.success) message.success(res.message || '精炼成功');
       else {
         if (res.message === '精炼失败') message.warning(res.message);
-        else message.error(getUnifiedApiErrorMessage(res, '精炼失败'));
+        else void 0;
       }
       await onDone();
       window.dispatchEvent(new Event('inventory:changed'));
     } catch (e) {
-      message.error(getUnifiedApiErrorMessage(e, '精炼失败'));
+      void 0;
     } finally {
       setSubmitting(false);
     }
@@ -767,7 +767,7 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
         lockIndexes,
       });
       if (!res.success) {
-        message.error(getUnifiedApiErrorMessage(res, '洗炼失败'));
+        void 0;
         return;
       }
       message.success(res.message || '洗炼成功');
@@ -780,7 +780,7 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
       await onDone();
       window.dispatchEvent(new Event('inventory:changed'));
     } catch (e) {
-      message.error(getUnifiedApiErrorMessage(e, '洗炼失败'));
+      void 0;
     } finally {
       setSubmitting(false);
     }
@@ -806,7 +806,7 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
       await onDone();
       window.dispatchEvent(new Event('inventory:changed'));
     } catch (e) {
-      message.error(getUnifiedApiErrorMessage(e, '镶嵌失败'));
+      void 0;
     } finally {
       setSubmitting(false);
     }
@@ -1209,7 +1209,7 @@ const MobileBagModal: React.FC<MobileBagModalProps> = ({ open, onClose }) => {
       setInfo(infoRes.data);
       setItems([...nextBag, ...nextEquipped]);
     } catch (e) {
-      message.error(getUnifiedApiErrorMessage(e, '获取背包数据失败'));
+      void 0;
       setInfo(null);
       setItems([]);
       setActiveId(null);
@@ -1384,7 +1384,7 @@ const MobileBagModal: React.FC<MobileBagModalProps> = ({ open, onClose }) => {
       window.dispatchEvent(new Event('inventory:changed'));
       setSheetOpen(false);
     } catch (e) {
-      message.error(getUnifiedApiErrorMessage(e, '操作失败'));
+      void 0;
       setLoading(false);
     }
   }, [activeItem, message, refresh]);
@@ -1461,7 +1461,7 @@ const MobileBagModal: React.FC<MobileBagModalProps> = ({ open, onClose }) => {
       await refresh();
       window.dispatchEvent(new Event('inventory:changed'));
     } catch (error: unknown) {
-      message.error(getUnifiedApiErrorMessage(error, '设置锁定状态失败'));
+      void 0;
     } finally {
       setLoading(false);
     }
@@ -1499,7 +1499,7 @@ const MobileBagModal: React.FC<MobileBagModalProps> = ({ open, onClose }) => {
       await refresh();
       setBatchOpen(false);
     } catch (e) {
-      message.error(getUnifiedApiErrorMessage(e, '操作失败'));
+      void 0;
     } finally {
       setBatchSubmitting(false);
     }
@@ -1512,7 +1512,7 @@ const MobileBagModal: React.FC<MobileBagModalProps> = ({ open, onClose }) => {
       if (!res.success) throw new Error(getUnifiedApiErrorMessage(res, '整理失败'));
       await refresh();
     } catch (e) {
-      message.error(getUnifiedApiErrorMessage(e, '整理失败'));
+      void 0;
     } finally {
       setLoading(false);
     }

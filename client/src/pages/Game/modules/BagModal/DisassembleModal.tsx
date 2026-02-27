@@ -1,7 +1,6 @@
 import { App, Button, InputNumber, Modal, Tag } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { disassembleInventoryEquipment } from '../../../../services/api';
-import { getUnifiedApiErrorMessage } from '../../../../services/api';
 import { isDisassemblableBagItem, qualityLabelText } from './bagShared';
 import type { BagCategory, BagQuality } from './bagShared';
 
@@ -134,7 +133,7 @@ const DisassembleModal: React.FC<DisassembleModalProps> = ({ open, item, onClose
                 await onSuccess();
                 onClose();
               } catch (error: unknown) {
-                message.error(getUnifiedApiErrorMessage(error, '分解失败'));
+                void 0;
               } finally {
                 setSubmitting(false);
               }

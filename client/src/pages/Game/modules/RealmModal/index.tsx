@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CharacterData } from '../../../../services/gameSocket';
 import { gameSocket } from '../../../../services/gameSocket';
 import { SERVER_BASE, breakthroughToNextRealm, getRealmOverview, type RealmOverviewDto } from '../../../../services/api';
-import { getUnifiedApiErrorMessage } from '../../../../services/api';
 import coin01 from '../../../../assets/images/ui/sh_icon_0006_jinbi_02.png';
 import lingshiIcon from '../../../../assets/images/ui/lingshi.png';
 import tongqianIcon from '../../../../assets/images/ui/tongqian.png';
@@ -109,16 +108,15 @@ const RealmModal: React.FC<RealmModalProps> = ({ open, onClose, character }) => 
         setOverview(res.data);
       } else {
         setOverview(null);
-        message.error(getUnifiedApiErrorMessage(res, '获取境界信息失败'));
+        void 0;
       }
-    } catch (err) {
-      const e = err as { message?: string };
+    } catch {
       setOverview(null);
-      message.error(getUnifiedApiErrorMessage(e, '获取境界信息失败'));
+      void 0;
     } finally {
       setLoading(false);
     }
-  }, [message, open]);
+  }, [open]);
 
   useEffect(() => {
     if (open) {
@@ -223,15 +221,14 @@ const RealmModal: React.FC<RealmModalProps> = ({ open, onClose, character }) => 
     try {
       const res = await breakthroughToNextRealm();
       if (!res.success) {
-        message.error(getUnifiedApiErrorMessage(res, '突破失败'));
+        void 0;
         return;
       }
       message.success(res.message || '突破成功');
       gameSocket.refreshCharacter();
       void refreshOverview();
-    } catch (err) {
-      const e = err as { message?: string };
-      message.error(getUnifiedApiErrorMessage(e, '突破失败'));
+    } catch {
+      void 0;
     } finally {
       setBreakthroughLoading(false);
     }

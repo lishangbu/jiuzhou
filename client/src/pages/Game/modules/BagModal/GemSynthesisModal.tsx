@@ -8,7 +8,6 @@ import {
   type GemSynthesisRecipeDto,
   type GemType,
 } from '../../../../services/api';
-import { getUnifiedApiErrorMessage } from '../../../../services/api';
 
 interface GemSynthesisModalProps {
   open: boolean;
@@ -192,7 +191,7 @@ const GemSynthesisModal: React.FC<GemSynthesisModalProps> = ({ open, onClose, on
       const maxLevel = allToLevels.length > 0 ? Math.max(...allToLevels) : 2;
       setTargetLevel(Math.max(2, Math.min(maxLevel, currentTargetLevel)));
     } catch (error: unknown) {
-      message.error(getUnifiedApiErrorMessage(error, '加载宝石配方失败'));
+      void 0;
       setRecipes([]);
       setWallet(null);
       setSelectedRecipeId('');
@@ -289,7 +288,7 @@ const GemSynthesisModal: React.FC<GemSynthesisModalProps> = ({ open, onClose, on
       await onSuccess();
       await refresh();
     } catch (error: unknown) {
-      message.error(getUnifiedApiErrorMessage(error, '宝石合成失败'));
+      void 0;
     } finally {
       setSubmitting(false);
     }
@@ -320,7 +319,7 @@ const GemSynthesisModal: React.FC<GemSynthesisModalProps> = ({ open, onClose, on
       await onSuccess();
       await refresh();
     } catch (error: unknown) {
-      message.error(getUnifiedApiErrorMessage(error, '快捷合成失败'));
+      void 0;
     } finally {
       setBatchSubmitting(false);
     }

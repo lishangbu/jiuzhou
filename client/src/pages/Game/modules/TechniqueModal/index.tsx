@@ -24,7 +24,6 @@ import {
   unequipCharacterTechnique,
   upgradeCharacterTechnique,
 } from '../../../../services/api';
-import { getUnifiedApiErrorMessage } from '../../../../services/api';
 import { useIsMobile } from '../../shared/responsive';
 import { formatSkillEffectLines } from '../skillEffectFormatter';
 import './index.scss';
@@ -665,7 +664,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose }) => {
       const nextEmpty = nextSkillSlots.findIndex((x) => x === null);
       if (nextEmpty !== -1) setActiveSkillSlot(nextEmpty);
     } catch (error: unknown) {
-      message.error(getUnifiedApiErrorMessage(error, '获取功法数据失败'));
+      void 0;
       setLearned([]);
       setEquipped({ main: null, sub1: null, sub2: null, sub3: null });
       setSkillSlots(Array.from({ length: 10 }).map(() => null));
@@ -707,7 +706,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose }) => {
         setDetailTechnique(buildTechniqueView(null, detailRes.data.technique, detailRes.data.layers, detailRes.data.skills));
         setDetailOpen(true);
       } catch {
-        message.error('获取功法详情失败');
+        void 0;
       }
     },
     [learned, message],
@@ -750,7 +749,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose }) => {
       message.success(res.message || '运功成功');
       await refreshStatus();
     } catch (error: unknown) {
-      message.error(getUnifiedApiErrorMessage(error, '运功失败'));
+      void 0;
     }
   };
 
@@ -764,7 +763,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose }) => {
       message.success(res.message || '卸下成功');
       await refreshStatus();
     } catch (error: unknown) {
-      message.error(getUnifiedApiErrorMessage(error, '卸下失败'));
+      void 0;
     }
   };
 
@@ -780,7 +779,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose }) => {
       message.success(res.message || '装备成功');
       await refreshStatus();
     } catch (error: unknown) {
-      message.error(getUnifiedApiErrorMessage(error, '装备技能失败'));
+      void 0;
     }
   };
 
@@ -793,7 +792,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose }) => {
       message.success(res.message || '已清空');
       await refreshStatus();
     } catch (error: unknown) {
-      message.error(getUnifiedApiErrorMessage(error, '卸下技能失败'));
+      void 0;
     }
   };
 
@@ -1445,7 +1444,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose }) => {
             const costRes = await getCharacterTechniqueUpgradeCost(characterId, id);
             if (costRes?.success && costRes.data) setUpgradeCost(costRes.data);
           } catch (error: unknown) {
-            message.error(getUnifiedApiErrorMessage(error, '修炼失败'));
+            void 0;
           } finally {
             setCultivateSubmitting(false);
           }

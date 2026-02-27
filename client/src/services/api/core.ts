@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { toUnifiedApiError } from './error';
+import { emitApiErrorToast, shouldAutoErrorToast, toUnifiedApiError } from './error';
 
 const normalizeBaseUrl = (raw: string): string => {
   const s = String(raw || '').trim();
@@ -100,24 +100,30 @@ api.interceptors.response.use(
       const success = (payload as { success?: unknown }).success;
       if (success === false) {
         const record = payload as { message?: unknown; code?: unknown };
-        return Promise.reject(
-          toUnifiedApiError(
-            {
-              message: record.message,
-              code: record.code,
-              success: false,
-              httpStatus: response.status,
-              raw: payload,
-            },
-            '请求失败',
-          ),
+        const normalized = toUnifiedApiError(
+          {
+            message: record.message,
+            code: record.code,
+            success: false,
+            httpStatus: response.status,
+            raw: payload,
+          },
+          '请求失败',
         );
+        if (shouldAutoErrorToast(response.config)) {
+          emitApiErrorToast({ message: normalized.message, error: normalized });
+        }
+        return Promise.reject(normalized);
       }
     }
     return payload;
   },
   (error) => {
-    return Promise.reject(toUnifiedApiError(error, '网络错误'));
+    const normalized = toUnifiedApiError(error, '网络错误');
+    if (shouldAutoErrorToast(error?.config)) {
+      emitApiErrorToast({ message: normalized.message, error: normalized });
+    }
+    return Promise.reject(normalized);
   }
 );
 

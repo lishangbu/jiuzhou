@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { ConfigProvider, App as AntdApp, Modal, Spin, theme as antdTheme } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import Auth from './pages/Auth';
-import { verifySession, checkCharacter } from './services/api';
+import { verifySession, checkCharacter, API_ERROR_TOAST_EVENT, type ApiErrorToastDetail } from './services/api';
 import { gameSocket } from './services/gameSocket';
 import { THEME_EVENT_NAME, getStoredThemeMode, persistThemeMode, type ThemeMode } from './constants/theme';
 import './App.css';
@@ -20,6 +20,23 @@ const centeredViewportStyle = {
   height: '100%',
 } as const;
 const modalThemeCompat: Record<string, number> = { contentPadding: 8 };
+
+const ApiErrorToastBridge: React.FC = () => {
+  const { message } = AntdApp.useApp();
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const customEvent = event as CustomEvent<ApiErrorToastDetail>;
+      const text = String(customEvent.detail?.message || '').trim();
+      if (!text) return;
+      message.error(text);
+    };
+    window.addEventListener(API_ERROR_TOAST_EVENT, handler as EventListener);
+    return () => window.removeEventListener(API_ERROR_TOAST_EVENT, handler as EventListener);
+  }, [message]);
+
+  return null;
+};
 
 const clearAuthStorage = () => {
   localStorage.removeItem(TOKEN_STORAGE_KEY);
@@ -140,6 +157,7 @@ function App() {
       }}
     >
       <AntdApp>
+        <ApiErrorToastBridge />
         {isLoggedIn ? (
           <Suspense
             fallback={

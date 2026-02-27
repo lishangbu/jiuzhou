@@ -25,6 +25,7 @@ import { applyGameItemTaxonomy } from './itemTaxonomy';
 let taxonomyReady = false;
 let inflight: Promise<void> | null = null;
 const listeners = new Set<() => void>();
+const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
 
 const emitTaxonomyUpdated = (): void => {
   for (const listener of listeners) {
@@ -37,7 +38,7 @@ const ensureGameItemTaxonomyLoaded = async (): Promise<void> => {
   if (inflight) return inflight;
   inflight = (async () => {
     try {
-      const res = await getGameItemTaxonomy();
+      const res = await getGameItemTaxonomy(SILENT_REQUEST_CONFIG);
       if (!res.data?.taxonomy) return;
       applyGameItemTaxonomy(res.data.taxonomy);
       taxonomyReady = true;

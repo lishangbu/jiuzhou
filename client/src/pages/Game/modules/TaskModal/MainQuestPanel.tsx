@@ -12,7 +12,6 @@ import {
   type SectionDto,
 } from '../../../../services/mainQuestApi';
 import { resolveAssetUrl } from '../../../../services/api';
-import { getUnifiedApiErrorMessage } from '../../../../services/api';
 import coin01 from '../../../../assets/images/ui/sh_icon_0006_jinbi_02.png';
 import lingshiIcon from '../../../../assets/images/ui/lingshi.png';
 import tongqianIcon from '../../../../assets/images/ui/tongqian.png';
@@ -92,7 +91,7 @@ const MainQuestPanel: React.FC<MainQuestPanelProps> = ({ onTrackChange }) => {
         setProgress(res.data);
       }
     } catch {
-      message.error('加载主线进度失败');
+      void 0;
     } finally {
       setLoading(false);
     }
@@ -107,7 +106,7 @@ const MainQuestPanel: React.FC<MainQuestPanelProps> = ({ onTrackChange }) => {
         setChapters(res.data.chapters || []);
       }
     } catch {
-      message.error('加载章节列表失败');
+      void 0;
     } finally {
       setLoading(false);
     }
@@ -122,7 +121,7 @@ const MainQuestPanel: React.FC<MainQuestPanelProps> = ({ onTrackChange }) => {
         setSections(res.data.sections || []);
       }
     } catch {
-      message.error('加载任务节列表失败');
+      void 0;
     } finally {
       setLoading(false);
     }
@@ -139,10 +138,10 @@ const MainQuestPanel: React.FC<MainQuestPanelProps> = ({ onTrackChange }) => {
         onTrackChange?.();
         window.dispatchEvent(new Event('room:objects:changed'));
       } else {
-        message.error(getUnifiedApiErrorMessage(res, '操作失败'));
+        void 0;
       }
     } catch {
-      message.error('操作失败');
+      void 0;
     } finally {
       setTrackLoading(false);
     }
@@ -188,10 +187,10 @@ const MainQuestPanel: React.FC<MainQuestPanelProps> = ({ onTrackChange }) => {
         }
         await loadProgress();
       } else {
-        message.error(getUnifiedApiErrorMessage(res, '完成任务失败'));
+        void 0;
       }
     } catch {
-      message.error('完成任务失败');
+      void 0;
     } finally {
       setLoading(false);
     }
