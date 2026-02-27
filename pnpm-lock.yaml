@@ -1,8 +1,9 @@
 lockfileVersion: '9.0'
 
 settings:
-  autoInstallPeers: true
+  autoInstallPeers: false
   excludeLinksFromLockfile: false
+  injectWorkspacePackages: true
 
 importers:
 
@@ -95,9 +96,6 @@ importers:
 
   server:
     dependencies:
-      '@prisma/client':
-        specifier: ^7.3.0
-        version: 7.3.0(prisma@7.3.0(@types/react@19.2.10)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3))(typescript@5.9.3)
       bcryptjs:
         specifier: ^3.0.3
         version: 3.0.3
@@ -128,9 +126,6 @@ importers:
       pg:
         specifier: ^8.17.2
         version: 8.18.0
-      prisma:
-        specifier: ^7.3.0
-        version: 7.3.0(@types/react@19.2.10)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
       redis:
         specifier: ^5.10.0
         version: 5.10.0
@@ -162,6 +157,9 @@ importers:
       nodemon:
         specifier: ^3.1.11
         version: 3.1.11
+      prisma:
+        specifier: ^7.3.0
+        version: 7.3.0(@types/react@19.2.10)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
       sharp:
         specifier: ^0.34.5
         version: 0.34.5
@@ -880,21 +878,6 @@ packages:
   '@parcel/watcher@2.5.6':
     resolution: {integrity: sha512-tmmZ3lQxAe/k/+rNnXQRawJ4NjxO2hqiOLTHvWchtGZULp4RyFeh6aU4XdOYBFe2KE1oShQTv4AblOs2iOrNnQ==}
     engines: {node: '>= 10.0.0'}
-
-  '@prisma/client-runtime-utils@7.3.0':
-    resolution: {integrity: sha512-dG/ceD9c+tnXATPk8G+USxxYM9E6UdMTnQeQ+1SZUDxTz7SgQcfxEqafqIQHcjdlcNK/pvmmLfSwAs3s2gYwUw==}
-
-  '@prisma/client@7.3.0':
-    resolution: {integrity: sha512-FXBIxirqQfdC6b6HnNgxGmU7ydCPEPk7maHMOduJJfnTP+MuOGa15X4omjR/zpPUUpm8ef/mEFQjJudOGkXFcQ==}
-    engines: {node: ^20.19 || ^22.12 || >=24.0}
-    peerDependencies:
-      prisma: '*'
-      typescript: '>=5.4.0'
-    peerDependenciesMeta:
-      prisma:
-        optional: true
-      typescript:
-        optional: true
 
   '@prisma/config@7.3.0':
     resolution: {integrity: sha512-QyMV67+eXF7uMtKxTEeQqNu/Be7iH+3iDZOQZW5ttfbSwBamCSdwPszA0dum+Wx27I7anYTPLmRmMORKViSW1A==}
@@ -4093,15 +4076,6 @@ snapshots:
       '@parcel/watcher-win32-ia32': 2.5.6
       '@parcel/watcher-win32-x64': 2.5.6
     optional: true
-
-  '@prisma/client-runtime-utils@7.3.0': {}
-
-  '@prisma/client@7.3.0(prisma@7.3.0(@types/react@19.2.10)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3))(typescript@5.9.3)':
-    dependencies:
-      '@prisma/client-runtime-utils': 7.3.0
-    optionalDependencies:
-      prisma: 7.3.0(@types/react@19.2.10)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
-      typescript: 5.9.3
 
   '@prisma/config@7.3.0':
     dependencies:

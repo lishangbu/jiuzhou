@@ -1,18 +1,19 @@
 # ==========================================================
 # 模块作用：
-# 1) 在独立阶段完成 server 构建与生产依赖准备
-# 2) 最终运行镜像只复制“运行必需文件”，避免把安装过程层带入最终镜像
+# 1) 在构建阶段完成 server 编译
+# 2) 在独立阶段安装 server 生产依赖
+# 3) 运行阶段仅复制构建产物与生产依赖，避免携带构建历史层
 #
 # 输入/输出：
 # - 输入：workspace 清单、server 源码、Prisma schema
-# - 输出：server/dist + 生产依赖 node_modules + Prisma Client
+# - 输出：server/dist + 生产依赖 node_modules
 #
 # 数据流：
-# base(工具链) -> builder(编译产物) + prod-deps(生产依赖) -> runner(最小运行镜像)
+# base(工具链) -> builder(编译) + prod-deps(生产依赖) -> runner(运行镜像)
 #
 # 关键边界条件与坑点：
-# 1) prisma generate 必须在 Linux Alpine 环境执行，确保引擎与运行时一致
-# 2) pnpm 的 store/cache 必须在“同一 RUN 层”清理，否则历史层体积不会下降
+# 1) lockfile 配置必须与 Docker 内 pnpm 配置一致，否则 frozen-lockfile 会失败
+# 2) 仅保留 server 运行必需依赖，避免把未使用依赖打入生产镜像
 # ==========================================================
 
 # =======================================
@@ -22,52 +23,47 @@ FROM node:22-alpine AS base
 
 WORKDIR /app
 
-# 固定包管理器配置，保障各阶段安装行为一致
+# 固定 pnpm、镜像源和 lockfile 相关配置，保证构建可复现
 RUN corepack enable && corepack prepare pnpm@latest --activate && \
-    pnpm config set registry https://registry.npmmirror.com
-
-# Prisma 引擎镜像与各阶段保持一致，避免生成产物不一致
-ENV PRISMA_ENGINES_MIRROR="https://registry.npmmirror.com/-/binary/prisma"
+    pnpm config set registry https://registry.npmmirror.com && \
+    pnpm config set inject-workspace-packages true && \
+    pnpm config set auto-install-peers false
 
 # =======================================
-# 构建阶段：安装构建所需依赖并编译 server
+# 构建阶段：编译 server
 # =======================================
 FROM base AS builder
 
-# 先复制清单文件，最大化依赖安装缓存命中
+# 先复制依赖解析清单，最大化依赖缓存命中
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY client/package.json ./client/
 COPY server/package.json ./server/
-COPY server/prisma ./server/prisma/
 
-# 仅安装 server 构建所需依赖，避免无关包进入构建图
-RUN pnpm install --frozen-lockfile --filter ./server...
+# 仅安装 server 构建依赖，避免 client 依赖进入构建路径
+RUN pnpm install --frozen-lockfile --filter jiuzhou-server...
 
-# 再复制服务端源码，降低源码变更对依赖层缓存的影响
+# 再复制服务端源码，避免源码修改导致依赖层失效
 COPY server ./server
 
-# 在构建阶段生成 Prisma Client 并编译 TypeScript
-RUN pnpm --filter ./server db:generate && \
-    pnpm --filter ./server build
+# 仅执行 TypeScript 构建，运行镜像不包含未使用的 Prisma 产物
+RUN pnpm --filter jiuzhou-server build
 
 # =======================================
-# 生产依赖阶段：只保留运行时依赖与 Prisma Client
+# 生产依赖阶段：仅安装运行所需依赖
 # =======================================
 FROM base AS prod-deps
 
-# 仅复制依赖解析所需文件，不复制源码
+# 仅复制解析生产依赖所需文件
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY client/package.json ./client/
 COPY server/package.json ./server/
-COPY server/prisma ./server/prisma/
 
-# 在同一层完成安装 + 生成 + 清理，确保历史层不残留大体积缓存
-RUN pnpm install --prod --frozen-lockfile --filter ./server... --package-import-method=copy && \
-    pnpm --filter ./server db:generate && \
+# 安装 server 生产依赖并清理 pnpm 缓存
+RUN pnpm install --prod --frozen-lockfile --filter jiuzhou-server... --package-import-method=copy && \
     rm -rf /root/.local/share/pnpm/store /root/.cache
 
 # =======================================
-# 运行阶段：仅复制运行必需文件，避免携带安装层
+# 运行阶段：仅保留运行必需文件
 # =======================================
 FROM node:22-alpine AS runner
 
@@ -75,18 +71,18 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# 从生产依赖阶段复制运行必需依赖，避免在 runner 阶段执行安装
+# 复制生产依赖（workspace 根 + server 局部链接）
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=prod-deps /app/server/node_modules ./server/node_modules
 
 WORKDIR /app/server
 
-# 拷贝构建产物与运行时数据文件
+# 复制构建产物与运行时静态数据
 COPY --from=builder /app/server/dist ./dist
 COPY server/src/data ./src/data
 COPY server/package.json ./package.json
 
-# 预创建上传目录，便于容器内运行及挂载卷
+# 预创建上传目录，供运行时写入与卷挂载
 RUN mkdir -p uploads
 
 EXPOSE 6011
