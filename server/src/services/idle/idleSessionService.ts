@@ -7,7 +7,7 @@
  *
  * 输入/输出：
  *   - startIdleSession：创建新会话，含互斥锁检查、Stamina 检查、快照写入
- *   - stopIdleSession：将会话标记为 stopping，等待执行循环自然结束
+ *   - stopIdleSession：将会话标记为 stopping（幂等），并返回被停止的会话 ID 列表
  *   - getActiveIdleSession：查询当前活跃会话（用于断线续战）
  *   - getIdleHistory：最近 30 条历史记录（倒序）
  *   - markSessionViewed：标记会话已查看（幂等）
@@ -23,8 +23,7 @@
  *      SET NX EX 保证原子性，防止并发启动两个会话
  *   2. getIdleHistory 超过 30 条时自动删除最旧记录（按 started_at 升序取最旧）
  *   3. markSessionViewed 幂等：已设置 viewed_at 时不重复更新
- *   4. stopIdleSession 只将 status 改为 stopping，不直接终止执行循环；
- *      执行循环在每场战斗完成后检查 stopping 状态并自然退出
+ *   4. stopIdleSession 仅负责状态持久化；执行器收到 stop 信号后会被立即唤醒做终止检查
  */
 
 import { randomUUID } from 'crypto';
@@ -187,11 +186,18 @@ export async function startIdleSession(params: StartIdleSessionParams): Promise<
  * 只将 status 改为 stopping，执行循环在下一场战斗完成后检查此状态并自然退出。
  * 若会话不存在或不属于该角色，返回 success: false。
  */
-export async function stopIdleSession(characterId: number): Promise<{ success: boolean; error?: string }> {
+export interface StopIdleSessionResult {
+  success: boolean;
+  error?: string;
+  /** 本次请求命中的会话 ID 列表（可能为 1 个；异常并发场景可能 > 1） */
+  sessionIds?: string[];
+}
+
+export async function stopIdleSession(characterId: number): Promise<StopIdleSessionResult> {
   const res = await query(
     `UPDATE idle_sessions
      SET status = 'stopping', updated_at = NOW()
-     WHERE character_id = $1 AND status = 'active'
+     WHERE character_id = $1 AND status IN ('active', 'stopping')
      RETURNING id`,
     [characterId]
   );
@@ -199,7 +205,7 @@ export async function stopIdleSession(characterId: number): Promise<{ success: b
   if (res.rows.length === 0) {
     return { success: false, error: '没有活跃的挂机会话' };
   }
-  return { success: true };
+  return { success: true, sessionIds: res.rows.map((row) => String(row.id)) };
 }
 
 /**
@@ -213,6 +219,21 @@ export async function getActiveIdleSession(characterId: number): Promise<IdleSes
      ORDER BY started_at DESC
      LIMIT 1`,
     [characterId]
+  );
+
+  if (res.rows.length === 0) return null;
+  return rowToIdleSessionRow(res.rows[0] as Record<string, unknown>);
+}
+
+/**
+ * 按会话 ID 查询会话（用于执行循环做精确终止判定）
+ */
+export async function getIdleSessionById(sessionId: string): Promise<IdleSessionRow | null> {
+  const res = await query(
+    `SELECT * FROM idle_sessions
+     WHERE id = $1
+     LIMIT 1`,
+    [sessionId]
   );
 
   if (res.rows.length === 0) return null;

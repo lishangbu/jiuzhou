@@ -36,7 +36,10 @@ import {
   getSessionBatches,
   markSessionViewed,
 } from '../services/idle/idleSessionService.js';
-import { startExecutionLoop } from '../services/idle/idleBattleExecutorWorker.js';
+import {
+  startExecutionLoop,
+  requestImmediateStop,
+} from '../services/idle/idleBattleExecutorWorker.js';
 import { validateAutoSkillPolicy, serializeAutoSkillPolicy } from '../services/idle/autoSkillPolicyCodec.js';
 import { query } from '../config/database.js';
 import { getRoomInMap } from '../services/mapService.js';
@@ -171,6 +174,11 @@ router.post('/stop', requireCharacter, async (req: Request, res: Response): Prom
   if (!result.success) {
     res.status(400).json({ success: false, message: result.error });
     return;
+  }
+
+  // 立即唤醒执行循环做终止检查，避免等待下一次长延迟 tick。
+  for (const sessionId of result.sessionIds ?? []) {
+    requestImmediateStop(sessionId);
   }
 
   res.json({ success: true });
