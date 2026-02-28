@@ -39,7 +39,6 @@ export const applyToSect = async (characterId: number, sectId: string, message?:
   return await withTransaction(async (client) => {
 const existing = await getCharacterSectId(characterId, client);
     if (existing) {
-      await client.query('ROLLBACK');
       return { success: false, message: '已加入宗门，无法申请' };
     }
   
@@ -48,7 +47,6 @@ const existing = await getCharacterSectId(characterId, client);
       [sectId]
     );
     if (sectRes.rows.length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '宗门不存在' };
     }
   
@@ -58,22 +56,18 @@ const existing = await getCharacterSectId(characterId, client);
     const maxMembers = toNumber(sectRes.rows[0].max_members);
   
     if (memberCount >= maxMembers) {
-      await client.query('ROLLBACK');
       return { success: false, message: '宗门人数已满' };
     }
   
     const realm = await getCharacterRealm(characterId, client);
     if (!realm) {
-      await client.query('ROLLBACK');
       return { success: false, message: '角色不存在' };
     }
     if (compareRealmRank(realm, joinMinRealm) < 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: `境界不足，需达到：${joinMinRealm}` };
     }
   
     if (joinType === 'invite') {
-      await client.query('ROLLBACK');
       return { success: false, message: '该宗门仅支持邀请加入' };
     }
   
@@ -94,7 +88,6 @@ const existing = await getCharacterSectId(characterId, client);
       [sectId, characterId]
     );
     if (pendingRes.rows.length > 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '已提交申请，请等待审核' };
     }
   
@@ -189,7 +182,6 @@ export const handleApplication = async (operatorId: number, applicationId: numbe
   return await withTransaction(async (client) => {
 const me = await assertMember(operatorId, client);
     if (!hasPermission(me.position, 'approve')) {
-      await client.query('ROLLBACK');
       return { success: false, message: '无权限处理申请' };
     }
   
@@ -202,17 +194,14 @@ const me = await assertMember(operatorId, client);
       [applicationId]
     );
     if (appRes.rows.length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '申请不存在' };
     }
   
     const app = appRes.rows[0] as SectApplicationRow;
     if (app.sect_id !== me.sectId) {
-      await client.query('ROLLBACK');
       return { success: false, message: '不可处理其他宗门的申请' };
     }
     if (app.status !== 'pending') {
-      await client.query('ROLLBACK');
       return { success: false, message: '申请已处理' };
     }
   
@@ -229,13 +218,11 @@ return { success: true, message: '已拒绝' };
       me.sectId,
     ]);
     if (sectRes.rows.length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '宗门不存在' };
     }
     const memberCount = toNumber(sectRes.rows[0].member_count);
     const maxMembers = toNumber(sectRes.rows[0].max_members);
     if (memberCount >= maxMembers) {
-      await client.query('ROLLBACK');
       return { success: false, message: '宗门人数已满' };
     }
   
@@ -271,16 +258,13 @@ const appRes = await client.query(
       [applicationId]
     );
     if (appRes.rows.length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '申请不存在' };
     }
     const app = appRes.rows[0] as { id: number; sect_id: string; character_id: number; status: string };
     if (app.character_id !== characterId) {
-      await client.query('ROLLBACK');
       return { success: false, message: '无权限取消该申请' };
     }
     if (app.status !== 'pending') {
-      await client.query('ROLLBACK');
       return { success: false, message: '申请已处理，无法取消' };
     }
     await client.query(`UPDATE sect_application SET status = 'cancelled', handled_at = NOW(), handled_by = NULL WHERE id = $1`, [

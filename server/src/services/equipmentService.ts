@@ -711,7 +711,6 @@ export const createEquipmentInstance = async (
   return await withTransaction(async (client) => {
 const txResult = await createEquipmentInstanceTx(client, userId, characterId, generated, options);
     if (!txResult.success) {
-      await client.query('ROLLBACK');
       return txResult;
     }
 return {

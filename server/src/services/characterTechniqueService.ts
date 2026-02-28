@@ -417,14 +417,12 @@ export const learnTechnique = async (
       [characterId, techniqueId]
     );
     if (existCheck.rows.length > 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '已学习该功法' };
     }
       
     // 检查功法是否存在
     const techniqueDef = getTechniqueDefMap().get(techniqueId) ?? null;
     if (!techniqueDef) {
-      await client.query('ROLLBACK');
       return { success: false, message: '功法不存在' };
     }
   
@@ -433,7 +431,6 @@ export const learnTechnique = async (
       [characterId],
     );
     if (charResult.rows.length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '角色不存在' };
     }
   
@@ -441,7 +438,6 @@ export const learnTechnique = async (
     const currentRealm = charResult.rows[0].realm;
     const currentSubRealm = charResult.rows[0].sub_realm;
     if (!isRealmSufficient(currentRealm, requiredRealm, currentSubRealm)) {
-      await client.query('ROLLBACK');
       return { success: false, message: `境界不足，需要达到${requiredRealm}` };
     }
       
@@ -533,7 +529,6 @@ export const upgradeTechnique = async (
       [characterId, techniqueId]
     );
     if (ctResult.rows.length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '未学习该功法' };
     }
     const currentLayer = ctResult.rows[0].current_layer;
@@ -542,7 +537,6 @@ export const upgradeTechnique = async (
     // 获取功法最大层数
     const techniqueDef = getTechniqueDefMap().get(techniqueId) ?? null;
     if (!techniqueDef) {
-      await client.query('ROLLBACK');
       return { success: false, message: '功法不存在' };
     }
     const maxLayer = Number(techniqueDef.max_layer ?? 1);
@@ -550,7 +544,6 @@ export const upgradeTechnique = async (
     const qualityMultiplier = resolveTechniqueCostMultiplierByQuality(techniqueDef.quality);
       
     if (currentLayer >= maxLayer) {
-      await client.query('ROLLBACK');
       return { success: false, message: '已达最高层数' };
     }
       
@@ -558,7 +551,6 @@ export const upgradeTechnique = async (
     const nextLayer = currentLayer + 1;
     const layer = getTechniqueLayerByTechniqueAndLayerStatic(techniqueId, nextLayer);
     if (!layer) {
-      await client.query('ROLLBACK');
       return { success: false, message: '层级配置不存在' };
     }
   
@@ -572,17 +564,14 @@ export const upgradeTechnique = async (
       [characterId]
     );
     if (charResult.rows.length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '角色不存在' };
     }
       
     const char = charResult.rows[0];
     if (char.spirit_stones < costStones) {
-      await client.query('ROLLBACK');
       return { success: false, message: `灵石不足，需要${costStones}，当前${char.spirit_stones}` };
     }
     if (char.exp < costExp) {
-      await client.query('ROLLBACK');
       return { success: false, message: `经验不足，需要${costExp}，当前${char.exp}` };
     }
       
@@ -598,7 +587,6 @@ export const upgradeTechnique = async (
       if (totalQty < mat.qty) {
         // 获取材料名称
         const matName = getItemDefinitionById(mat.itemId)?.name || mat.itemId;
-        await client.query('ROLLBACK');
         return { success: false, message: `材料不足：${matName}，需要${mat.qty}，当前${totalQty}` };
       }
     }
@@ -682,7 +670,6 @@ export const equipTechnique = async (
       [characterId, techniqueId]
     );
     if (ctResult.rows.length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '未学习该功法' };
     }
       
@@ -691,7 +678,6 @@ export const equipTechnique = async (
       
     // 如果已装备在目标位置，无需操作
     if (ct.slot_type === slotType && (slotType === 'main' || ct.slot_index === slotIndex)) {
-      await client.query('ROLLBACK');
       return { success: true, message: '功法已在该位置' };
     }
       
@@ -705,7 +691,6 @@ export const equipTechnique = async (
     } else {
       // 副功法槽位验证
       if (!slotIndex || slotIndex < 1 || slotIndex > 3) {
-        await client.query('ROLLBACK');
         return { success: false, message: '副功法槽位必须为1-3' };
       }
         
@@ -782,7 +767,6 @@ const result = await client.query(
     );
       
     if (result.rowCount === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '功法未装备' };
     }
       
@@ -887,7 +871,6 @@ export const equipSkill = async (
 // 检查技能是否可用（来自已装备功法且已解锁）
     const available = await loadAvailableSkillEntries(characterId);
     if (!available.some((entry) => entry.skillId === skillId)) {
-      await client.query('ROLLBACK');
       return { success: false, message: '技能不可用（未解锁或功法未装备）' };
     }
       

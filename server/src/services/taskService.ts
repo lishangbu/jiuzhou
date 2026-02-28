@@ -718,25 +718,21 @@ await resetRecurringTaskProgressIfNeeded(cid, client);
       [cid, tid]
     );
     if ((progressRes.rows ?? []).length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '任务未接取' };
     }
     const status = asNonEmptyString(progressRes.rows[0]?.status) ?? 'ongoing';
     if (status !== 'claimable') {
-      await client.query('ROLLBACK');
       return { success: false, message: '任务不可领取' };
     }
   
     const taskDef = await getTaskDefinitionById(tid, client);
     if (!taskDef) {
-      await client.query('ROLLBACK');
       return { success: false, message: '任务不存在' };
     }
   
     const rewards = parseRewards(taskDef.rewards);
     const applyResult = await applyTaskRewardsTx(client, uid, cid, rewards);
     if (!applyResult.success) {
-      await client.query('ROLLBACK');
       return { success: false, message: applyResult.message };
     }
   

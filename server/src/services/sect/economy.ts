@@ -29,12 +29,10 @@ const member = await assertMember(characterId, client);
   
     const charRes = await client.query(`SELECT spirit_stones FROM characters WHERE id = $1 FOR UPDATE`, [characterId]);
     if (charRes.rows.length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '角色不存在' };
     }
     const curSpiritStones = toNumber(charRes.rows[0].spirit_stones);
     if (curSpiritStones < donatedSpiritStones) {
-      await client.query('ROLLBACK');
       return { success: false, message: '灵石不足' };
     }
   

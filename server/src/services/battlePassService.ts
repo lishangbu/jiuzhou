@@ -213,7 +213,6 @@ const maxLevel = Number(season.max_level) || 30;
   
     const taskType = String(task.task_type || 'daily') as BattlePassTaskType;
     if (taskType !== 'daily' && taskType !== 'weekly' && taskType !== 'season') {
-      await client.query('ROLLBACK');
       return { success: false, message: '任务类型不支持' };
     }
     const targetValue = Math.max(1, Number(task.target_value) || 1);
@@ -236,14 +235,12 @@ const maxLevel = Number(season.max_level) || 30;
       | undefined;
     const completedInCycle = progressRow?.completed === true && isInCurrentCycle(taskType, toDate(progressRow?.completed_at), now);
     if (completedInCycle) {
-      await client.query('ROLLBACK');
       return { success: false, message: '任务已完成' };
     }
     const progressInCycle = progressRow?.updated_at ? isInCurrentCycle(taskType, toDate(progressRow.updated_at), now) : false;
     const rawProgressValue = progressInCycle ? Number(progressRow?.progress_value ?? 0) : 0;
     const currentProgressValue = Number.isFinite(rawProgressValue) ? Math.max(0, rawProgressValue) : 0;
     if (currentProgressValue < targetValue) {
-      await client.query('ROLLBACK');
       return { success: false, message: '任务目标未达成，无法完成' };
     }
   
@@ -411,7 +408,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
     const expPerLevel = Number(season.exp_per_level) || 1000;
   
     if (level < 1 || level > maxLevel) {
-      await client.query('ROLLBACK');
       return { success: false, message: '等级无效' };
     }
   
@@ -425,12 +421,10 @@ await lockCharacterInventoryMutexTx(client, characterId);
     const currentLevel = Math.min(Math.floor(exp / expPerLevel) + 1, maxLevel);
   
     if (level > currentLevel) {
-      await client.query('ROLLBACK');
       return { success: false, message: '等级未解锁' };
     }
   
     if (track === 'premium' && !premiumUnlocked) {
-      await client.query('ROLLBACK');
       return { success: false, message: '未解锁特权通行证' };
     }
   
@@ -440,14 +434,12 @@ await lockCharacterInventoryMutexTx(client, characterId);
       [characterId, seasonId, level, track],
     );
     if (claimCheck.rows.length > 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '该等级奖励已领取' };
     }
   
     // 获取奖励配置
     const rewardRow = (config?.rewards ?? []).find((entry) => Number(entry.level) === level);
     if (!rewardRow) {
-      await client.query('ROLLBACK');
       return { success: false, message: '奖励配置不存在' };
     }
   
@@ -485,7 +477,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
             obtainedFrom: 'battle_pass',
           });
           if (!addResult.success) {
-            await client.query('ROLLBACK');
             return { success: false, message: addResult.message || '添加物品失败' };
           }
         }

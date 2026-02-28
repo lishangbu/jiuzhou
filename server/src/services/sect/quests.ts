@@ -465,7 +465,6 @@ await assertMember(characterId, client);
   
     const quest = await resolveQuestDefByIdTx(client, characterId, questId);
     if (!quest) {
-      await client.query('ROLLBACK');
       return { success: false, message: '任务不存在' };
     }
   
@@ -474,7 +473,6 @@ await assertMember(characterId, client);
       [characterId, questId]
     );
     if (existing.rows.length > 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '任务已接取' };
     }
   
@@ -500,11 +498,9 @@ const member = await assertMember(characterId, client);
   
     const quest = await resolveQuestDefByIdTx(client, characterId, questId);
     if (!quest) {
-      await client.query('ROLLBACK');
       return { success: false, message: '任务不存在' };
     }
     if (quest.actionType !== 'submit_item' || !quest.submitRequirement) {
-      await client.query('ROLLBACK');
       return { success: false, message: '该任务无需提交物品' };
     }
   
@@ -513,28 +509,23 @@ const member = await assertMember(characterId, client);
       [characterId, questId]
     );
     if (progressRes.rows.length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '任务未接取' };
     }
   
     const status = normalizeQuestStatus(progressRes.rows[0].status);
     if (status === 'claimed') {
-      await client.query('ROLLBACK');
       return { success: false, message: '奖励已领取' };
     }
     if (status === 'completed') {
-      await client.query('ROLLBACK');
       return { success: false, message: '任务已完成，请先领取奖励' };
     }
     if (status !== 'in_progress') {
-      await client.query('ROLLBACK');
       return { success: false, message: '任务状态异常' };
     }
   
     const currentProgress = Math.max(0, Math.min(quest.required, toNumber(progressRes.rows[0].progress)));
     const remaining = Math.max(0, quest.required - currentProgress);
     if (remaining <= 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '任务已达成，请先领取奖励' };
     }
   
@@ -542,7 +533,6 @@ const member = await assertMember(characterId, client);
     const submitQty = Math.min(remaining, requested);
     const consumeRes = await consumeItemDefQtyTx(client, characterId, quest.submitRequirement.itemDefId, submitQty);
     if (!consumeRes.success || consumeRes.consumed <= 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: `${quest.submitRequirement.itemName}数量不足` };
     }
   
@@ -585,7 +575,6 @@ const member = await assertMember(characterId, client);
   
     const quest = await resolveQuestDefByIdTx(client, characterId, questId);
     if (!quest) {
-      await client.query('ROLLBACK');
       return { success: false, message: '任务不存在' };
     }
   
@@ -594,17 +583,14 @@ const member = await assertMember(characterId, client);
       [characterId, questId]
     );
     if (progressRes.rows.length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '任务未接取' };
     }
   
     const status = normalizeQuestStatus(progressRes.rows[0].status);
     if (status === 'claimed') {
-      await client.query('ROLLBACK');
       return { success: false, message: '奖励已领取' };
     }
     if (status !== 'completed') {
-      await client.query('ROLLBACK');
       return { success: false, message: '任务未完成' };
     }
   

@@ -118,7 +118,6 @@ const member = await assertMember(characterId, client);
   
     const userId = await getCharacterUserId(characterId, client);
     if (!userId) {
-      await client.query('ROLLBACK');
       return { success: false, message: '角色不存在' };
     }
   
@@ -127,7 +126,6 @@ const member = await assertMember(characterId, client);
       [characterId]
     );
     if (memberRes.rows.length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '未加入宗门' };
     }
   
@@ -150,7 +148,6 @@ const member = await assertMember(characterId, client);
         return sum + Math.ceil(totalQty / shopItemUnitQty);
       }, 0);
       if (usedToday + q > dailyLimit) {
-        await client.query('ROLLBACK');
         if (dailyLimit <= 1) {
           return { success: false, message: '该商品今日已兑换' };
         }
@@ -162,7 +159,6 @@ const member = await assertMember(characterId, client);
     const contribution = toNumber(memberRes.rows[0].contribution);
     const cost = shopItem.costContribution * q;
     if (contribution < cost) {
-      await client.query('ROLLBACK');
       return { success: false, message: '贡献不足' };
     }
   
@@ -175,7 +171,6 @@ const member = await assertMember(characterId, client);
       dbClient: client,
     });
     if (!createRes.success) {
-      await client.query('ROLLBACK');
       return { success: false, message: createRes.message };
     }
   

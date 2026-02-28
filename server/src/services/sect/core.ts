@@ -36,25 +36,21 @@ export const createSect = async (characterId: number, name: string, description?
   return await withTransaction(async (client) => {
 const existing = await getCharacterSectId(characterId, client);
     if (existing) {
-      await client.query('ROLLBACK');
       return { success: false, message: '已加入宗门，无法创建' };
     }
   
     const nameCheck = await client.query('SELECT id FROM sect_def WHERE name = $1', [name]);
     if (nameCheck.rows.length > 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '宗门名称已存在' };
     }
   
     const createCost = 1000;
     const charRes = await client.query('SELECT spirit_stones FROM characters WHERE id = $1 FOR UPDATE', [characterId]);
     if (charRes.rows.length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '角色不存在' };
     }
     const curSS = toNumber(charRes.rows[0]?.spirit_stones);
     if (curSS < createCost) {
-      await client.query('ROLLBACK');
       return { success: false, message: `灵石不足，创建需要${createCost}` };
     }
     await client.query(`UPDATE characters SET spirit_stones = spirit_stones - $1, updated_at = NOW() WHERE id = $2`, [
@@ -209,7 +205,6 @@ export const updateSectAnnouncement = async (operatorId: number, announcement: s
   return await withTransaction(async (client) => {
 const me = await assertMember(operatorId, client);
     if (!hasPermission(me.position, 'approve')) {
-      await client.query('ROLLBACK');
       return { success: false, message: '无权限编辑宗门公告' };
     }
   
@@ -229,7 +224,6 @@ export const transferLeader = async (currentLeaderId: number, newLeaderId: numbe
   return await withTransaction(async (client) => {
 const me = await assertMember(currentLeaderId, client);
     if (me.position !== 'leader') {
-      await client.query('ROLLBACK');
       return { success: false, message: '只有宗主可转让' };
     }
   
@@ -237,7 +231,6 @@ const me = await assertMember(currentLeaderId, client);
       newLeaderId,
     ]);
     if (target.rows.length === 0 || target.rows[0].sect_id !== me.sectId) {
-      await client.query('ROLLBACK');
       return { success: false, message: '目标不在本宗门' };
     }
   
@@ -262,17 +255,14 @@ export const disbandSect = async (leaderId: number): Promise<Result> => {
   return await withTransaction(async (client) => {
 const me = await assertMember(leaderId, client);
     if (!hasPermission(me.position, 'disband')) {
-      await client.query('ROLLBACK');
       return { success: false, message: '无权限解散宗门' };
     }
   
     const sect = await getSectDefTx(client, me.sectId);
     if (!sect) {
-      await client.query('ROLLBACK');
       return { success: false, message: '宗门不存在' };
     }
     if (toNumber(sect.leader_id) !== leaderId) {
-      await client.query('ROLLBACK');
       return { success: false, message: '只有宗主可解散宗门' };
     }
   
@@ -287,7 +277,6 @@ export const leaveSect = async (characterId: number): Promise<Result> => {
   return await withTransaction(async (client) => {
 const me = await assertMember(characterId, client);
     if (me.position === 'leader') {
-      await client.query('ROLLBACK');
       return { success: false, message: '宗主不可退出，请先转让或解散' };
     }
   
@@ -304,7 +293,6 @@ export const kickMember = async (operatorId: number, targetId: number): Promise<
   return await withTransaction(async (client) => {
 const me = await assertMember(operatorId, client);
     if (!hasPermission(me.position, 'kick')) {
-      await client.query('ROLLBACK');
       return { success: false, message: '无权限踢人' };
     }
   
@@ -313,17 +301,14 @@ const me = await assertMember(operatorId, client);
       [targetId]
     );
     if (targetRes.rows.length === 0 || targetRes.rows[0].sect_id !== me.sectId) {
-      await client.query('ROLLBACK');
       return { success: false, message: '目标不在本宗门' };
     }
   
     const targetPos = targetRes.rows[0].position as SectPosition;
     if (targetPos === 'leader') {
-      await client.query('ROLLBACK');
       return { success: false, message: '不可踢出宗主' };
     }
     if (positionRank(me.position) <= positionRank(targetPos)) {
-      await client.query('ROLLBACK');
       return { success: false, message: '权限不足，无法操作同级或更高职位' };
     }
   
@@ -340,13 +325,11 @@ export const appointPosition = async (operatorId: number, targetId: number, posi
   return await withTransaction(async (client) => {
 const me = await assertMember(operatorId, client);
     if (!(me.position === 'leader' || me.position === 'vice_leader')) {
-      await client.query('ROLLBACK');
       return { success: false, message: '无权限任命职位' };
     }
   
     const allowed: SectPosition[] = ['vice_leader', 'elder', 'elite', 'disciple'];
     if (!allowed.includes(position as SectPosition)) {
-      await client.query('ROLLBACK');
       return { success: false, message: '职位参数错误' };
     }
   
@@ -355,16 +338,13 @@ const me = await assertMember(operatorId, client);
       [targetId]
     );
     if (targetRes.rows.length === 0 || targetRes.rows[0].sect_id !== me.sectId) {
-      await client.query('ROLLBACK');
       return { success: false, message: '目标不在本宗门' };
     }
     if (targetRes.rows[0].position === 'leader') {
-      await client.query('ROLLBACK');
       return { success: false, message: '不可任命宗主职位' };
     }
     if (operatorId !== targetId && positionRank(me.position) <= positionRank(targetRes.rows[0].position as SectPosition)) {
       if (me.position !== 'leader') {
-        await client.query('ROLLBACK');
         return { success: false, message: '权限不足，无法任命同级或更高职位' };
       }
     }
@@ -375,7 +355,6 @@ const me = await assertMember(operatorId, client);
         [me.sectId]
       );
       if (toNumber(cntRes.rows[0]?.cnt) >= 2) {
-        await client.query('ROLLBACK');
         return { success: false, message: '副宗主已满' };
       }
     }
@@ -385,7 +364,6 @@ const me = await assertMember(operatorId, client);
         [me.sectId]
       );
       if (toNumber(cntRes.rows[0]?.cnt) >= 5) {
-        await client.query('ROLLBACK');
         return { success: false, message: '长老已满' };
       }
     }

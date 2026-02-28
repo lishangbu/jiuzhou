@@ -290,18 +290,15 @@ const instRes = await client.query(
       [bid],
     );
     if ((instRes.rows ?? []).length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '悬赏不存在' };
     }
     const inst = instRes.rows[0] as any;
     const taskId = asNonEmptyString(inst?.task_id) ?? '';
     if (!taskId) {
-      await client.query('ROLLBACK');
       return { success: false, message: '悬赏数据异常' };
     }
     const expiresAtMs = inst?.expires_at ? new Date(inst.expires_at).getTime() : 0;
     if (expiresAtMs && Number.isFinite(expiresAtMs) && Date.now() > expiresAtMs) {
-      await client.query('ROLLBACK');
       return { success: false, message: '悬赏已过期' };
     }
   
@@ -310,11 +307,9 @@ const instRes = await client.query(
     const claimedCount = asFiniteInt(inst?.claimed_count, 0);
   
     if (claimPolicy === 'unique' && claimedCount >= 1) {
-      await client.query('ROLLBACK');
       return { success: false, message: '该悬赏已被接取' };
     }
     if (claimPolicy === 'limited' && maxClaims > 0 && claimedCount >= maxClaims) {
-      await client.query('ROLLBACK');
       return { success: false, message: '该悬赏接取次数已满' };
     }
   
@@ -325,7 +320,6 @@ const instRes = await client.query(
     if ((taskProgRes.rows ?? []).length > 0) {
       const st = asNonEmptyString(taskProgRes.rows[0]?.status);
       if (st && st !== 'claimed') {
-        await client.query('ROLLBACK');
         return { success: false, message: '该任务已接取' };
       }
     }
@@ -340,7 +334,6 @@ const instRes = await client.query(
       [bid, cid],
     );
     if ((insertClaimRes.rows ?? []).length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '已接取该悬赏' };
     }
   
@@ -351,7 +344,6 @@ const instRes = await client.query(
   
     const taskDef = await getTaskDefinitionById(taskId, client);
     if (!taskDef) {
-      await client.query('ROLLBACK');
       return { success: false, message: '任务不存在' };
     }
     const objectives = Array.isArray(taskDef.objectives) ? (taskDef.objectives as any[]) : [];
@@ -446,14 +438,12 @@ export const publishBounty = async (
         nameById.set(id, name);
       }
       if (nameById.size !== itemIds.length) {
-        await client.query('ROLLBACK');
         return { success: false, message: '包含不存在的材料' };
       }
   
       const providedTaskId = asNonEmptyString(payload.taskId);
       const taskId = providedTaskId ? providedTaskId : `task-bounty-${crypto.randomUUID()}`;
       if (taskId.length > 64) {
-        await client.query('ROLLBACK');
         return { success: false, message: '任务ID过长' };
       }
   
@@ -496,7 +486,6 @@ export const publishBounty = async (
       } else {
         const existsTaskDef = await getTaskDefinitionById(taskId, client);
         if (!existsTaskDef) {
-          await client.query('ROLLBACK');
           return { success: false, message: '任务不存在' };
         }
       }
@@ -506,17 +495,14 @@ export const publishBounty = async (
         [cid],
       );
       if ((charRes.rows ?? []).length === 0) {
-        await client.query('ROLLBACK');
         return { success: false, message: '角色不存在' };
       }
       const curSpirit = asFiniteNonNegativeInt(charRes.rows[0]?.spirit_stones, 0);
       const curSilver = asFiniteNonNegativeInt(charRes.rows[0]?.silver, 0);
       if (curSpirit < spiritCost) {
-        await client.query('ROLLBACK');
         return { success: false, message: '灵石不足' };
       }
       if (curSilver < silverCost) {
-        await client.query('ROLLBACK');
         return { success: false, message: '银两不足' };
       }
   
@@ -631,7 +617,6 @@ export const submitBountyMaterials = async (
         [cid, tid],
       );
       if ((claimRes.rows ?? []).length === 0) {
-        await client.query('ROLLBACK');
         return { success: false, message: '未接取该悬赏' };
       }
   
@@ -639,13 +624,11 @@ export const submitBountyMaterials = async (
       const claimId = Number(claimRow?.claim_id);
       const claimStatus = asNonEmptyString(claimRow?.claim_status) ?? 'claimed';
       if (claimStatus === 'completed') {
-        await client.query('ROLLBACK');
         return { success: false, message: '已提交材料' };
       }
   
       const requiredItems = asRequiredItems(claimRow?.required_items);
       if (requiredItems.length === 0) {
-        await client.query('ROLLBACK');
         return { success: false, message: '该悬赏无需提交材料' };
       }
   
@@ -654,16 +637,13 @@ export const submitBountyMaterials = async (
         [cid, tid],
       );
       if ((progRes.rows ?? []).length === 0) {
-        await client.query('ROLLBACK');
         return { success: false, message: '任务未接取' };
       }
       const currentStatus = asNonEmptyString(progRes.rows[0]?.status) ?? 'ongoing';
       if (currentStatus === 'claimable') {
-        await client.query('ROLLBACK');
         return { success: false, message: '任务已可领取' };
       }
       if (currentStatus === 'claimed') {
-        await client.query('ROLLBACK');
         return { success: false, message: '任务已完成' };
       }
   
@@ -690,7 +670,6 @@ export const submitBountyMaterials = async (
         const rows = (rowsRes.rows ?? []) as Array<{ id: number; qty: number; locked: boolean }>;
         const available = rows.filter((r) => !r.locked).reduce((sum, r) => sum + Math.max(0, Number(r.qty) || 0), 0);
         if (available < remaining) {
-          await client.query('ROLLBACK');
           return { success: false, message: `${reqItem.name}数量不足` };
         }
   

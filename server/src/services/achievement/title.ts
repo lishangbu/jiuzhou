@@ -92,7 +92,6 @@ export const equipTitle = async (characterId: number, titleId: string): Promise<
   return await withTransaction(async (client) => {
 const targetDef = getTitleDefinitions().find((row) => row.id === tid && row.enabled !== false);
     if (!targetDef) {
-      await client.query('ROLLBACK');
       return { success: false, message: '未拥有该称号' };
     }
   
@@ -110,7 +109,6 @@ const targetDef = getTitleDefinitions().find((row) => row.id === tid && row.enab
     );
   
     if ((targetRes.rows ?? []).length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '未拥有该称号' };
     }
   

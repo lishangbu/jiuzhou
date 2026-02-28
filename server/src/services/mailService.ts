@@ -364,7 +364,6 @@ export const claimAttachments = async (
   `, [mailId, characterId, userId]);
 
   if (mailResult.rows.length === 0) {
-    await client.query('ROLLBACK');
     return { success: false, message: '邮件不存在' };
   }
 
@@ -372,13 +371,11 @@ export const claimAttachments = async (
 
   // 2. 检查是否已领取
   if (mail.claimed_at) {
-    await client.query('ROLLBACK');
     return { success: false, message: '附件已领取' };
   }
 
   // 3. 检查是否过期
   if (mail.expire_at && new Date(mail.expire_at) < new Date()) {
-    await client.query('ROLLBACK');
     return { success: false, message: '邮件已过期' };
   }
 
@@ -387,7 +384,6 @@ export const claimAttachments = async (
   const hasItems = mail.attach_items && mail.attach_items.length > 0;
 
   if (!hasCurrency && !hasItems) {
-    await client.query('ROLLBACK');
     return { success: false, message: '该邮件没有附件' };
   }
 
@@ -397,7 +393,6 @@ export const claimAttachments = async (
     const requiredSlots = await estimateRequiredSlots(client, mail.attach_items as MailAttachItem[]);
     const freeSlots = inventoryInfo.bag_capacity - inventoryInfo.bag_used;
     if (freeSlots < requiredSlots) {
-      await client.query('ROLLBACK');
       return { success: false, message: `背包空间不足，需要${requiredSlots}格，当前剩余${freeSlots}格` };
     }
   }
@@ -435,7 +430,6 @@ export const claimAttachments = async (
       );
 
       if (!createResult.success) {
-        await client.query('ROLLBACK');
         return { success: false, message: `物品创建失败: ${createResult.message}` };
       }
 
@@ -491,7 +485,6 @@ export const claimAllAttachments = async (
   `, [characterId, userId]);
 
   if (mailsResult.rows.length === 0) {
-    await client.query('ROLLBACK');
     return { success: true, message: '没有可领取的附件', claimedCount: 0 };
   }
 
@@ -512,7 +505,6 @@ export const claimAllAttachments = async (
     const inventoryInfo = await getInventoryInfoWithClient(characterId, client);
     const freeSlots = inventoryInfo.bag_capacity - inventoryInfo.bag_used;
     if (freeSlots < totalItemSlots) {
-      await client.query('ROLLBACK');
       return { success: false, message: `背包空间不足，需要${totalItemSlots}格，当前剩余${freeSlots}格`, claimedCount: 0 };
     }
   }
@@ -562,7 +554,6 @@ export const claimAllAttachments = async (
         );
 
         if (!createResult.success) {
-          await client.query('ROLLBACK');
           return { success: false, message: `物品创建失败: ${createResult.message}`, claimedCount: 0 };
         }
 

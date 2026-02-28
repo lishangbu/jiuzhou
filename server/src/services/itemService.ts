@@ -255,13 +255,11 @@ await lockCharacterInventoryMutexTx(client, characterId);
       [characterId]
     );
     if (charResult.rows.length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '角色不存在' };
     }
     const charRow = charResult.rows[0];
     const computedBefore = await getCharacterComputedByCharacterId(characterId);
     if (!computedBefore) {
-      await client.query('ROLLBACK');
       return { success: false, message: '角色数据异常' };
     }
   
@@ -277,20 +275,17 @@ await lockCharacterInventoryMutexTx(client, characterId);
     );
   
     if (instanceResult.rows.length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '物品不存在' };
     }
   
     const item = instanceResult.rows[0] as Record<string, unknown>;
     const itemDefId = typeof item.item_def_id === 'string' ? item.item_def_id : String(item.item_def_id || '');
     if (!itemDefId) {
-      await client.query('ROLLBACK');
       return { success: false, message: '物品数据异常' };
     }
   
     const itemDef = getItemDefinitionById(itemDefId);
     if (!itemDef) {
-      await client.query('ROLLBACK');
       return { success: false, message: '物品不存在' };
     }
     const category = String(itemDef.category || '');
@@ -299,22 +294,18 @@ await lockCharacterInventoryMutexTx(client, characterId);
   
     // 检查是否可使用
     if (category === 'equipment' || category === 'material' || category === 'gem') {
-      await client.query('ROLLBACK');
       return { success: false, message: '该物品不可使用' };
     }
   
     if (!useType) {
-      await client.query('ROLLBACK');
       return { success: false, message: '该物品不可使用' };
     }
   
     if (item.locked) {
-      await client.query('ROLLBACK');
       return { success: false, message: '物品已锁定' };
     }
   
     if ((Number(item.qty) || 0) < qty) {
-      await client.query('ROLLBACK');
       return { success: false, message: '数量不足' };
     }
   
@@ -332,7 +323,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
         const untilMs = until ? new Date(until).getTime() : 0;
         if (untilMs > Date.now()) {
           const remaining = Math.ceil((untilMs - Date.now()) / 1000);
-          await client.query('ROLLBACK');
           return { success: false, message: `物品冷却中，剩余${remaining}秒` };
         }
       }
@@ -360,12 +350,10 @@ await lockCharacterInventoryMutexTx(client, characterId);
       const totalUsed = Number(row?.total_count) || 0;
   
       if (dailyLimit > 0 && dailyUsed + qty > dailyLimit) {
-        await client.query('ROLLBACK');
         return { success: false, message: '今日使用次数已达上限' };
       }
   
       if (totalLimit > 0 && totalUsed + qty > totalLimit) {
-        await client.query('ROLLBACK');
         return { success: false, message: '使用次数已达上限' };
       }
     }
@@ -466,7 +454,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
             .filter((id): id is string => id.length > 0);
   
           if (gemIds.length === 0) {
-            await client.query('ROLLBACK');
             return { success: false, message: '宝石袋配置异常：没有可掉落宝石' };
           }
   
@@ -492,14 +479,12 @@ await lockCharacterInventoryMutexTx(client, characterId);
             : null;
         const expandType = params ? String(params.expand_type || '') : '';
         if (expandType !== 'bag') {
-          await client.query('ROLLBACK');
           return { success: false, message: '该道具暂不支持当前扩容类型' };
         }
   
         const valueRaw = params ? Number(params.value) : NaN;
         const expandValue = Number.isInteger(valueRaw) ? valueRaw : Math.floor(valueRaw);
         if (!Number.isInteger(expandValue) || expandValue <= 0) {
-          await client.query('ROLLBACK');
           return { success: false, message: '扩容道具配置错误' };
         }
   
@@ -515,19 +500,16 @@ await lockCharacterInventoryMutexTx(client, characterId);
             : null;
         const techniqueId = params ? String(params.technique_id || '').trim() : '';
         if (!techniqueId) {
-          await client.query('ROLLBACK');
           return { success: false, message: '功法书配置异常，缺少功法ID' };
         }
   
         const techniqueDef = getTechniqueDefinitions().find((entry) => entry.id === techniqueId && entry.enabled !== false) ?? null;
         if (!techniqueDef) {
-          await client.query('ROLLBACK');
           return { success: false, message: '目标功法不存在或未开放' };
         }
   
         const requiredRealm = String(techniqueDef.required_realm || '').trim();
         if (!isRealmSufficient(charRow.realm, requiredRealm, charRow.sub_realm)) {
-          await client.query('ROLLBACK');
           return { success: false, message: `境界不足，需要达到${requiredRealm}` };
         }
   
@@ -536,7 +518,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
           [characterId, techniqueId]
         );
         if (existsRes.rows.length > 0) {
-          await client.query('ROLLBACK');
           return { success: false, message: '已学习该功法' };
         }
   
@@ -589,14 +570,12 @@ await lockCharacterInventoryMutexTx(client, characterId);
       !hasLearnTechnique &&
       !hasExpandEffect
     ) {
-      await client.query('ROLLBACK');
       return { success: false, message: '该物品暂不支持使用效果' };
     }
   
     if (hasExpandEffect) {
       const expandResult = await expandInventoryWithClient(client, characterId, 'bag', totalExpandSize);
       if (!expandResult.success) {
-        await client.query('ROLLBACK');
         return { success: false, message: expandResult.message };
       }
     }

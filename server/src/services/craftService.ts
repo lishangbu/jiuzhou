@@ -468,20 +468,17 @@ export const executeCraftRecipe = async (
   return await withTransaction(async (client) => {
 const characterSnapshot = await getCharacterByUserId(user, client, false);
     if (!characterSnapshot) {
-      await client.query('ROLLBACK');
       return { success: false, message: '角色不存在' };
     }
     await lockCharacterInventoryMutexTx(client, characterSnapshot.id);
   
     const character = await getCharacterByUserId(user, client, true);
     if (!character) {
-      await client.query('ROLLBACK');
       return { success: false, message: '角色不存在' };
     }
   
     const recipeDef = getItemRecipeById(recipeId);
     if (!recipeDef || recipeDef.enabled === false) {
-      await client.query('ROLLBACK');
       return { success: false, message: '配方不存在' };
     }
   
@@ -508,7 +505,6 @@ const characterSnapshot = await getCharacterByUserId(user, client, false);
     } satisfies RecipeRow;
     const reqRealm = asString(recipe.req_realm) || null;
     if (!isRealmSufficient(character.realm, reqRealm)) {
-      await client.query('ROLLBACK');
       return { success: false, message: `境界不足，需要${reqRealm}` };
     }
   
@@ -524,15 +520,12 @@ const characterSnapshot = await getCharacterByUserId(user, client, false);
     const totalExpCost = costExpPerCraft * times;
   
     if (character.silver < totalSilverCost) {
-      await client.query('ROLLBACK');
       return { success: false, message: '银两不足' };
     }
     if (character.spiritStones < totalSpiritCost) {
-      await client.query('ROLLBACK');
       return { success: false, message: '灵石不足' };
     }
     if (character.exp < totalExpCost) {
-      await client.query('ROLLBACK');
       return { success: false, message: '经验不足' };
     }
   
@@ -540,7 +533,6 @@ const characterSnapshot = await getCharacterByUserId(user, client, false);
       const totalQty = itemCost.qty * times;
       const consume = await consumeMaterialByDefIdTx(client, character.id, itemCost.itemDefId, totalQty);
       if (!consume.success) {
-        await client.query('ROLLBACK');
         return { success: false, message: consume.message };
       }
     }
@@ -590,7 +582,6 @@ const characterSnapshot = await getCharacterByUserId(user, client, false);
         { location: 'bag', obtainedFrom: `craft:${recipe.id}` },
       );
       if (!addResult.success) {
-        await client.query('ROLLBACK');
         return { success: false, message: addResult.message || '背包空间不足' };
       }
   
@@ -617,7 +608,6 @@ const characterSnapshot = await getCharacterByUserId(user, client, false);
           { location: 'bag', obtainedFrom: `craft-refund:${recipe.id}` },
         );
         if (!addResult.success) {
-          await client.query('ROLLBACK');
           return { success: false, message: addResult.message || '返还材料失败' };
         }
         returnedItems.push({ itemDefId: itemCost.itemDefId, qty: rollbackQty });

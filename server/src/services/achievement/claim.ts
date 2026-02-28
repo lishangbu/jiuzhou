@@ -180,24 +180,20 @@ const lockedRes = await client.query(
     );
   
     if ((lockedRes.rows ?? []).length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '成就不存在或未解锁' };
     }
   
     const achievementDef = getAchievementDefinitions().find((entry) => entry.id === aid && entry.enabled !== false);
     if (!achievementDef) {
-      await client.query('ROLLBACK');
       return { success: false, message: '成就不存在或未解锁' };
     }
   
     const row = lockedRes.rows[0] as Record<string, unknown>;
     const status = asNonEmptyString(row.status) ?? 'in_progress';
     if (status === 'claimed') {
-      await client.query('ROLLBACK');
       return { success: false, message: '奖励已领取' };
     }
     if (status !== 'completed') {
-      await client.query('ROLLBACK');
       return { success: false, message: '成就尚未完成' };
     }
   
@@ -358,12 +354,10 @@ export const claimAchievementPointsReward = async (
       const claimedThresholds = parseClaimedThresholds(pointRow.claimed_thresholds);
   
       if (claimedThresholds.includes(th)) {
-        await client.query('ROLLBACK');
         return { success: false, message: '该点数奖励已领取' };
       }
   
       if (totalPoints < th) {
-        await client.query('ROLLBACK');
         return { success: false, message: '成就点数不足' };
       }
   
@@ -372,7 +366,6 @@ export const claimAchievementPointsReward = async (
       );
   
       if (!defRow) {
-        await client.query('ROLLBACK');
         return { success: false, message: '点数奖励不存在' };
       }
   

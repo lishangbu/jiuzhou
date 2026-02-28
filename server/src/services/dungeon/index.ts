@@ -1402,23 +1402,19 @@ export const startDungeonInstance = async (
     return await withTransaction(async (client) => {
   const instRes = await client.query(`SELECT * FROM dungeon_instance WHERE id = $1 LIMIT 1 FOR UPDATE`, [instanceId]);
       if (instRes.rows.length === 0) {
-        await client.query('ROLLBACK');
         return { success: false, message: '秘境实例不存在' };
       }
       const inst = instRes.rows[0] as DungeonInstanceRow;
   
       if (inst.status !== 'preparing') {
-        await client.query('ROLLBACK');
         return { success: false, message: '秘境已开始或已结束' };
       }
       if (inst.creator_id !== user.characterId) {
-        await client.query('ROLLBACK');
         return { success: false, message: '只有创建者可以开始秘境' };
       }
   
       const dungeonDef = getDungeonDefById(inst.dungeon_id);
       if (!dungeonDef) {
-        await client.query('ROLLBACK');
         return { success: false, message: '秘境不存在' };
       }
       const dailyLimit = dungeonDef.daily_limit;
@@ -1429,18 +1425,15 @@ export const startDungeonInstance = async (
   
       const participants = parseParticipants(inst.participants);
       if (participants.length < minPlayers) {
-        await client.query('ROLLBACK');
         return { success: false, message: `人数不足，需要至少${minPlayers}人` };
       }
       if (participants.length > maxPlayers) {
-        await client.query('ROLLBACK');
         return { success: false, message: `人数超限，最多${maxPlayers}人` };
       }
   
       for (const p of participants) {
         const touch = await touchEntryCount(client, p.characterId, inst.dungeon_id, dailyLimit, weeklyLimit);
         if (!touch.ok) {
-          await client.query('ROLLBACK');
           return { success: false, message: touch.message };
         }
       }
@@ -1449,12 +1442,10 @@ export const startDungeonInstance = async (
         for (const p of participants) {
           const staminaState = await applyStaminaRecoveryTx(client, p.characterId);
           if (!staminaState) {
-            await client.query('ROLLBACK');
             return { success: false, message: '角色不存在' };
           }
           const stamina = asNumber(staminaState.stamina, 0);
           if (stamina < staminaCost) {
-            await client.query('ROLLBACK');
             return { success: false, message: `体力不足，需要${staminaCost}，当前${stamina}` };
           }
         }
@@ -1475,7 +1466,6 @@ export const startDungeonInstance = async (
             [staminaCost, p.characterId, STAMINA_MAX]
           );
           if ((updRes.rowCount ?? 0) === 0) {
-            await client.query('ROLLBACK');
             return { success: false, message: '体力扣除失败' };
           }
         }
@@ -1483,13 +1473,11 @@ export const startDungeonInstance = async (
   
       const stageWave = await getStageAndWave(inst.difficulty_id, 1, 1);
       if (!stageWave.ok) {
-        await client.query('ROLLBACK');
         return { success: false, message: stageWave.message };
       }
   
       const monsterDefIds = buildMonsterDefIdsFromWave(stageWave.wave.monsters, 5);
       if (monsterDefIds.length === 0) {
-        await client.query('ROLLBACK');
         return { success: false, message: '该波次未配置怪物' };
       }
   
@@ -1499,7 +1487,6 @@ export const startDungeonInstance = async (
   
       const battleRes = await startDungeonPVEBattle(userId, monsterDefIds, { resourceSyncClient: client, skipCooldown: true });
       if (!battleRes.success || !battleRes.data?.battleId) {
-        await client.query('ROLLBACK');
         return { success: false, message: battleRes.message || '开启战斗失败' };
       }
   
@@ -1588,12 +1575,10 @@ export const nextDungeonInstance = async (
 
         const instLockRes = await client.query(`SELECT status FROM dungeon_instance WHERE id = $1 LIMIT 1 FOR UPDATE`, [instanceId]);
         if (instLockRes.rows.length === 0) {
-          await client.query('ROLLBACK');
           return { success: false, message: '秘境实例不存在' };
         }
         const lockedStatus = asString(instLockRes.rows[0]?.status, '');
         if (lockedStatus !== 'running') {
-          await client.query('ROLLBACK');
           if (lockedStatus === 'cleared' || lockedStatus === 'failed' || lockedStatus === 'abandoned') {
             return { success: true, data: { instanceId, status: lockedStatus as DungeonInstanceStatus, finished: true } };
           }

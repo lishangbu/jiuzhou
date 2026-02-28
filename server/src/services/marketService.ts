@@ -415,7 +415,6 @@ await lockCharacterInventoryMutexTx(client, params.characterId);
     );
   
     if (itemResult.rows.length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '物品不存在' };
     }
   
@@ -423,33 +422,26 @@ await lockCharacterInventoryMutexTx(client, params.characterId);
     const itemDefId = String(row.item_def_id || '').trim();
     const itemDef = itemDefId ? getItemDefinitionById(itemDefId) : null;
     if (!itemDef) {
-      await client.query('ROLLBACK');
       return { success: false, message: '物品不存在' };
     }
     if (itemDef.tradeable !== true) {
-      await client.query('ROLLBACK');
       return { success: false, message: '该物品不可交易' };
     }
     if (String(row.bind_type) !== 'none') {
-      await client.query('ROLLBACK');
       return { success: false, message: '该物品已绑定，无法上架' };
     }
     if (row.locked) {
-      await client.query('ROLLBACK');
       return { success: false, message: '该物品已锁定，无法上架' };
     }
     if (String(row.location) === 'equipped' || row.equipped_slot) {
-      await client.query('ROLLBACK');
       return { success: false, message: '已穿戴物品无法上架' };
     }
     if (!['bag', 'warehouse'].includes(String(row.location))) {
-      await client.query('ROLLBACK');
       return { success: false, message: '该物品当前位置无法上架' };
     }
   
     const curQty = Number(row.qty) || 0;
     if (qty > curQty) {
-      await client.query('ROLLBACK');
       return { success: false, message: '数量不足' };
     }
   
@@ -537,17 +529,14 @@ await lockCharacterInventoryMutexTx(client, params.characterId);
     );
   
     if (listingResult.rows.length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '上架记录不存在' };
     }
   
     const listing = listingResult.rows[0];
     if (Number(listing.seller_character_id) !== params.characterId) {
-      await client.query('ROLLBACK');
       return { success: false, message: '无权限操作该上架记录' };
     }
     if (String(listing.status) !== 'active') {
-      await client.query('ROLLBACK');
       return { success: false, message: '该上架记录不可下架' };
     }
   
@@ -562,22 +551,18 @@ await lockCharacterInventoryMutexTx(client, params.characterId);
       [itemInstanceId],
     );
     if (itemResult.rows.length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '物品不存在' };
     }
     const item = itemResult.rows[0];
     if (Number(item.owner_character_id) !== params.characterId) {
-      await client.query('ROLLBACK');
       return { success: false, message: '物品归属异常，无法下架' };
     }
     if (String(item.location) !== 'auction') {
-      await client.query('ROLLBACK');
       return { success: false, message: '物品不在坊市中，无法下架' };
     }
   
     const slot = await requireBuyerBagSlot(client, params.characterId);
     if (slot === null) {
-      await client.query('ROLLBACK');
       return { success: false, message: '背包已满，无法下架' };
     }
   
@@ -620,16 +605,13 @@ const listingOwnerResult = await client.query(
       [listingId],
     );
     if (listingOwnerResult.rows.length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '上架记录不存在' };
     }
     const sellerCharacterIdFromMeta = Number(listingOwnerResult.rows[0].seller_character_id);
     if (!Number.isInteger(sellerCharacterIdFromMeta) || sellerCharacterIdFromMeta <= 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '上架数据异常' };
     }
     if (sellerCharacterIdFromMeta === params.buyerCharacterId) {
-      await client.query('ROLLBACK');
       return { success: false, message: '不能购买自己上架的物品' };
     }
     await lockCharacterInventoryMutexesTx(client, [params.buyerCharacterId, sellerCharacterIdFromMeta]);
@@ -653,24 +635,20 @@ const listingOwnerResult = await client.query(
     );
   
     if (listingResult.rows.length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '上架记录不存在' };
     }
   
     const listing = listingResult.rows[0];
     if (String(listing.status) !== 'active') {
-      await client.query('ROLLBACK');
       return { success: false, message: '该物品已被购买或下架' };
     }
   
     const sellerCharacterId = Number(listing.seller_character_id);
     const sellerUserId = Number(listing.seller_user_id);
     if (sellerCharacterId !== sellerCharacterIdFromMeta) {
-      await client.query('ROLLBACK');
       return { success: false, message: '上架数据异常，请刷新后重试' };
     }
     if (sellerCharacterId === params.buyerCharacterId) {
-      await client.query('ROLLBACK');
       return { success: false, message: '不能购买自己上架的物品' };
     }
   
@@ -685,26 +663,21 @@ const listingOwnerResult = await client.query(
       [itemInstanceId],
     );
     if (itemRowResult.rows.length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '物品不存在' };
     }
     const itemRow = itemRowResult.rows[0];
     if (String(itemRow.location) !== 'auction') {
-      await client.query('ROLLBACK');
       return { success: false, message: '物品不在坊市中' };
     }
     if (Number(itemRow.qty) !== qty) {
-      await client.query('ROLLBACK');
       return { success: false, message: '物品数量异常，请刷新后重试' };
     }
     if (Number(itemRow.owner_character_id) !== sellerCharacterId) {
-      await client.query('ROLLBACK');
       return { success: false, message: '物品归属异常，请刷新后重试' };
     }
   
     const itemDef = getItemDefinitionById(itemDefId);
     if (!itemDef) {
-      await client.query('ROLLBACK');
       return { success: false, message: '物品配置不存在，请稍后重试' };
     }
     const taxRate = Number(itemDef.tax_rate) || 0;
@@ -716,18 +689,15 @@ const listingOwnerResult = await client.query(
       [params.buyerCharacterId],
     );
     if (buyerCharResult.rows.length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '角色不存在' };
     }
     const buyerStones = BigInt(buyerCharResult.rows[0].spirit_stones ?? 0);
     if (buyerStones < totalPrice) {
-      await client.query('ROLLBACK');
       return { success: false, message: `灵石不足，需要${totalPrice.toString()}` };
     }
   
     const slot = await requireBuyerBagSlot(client, params.buyerCharacterId);
     if (slot === null) {
-      await client.query('ROLLBACK');
       return { success: false, message: '背包已满，无法购买' };
     }
   

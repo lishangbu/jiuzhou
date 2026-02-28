@@ -189,7 +189,6 @@ const syncCurrentSectionStaticProgress = async (characterId: number): Promise<vo
         [cid],
       );
       if (!progressRes.rows?.[0]) {
-        await client.query('ROLLBACK');
         return;
       }
   
@@ -199,19 +198,16 @@ const syncCurrentSectionStaticProgress = async (characterId: number): Promise<vo
         objectives_progress?: unknown;
       };
       if (asString(progress.section_status) !== 'objectives') {
-        await client.query('ROLLBACK');
         return;
       }
   
       const sectionId = asString(progress.current_section_id);
       if (!sectionId) {
-        await client.query('ROLLBACK');
         return;
       }
   
       const section = getEnabledMainQuestSectionById(sectionId);
       if (!section) {
-        await client.query('ROLLBACK');
         return;
       }
   
@@ -288,7 +284,6 @@ const syncCurrentSectionStaticProgress = async (characterId: number): Promise<vo
       }
   
       if (!updated) {
-        await client.query('ROLLBACK');
         return;
       }
   
@@ -343,7 +338,6 @@ export const ensureMainQuestProgressForNewChapters = async (characterId: number)
       );
   
       if (!progressRes.rows?.[0]) {
-        await client.query('ROLLBACK');
         return;
       }
   
@@ -356,7 +350,6 @@ export const ensureMainQuestProgressForNewChapters = async (characterId: number)
       };
   
       if (asString(progress.section_status) !== 'completed') {
-        await client.query('ROLLBACK');
         return;
       }
   
@@ -396,7 +389,6 @@ export const ensureMainQuestProgressForNewChapters = async (characterId: number)
       }
   
       if (latestCompletedChapterNum <= 0) {
-        await client.query('ROLLBACK');
         return;
       }
   
@@ -406,14 +398,12 @@ export const ensureMainQuestProgressForNewChapters = async (characterId: number)
       });
   
       if (!nextSection) {
-        await client.query('ROLLBACK');
         return;
       }
   
       const nextChapterId = asString(nextSection.chapter_id).trim();
       const nextSectionId = asString(nextSection.id).trim();
       if (!nextChapterId || !nextSectionId) {
-        await client.query('ROLLBACK');
         return;
       }
   
@@ -712,7 +702,6 @@ export const advanceDialogue = async (
         [cid],
       );
       if (!progressRes.rows?.[0]) {
-        await client.query('ROLLBACK');
         return { success: false, message: '主线进度不存在' };
       }
   
@@ -724,7 +713,6 @@ export const advanceDialogue = async (
   
       if (!dialogueId) {
         if (!sectionId) {
-          await client.query('ROLLBACK');
           return { success: false, message: '没有进行中的对话' };
         }
   
@@ -735,13 +723,11 @@ export const advanceDialogue = async (
             : asString(section?.dialogue_id);
   
         if (!startDialogueId) {
-          await client.query('ROLLBACK');
           return { success: false, message: '没有可用的对话' };
         }
   
         const bootstrapDialogue = await loadDialogue(startDialogueId);
         if (!bootstrapDialogue) {
-          await client.query('ROLLBACK');
           return { success: false, message: '对话不存在' };
         }
   
@@ -752,7 +738,6 @@ export const advanceDialogue = async (
   
       const dialogue = await loadDialogue(dialogueId);
       if (!dialogue) {
-        await client.query('ROLLBACK');
         return { success: false, message: '对话不存在' };
       }
   
@@ -769,12 +754,10 @@ export const advanceDialogue = async (
         getDialogueNode(dialogue.nodes, currentNodeIdRaw) ?? createDialogueState(dialogueId, dialogue.nodes).currentNode;
   
       if (!currentNode) {
-        await client.query('ROLLBACK');
         return { success: false, message: '对话节点不存在' };
       }
   
       if (currentNode.type === 'choice') {
-        await client.query('ROLLBACK');
         return { success: false, message: '请选择选项' };
       }
   
@@ -814,7 +797,6 @@ export const advanceDialogue = async (
   
       const nextNode = getDialogueNode(dialogue.nodes, nextNodeId);
       if (!nextNode) {
-        await client.query('ROLLBACK');
         return { success: false, message: `无效的对话节点: ${nextNodeId}` };
       }
   
@@ -867,26 +849,22 @@ export const selectDialogueChoice = async (
         [cid],
       );
       if (!progressRes.rows?.[0]) {
-        await client.query('ROLLBACK');
         return { success: false, message: '主线进度不存在' };
       }
   
       const dialogueStateRaw = asObject(progressRes.rows[0].dialogue_state);
       if (!dialogueStateRaw.dialogueId) {
-        await client.query('ROLLBACK');
         return { success: false, message: '没有进行中的对话' };
       }
   
       const dialogue = await loadDialogue(asString(dialogueStateRaw.dialogueId));
       if (!dialogue) {
-        await client.query('ROLLBACK');
         return { success: false, message: '对话不存在' };
       }
   
       const currentNodeId = asString(dialogueStateRaw.currentNodeId);
       const { nextNodeId, effects } = processChoice(dialogue.nodes, currentNodeId, ch);
       if (!nextNodeId) {
-        await client.query('ROLLBACK');
         return { success: false, message: '无效的选项' };
       }
   
@@ -898,7 +876,6 @@ export const selectDialogueChoice = async (
   
       const nextNode = getDialogueNode(dialogue.nodes, nextNodeId);
       if (!nextNode) {
-        await client.query('ROLLBACK');
         return { success: false, message: `无效的对话节点: ${nextNodeId}` };
       }
       const selectedChoices = [...asArray<string>(dialogueStateRaw.selectedChoices), ch];
@@ -953,7 +930,6 @@ const progressRes = await client.query(
       [cid],
     );
     if (!progressRes.rows?.[0]) {
-      await client.query('ROLLBACK');
       return { success: false, message: '主线进度不存在', updated: false, completed: false };
     }
 
@@ -963,19 +939,16 @@ const progressRes = await client.query(
       objectives_progress?: unknown;
     };
     if (asString(progress.section_status) !== 'objectives') {
-      await client.query('ROLLBACK');
       return { success: true, message: '当前不在目标阶段', updated: false, completed: false };
     }
 
     const sectionId = asString(progress.current_section_id);
     if (!sectionId) {
-      await client.query('ROLLBACK');
       return { success: false, message: '任务节不存在', updated: false, completed: false };
     }
 
     const section = getEnabledMainQuestSectionById(sectionId);
     if (!section) {
-      await client.query('ROLLBACK');
       return { success: false, message: '任务节不存在', updated: false, completed: false };
     }
 
@@ -1102,7 +1075,6 @@ const progressRes = await client.query(
     }
 
     if (!updated) {
-      await client.query('ROLLBACK');
       return { success: true, message: '无匹配目标', updated: false, completed: false };
     }
 
@@ -1241,7 +1213,6 @@ export const completeCurrentSection = async (
         [cid],
       );
       if (!progressRes.rows?.[0]) {
-        await client.query('ROLLBACK');
         return { success: false, message: '主线进度不存在' };
       }
   
@@ -1254,26 +1225,22 @@ export const completeCurrentSection = async (
       };
   
       if (asString(progress.section_status) !== 'turnin') {
-        await client.query('ROLLBACK');
         return { success: false, message: '任务未完成，无法领取奖励' };
       }
   
       const currentSectionId = asString(progress.current_section_id);
       if (!currentSectionId) {
-        await client.query('ROLLBACK');
         return { success: false, message: '任务节不存在' };
       }
   
       const section = getEnabledMainQuestSectionById(currentSectionId);
       if (!section) {
-        await client.query('ROLLBACK');
         return { success: false, message: '任务节不存在' };
       }
   
       const sectionId = asString(section.id);
       const chapterId = asString(section.chapter_id);
       if (!sectionId || !chapterId) {
-        await client.query('ROLLBACK');
         return { success: false, message: '任务节不存在' };
       }
   

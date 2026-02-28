@@ -577,14 +577,12 @@ export const synthesizeGem = async (
 
   const wallet = await getCharacterWalletTx(client, characterId, true);
   if (!wallet) {
-    await client.query('ROLLBACK');
     return { success: false, message: '角色不存在' };
   }
 
   const recipeRows = await getGemRecipeRows(client, { recipeId });
   const recipe = recipeRows.length > 0 ? parseRecipeModel(recipeRows[0]) : null;
   if (!recipe) {
-    await client.query('ROLLBACK');
     return { success: false, message: '宝石配方不存在' };
   }
 
@@ -599,19 +597,16 @@ export const synthesizeGem = async (
   });
 
   if (maxTimes <= 0) {
-    await client.query('ROLLBACK');
     return { success: false, message: '材料或货币不足' };
   }
 
   if (times > maxTimes) {
-    await client.query('ROLLBACK');
     return { success: false, message: `当前最多可合成${maxTimes}次` };
   }
 
   const consumeQty = recipe.inputQty * times;
   const consumeRes = await consumeItemDefQtyTx(client, characterId, recipe.inputItemDefId, consumeQty);
   if (!consumeRes.success) {
-    await client.query('ROLLBACK');
     return { success: false, message: consumeRes.message };
   }
 
@@ -621,7 +616,6 @@ export const synthesizeGem = async (
   wallet.spiritStones -= totalSpiritStoneCost;
 
   if (wallet.silver < 0 || wallet.spiritStones < 0) {
-    await client.query('ROLLBACK');
     return { success: false, message: '货币不足' };
   }
 
@@ -643,7 +637,6 @@ export const synthesizeGem = async (
       obtainedFrom: 'gem-synthesis',
     });
     if (!addRes.success) {
-      await client.query('ROLLBACK');
       return { success: false, message: addRes.message };
     }
     produced = {
@@ -706,7 +699,6 @@ export const synthesizeGemBatch = async (
 
   const wallet = await getCharacterWalletTx(client, characterId, true);
   if (!wallet) {
-    await client.query('ROLLBACK');
     return { success: false, message: '角色不存在' };
   }
 
@@ -717,7 +709,6 @@ export const synthesizeGemBatch = async (
     .filter((row) => row.gemType === gemType);
 
   if (recipes.length === 0) {
-    await client.query('ROLLBACK');
     return { success: false, message: '宝石配方不存在' };
   }
 
@@ -725,11 +716,9 @@ export const synthesizeGemBatch = async (
   let selectedSeriesKey = requestedSeriesKey;
   if (selectedSeriesKey) {
     if (!seriesKeySet.has(selectedSeriesKey)) {
-      await client.query('ROLLBACK');
       return { success: false, message: '宝石子类型参数错误' };
     }
   } else if (seriesKeySet.size > 1) {
-    await client.query('ROLLBACK');
     return { success: false, message: '该类型包含多个子类型，请先选择具体宝石后再批量合成' };
   } else {
     selectedSeriesKey = recipes[0]?.seriesKey || '';
@@ -787,7 +776,6 @@ export const synthesizeGemBatch = async (
     const consumeQty = recipe.inputQty * maxTimes;
     const consumeRes = await consumeItemDefQtyTx(client, characterId, recipe.inputItemDefId, consumeQty);
     if (!consumeRes.success) {
-      await client.query('ROLLBACK');
       return { success: false, message: consumeRes.message };
     }
 
@@ -797,7 +785,6 @@ export const synthesizeGemBatch = async (
     wallet.silver -= totalSilverCost;
     wallet.spiritStones -= totalSpiritCost;
     if (wallet.silver < 0 || wallet.spiritStones < 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '货币不足' };
     }
 
@@ -820,7 +807,6 @@ export const synthesizeGemBatch = async (
         obtainedFrom: 'gem-synthesis',
       });
       if (!addRes.success) {
-        await client.query('ROLLBACK');
         return { success: false, message: addRes.message };
       }
       itemIds = addRes.itemIds ?? [];
@@ -852,7 +838,6 @@ export const synthesizeGemBatch = async (
   }
 
   if (steps.length === 0) {
-    await client.query('ROLLBACK');
     return { success: false, message: '材料或货币不足，无法批量合成' };
   }
 

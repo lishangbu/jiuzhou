@@ -1275,7 +1275,6 @@ const runInventoryMutationTx = async <T extends { success: boolean }>(
   await client.query("BEGIN");
   const result = await executor();
   if (!result.success) {
-    await client.query("ROLLBACK");
     return result;
   }
   await client.query("COMMIT");
@@ -1505,19 +1504,16 @@ await lockCharacterInventoryMutexTx(client, characterId);
     );
   
     if (result.rows.length === 0) {
-      await client.query("ROLLBACK");
       return { success: false, message: "物品不存在" };
     }
   
     const item = result.rows[0];
   
     if (item.locked) {
-      await client.query("ROLLBACK");
       return { success: false, message: "物品已锁定" };
     }
   
     if (item.qty < qty) {
-      await client.query("ROLLBACK");
       return { success: false, message: "数量不足" };
     }
   
@@ -1563,18 +1559,15 @@ await lockCharacterInventoryMutexTx(client, characterId);
     );
   
     if (itemResult.rows.length === 0) {
-      await client.query("ROLLBACK");
       return { success: false, message: "物品不存在" };
     }
   
     const row = itemResult.rows[0] as { id: number; location: string };
     const location = String(row.location || "");
     if (location === "auction") {
-      await client.query("ROLLBACK");
       return { success: false, message: "该物品当前位置不可锁定" };
     }
     if (!["bag", "warehouse", "equipped"].includes(location)) {
-      await client.query("ROLLBACK");
       return { success: false, message: "该物品当前位置不可锁定" };
     }
   
@@ -1633,36 +1626,30 @@ await lockCharacterInventoryMutexTx(client, characterId);
     );
   
     if (itemResult.rows.length === 0) {
-      await client.query("ROLLBACK");
       return { success: false, message: "物品不存在" };
     }
   
     const item = itemResult.rows[0] as MoveItemRow;
     const itemDef = getStaticItemDef(item.item_def_id);
     if (!itemDef) {
-      await client.query("ROLLBACK");
       return { success: false, message: "物品不存在" };
     }
     const currentLocationText = String(item.location);
     if (currentLocationText !== "bag" && currentLocationText !== "warehouse") {
-      await client.query("ROLLBACK");
       return { success: false, message: "当前位置不支持移动" };
     }
     const currentLocation = currentLocationText as SlottedInventoryLocation;
     const currentSlotRaw = item.location_slot;
     if (currentSlotRaw === null) {
-      await client.query("ROLLBACK");
       return { success: false, message: "物品格子状态异常" };
     }
     const currentSlot = Number(currentSlotRaw);
     if (!Number.isInteger(currentSlot) || currentSlot < 0) {
-      await client.query("ROLLBACK");
       return { success: false, message: "物品格子状态异常" };
     }
     const stackMax = Math.max(1, Math.floor(Number(itemDef.stack_max) || 1));
     const originalQty = Math.max(0, Number(item.qty) || 0);
     if (originalQty <= 0) {
-      await client.query("ROLLBACK");
       return { success: false, message: "物品数量异常" };
     }
   
@@ -1740,7 +1727,6 @@ return { success: true, message: "移动成功" };
         targetSlot < 0 ||
         targetSlot >= capacity
       ) {
-        await client.query("ROLLBACK");
         return { success: false, message: "目标格子超出容量" };
       }
     }
@@ -1755,7 +1741,6 @@ return { success: true, message: "移动成功" };
         client,
       );
       if (emptySlots.length === 0) {
-        await client.query("ROLLBACK");
         return { success: false, message: "目标位置已满" };
       }
       finalSlot = emptySlots[0];
@@ -1774,7 +1759,6 @@ return { success: true, message: "移动成功" };
         // 交换位置
         const otherItemId = Number(slotCheck.rows[0].id);
         if (!Number.isInteger(otherItemId) || otherItemId <= 0) {
-          await client.query("ROLLBACK");
           return { success: false, message: "目标格子状态异常" };
         }
   
@@ -1842,7 +1826,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
     );
   
     if (itemResult.rows.length === 0) {
-      await client.query("ROLLBACK");
       return { success: false, message: "物品不存在" };
     }
   
@@ -1857,38 +1840,31 @@ await lockCharacterInventoryMutexTx(client, characterId);
   
     const itemDef = getStaticItemDef(item.item_def_id);
     if (!itemDef) {
-      await client.query("ROLLBACK");
       return { success: false, message: "物品不存在" };
     }
   
     if (item.locked) {
-      await client.query("ROLLBACK");
       return { success: false, message: "物品已锁定" };
     }
   
     if (itemDef.category !== "equipment") {
-      await client.query("ROLLBACK");
       return { success: false, message: "该物品不可装备" };
     }
   
     const equipSlot = String(itemDef.equip_slot || "").trim();
     if (!equipSlot) {
-      await client.query("ROLLBACK");
       return { success: false, message: "装备槽位配置错误" };
     }
   
     if (item.qty !== 1) {
-      await client.query("ROLLBACK");
       return { success: false, message: "装备数量异常" };
     }
   
     if (item.location === "equipped") {
-      await client.query("ROLLBACK");
       return { success: false, message: "该装备已穿戴" };
     }
   
     if (item.location !== "bag" && item.location !== "warehouse") {
-      await client.query("ROLLBACK");
       return { success: false, message: "该物品当前位置不可装备" };
     }
   
@@ -1909,7 +1885,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
       );
   
       if (characterRealmResult.rows.length === 0) {
-        await client.query("ROLLBACK");
         return { success: false, message: "角色不存在" };
       }
   
@@ -1924,7 +1899,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
       const equipRequiredRealmRank =
         getEquipRealmRankForReroll(equipRequiredRealm);
       if (characterRealmRank < equipRequiredRealmRank) {
-        await client.query("ROLLBACK");
         return {
           success: false,
           message: `境界不足，需达到${equipRequiredRealm}`,
@@ -1938,7 +1912,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
       itemInstanceId,
     );
     if (!newItemDelta) {
-      await client.query("ROLLBACK");
       return { success: false, message: "装备数据异常" };
     }
   
@@ -1962,7 +1935,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
           swappedOutItemId,
         );
         if (!oldDelta) {
-          await client.query("ROLLBACK");
           return { success: false, message: "当前已穿戴装备数据异常" };
         }
   
@@ -1973,7 +1945,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
           client,
         );
         if (emptySlots.length === 0) {
-          await client.query("ROLLBACK");
           return { success: false, message: "背包已满，无法替换装备" };
         }
   
@@ -2072,7 +2043,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
     );
   
     if (itemResult.rows.length === 0) {
-      await client.query("ROLLBACK");
       return { success: false, message: "物品不存在" };
     }
   
@@ -2084,12 +2054,10 @@ await lockCharacterInventoryMutexTx(client, characterId);
     };
   
     if (item.locked) {
-      await client.query("ROLLBACK");
       return { success: false, message: "物品已锁定" };
     }
   
     if (item.location !== "equipped") {
-      await client.query("ROLLBACK");
       return { success: false, message: "该物品未穿戴" };
     }
   
@@ -2099,7 +2067,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
       itemInstanceId,
     );
     if (!delta) {
-      await client.query("ROLLBACK");
       return { success: false, message: "装备数据异常" };
     }
   
@@ -2111,7 +2078,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
       client,
     );
     if (emptySlots.length === 0) {
-      await client.query("ROLLBACK");
       return {
         success: false,
         message: targetLocation === "bag" ? "背包已满" : "仓库已满",
@@ -2174,14 +2140,12 @@ await lockCharacterInventoryMutexTx(client, characterId);
       itemInstanceId,
     );
     if (!itemState.success || !itemState.item) {
-      await client.query("ROLLBACK");
       return { success: false, message: itemState.message };
     }
     const item = itemState.item;
   
     const curLv = clampInt(item.strengthenLevel, 0, ENHANCE_MAX_LEVEL);
     if (curLv >= ENHANCE_MAX_LEVEL) {
-      await client.query("ROLLBACK");
       return {
         success: false,
         message: "强化已达上限",
@@ -2199,7 +2163,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
       item.location,
     );
     if (!beforeDiffRes.success) {
-      await client.query("ROLLBACK");
       return { success: false, message: beforeDiffRes.message };
     }
   
@@ -2210,7 +2173,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
       costPlan.materialQty,
     );
     if (!materialRes.success) {
-      await client.query("ROLLBACK");
       return { success: false, message: materialRes.message };
     }
   
@@ -2223,7 +2185,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
       },
     );
     if (!currencyRes.success) {
-      await client.query("ROLLBACK");
       return { success: false, message: currencyRes.message };
     }
   
@@ -2251,7 +2212,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
       beforeDiffRes.before,
     );
     if (!applyDiffRes.success) {
-      await client.query("ROLLBACK");
       return { success: false, message: applyDiffRes.message };
     }
 await invalidateCharacterComputedCache(characterId);
@@ -2306,14 +2266,12 @@ await lockCharacterInventoryMutexTx(client, characterId);
       itemInstanceId,
     );
     if (!itemState.success || !itemState.item) {
-      await client.query("ROLLBACK");
       return { success: false, message: itemState.message };
     }
     const item = itemState.item;
   
     const curLv = clampInt(item.refineLevel, 0, REFINE_MAX_LEVEL);
     if (curLv >= REFINE_MAX_LEVEL) {
-      await client.query("ROLLBACK");
       return {
         success: false,
         message: "精炼已达上限",
@@ -2331,7 +2289,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
       item.location,
     );
     if (!beforeDiffRes.success) {
-      await client.query("ROLLBACK");
       return { success: false, message: beforeDiffRes.message };
     }
   
@@ -2342,7 +2299,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
       costPlan.materialQty,
     );
     if (!materialRes.success) {
-      await client.query("ROLLBACK");
       return { success: false, message: materialRes.message };
     }
   
@@ -2355,7 +2311,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
       },
     );
     if (!currencyRes.success) {
-      await client.query("ROLLBACK");
       return { success: false, message: currencyRes.message };
     }
   
@@ -2381,7 +2336,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
       beforeDiffRes.before,
     );
     if (!applyDiffRes.success) {
-      await client.query("ROLLBACK");
       return { success: false, message: applyDiffRes.message };
     }
 await invalidateCharacterComputedCache(characterId);
@@ -2439,7 +2393,6 @@ export const rerollEquipmentAffixes = async (
         itemInstanceId,
       );
       if (!itemState.success || !itemState.item) {
-        await client.query("ROLLBACK");
         return { success: false, message: itemState.message };
       }
       const item = itemState.item;
@@ -2450,7 +2403,6 @@ export const rerollEquipmentAffixes = async (
         normalizedLockIndexes,
       );
       if (!lockValidation.success) {
-        await client.query("ROLLBACK");
         return { success: false, message: lockValidation.message };
       }
   
@@ -2461,13 +2413,11 @@ export const rerollEquipmentAffixes = async (
         item.location,
       );
       if (!beforeDiffRes.success) {
-        await client.query("ROLLBACK");
         return { success: false, message: beforeDiffRes.message };
       }
   
       const affixPool = await loadAffixPoolForRerollTx(client, item.affixPoolId);
       if (!affixPool) {
-        await client.query("ROLLBACK");
         return { success: false, message: "该装备没有可用词条池" };
       }
   
@@ -2502,13 +2452,11 @@ export const rerollEquipmentAffixes = async (
         attrFactor,
       });
       if (!rerollRes.success || !rerollRes.affixes) {
-        await client.query("ROLLBACK");
         return { success: false, message: rerollRes.message };
       }
   
       const rerolledAffixes = rerollRes.affixes;
       if (rerolledAffixes.length !== item.affixes.length) {
-        await client.query("ROLLBACK");
         return {
           success: false,
           message: "当前锁定组合无法完成洗炼，请减少锁定词条",
@@ -2523,7 +2471,6 @@ export const rerollEquipmentAffixes = async (
           costPlan.rerollScrollQty,
         );
         if (!rerollScrollRes.success) {
-          await client.query("ROLLBACK");
           return { success: false, message: rerollScrollRes.message };
         }
       }
@@ -2537,7 +2484,6 @@ export const rerollEquipmentAffixes = async (
         },
       );
       if (!currencyRes.success) {
-        await client.query("ROLLBACK");
         return { success: false, message: currencyRes.message };
       }
   
@@ -2560,7 +2506,6 @@ export const rerollEquipmentAffixes = async (
         beforeDiffRes.before,
       );
       if (!applyDiffRes.success) {
-        await client.query("ROLLBACK");
         return { success: false, message: applyDiffRes.message };
       }
   await invalidateCharacterComputedCache(characterId);
@@ -2624,7 +2569,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
       itemInstanceId,
     );
     if (!socketState.success || !socketState.item) {
-      await client.query("ROLLBACK");
       return { success: false, message: socketState.message };
     }
     const equip = socketState.item;
@@ -2636,7 +2580,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
       equip.location,
     );
     if (!beforeDiffRes.success) {
-      await client.query("ROLLBACK");
       return { success: false, message: beforeDiffRes.message };
     }
   
@@ -2651,13 +2594,11 @@ await lockCharacterInventoryMutexTx(client, characterId);
     if (slot === null) {
       slot = getNextAvailableSocketSlot(equip.socketedEntries, equip.socketMax);
       if (slot === null) {
-        await client.query("ROLLBACK");
         return { success: false, message: "镶嵌孔已满，请指定替换孔位" };
       }
     }
   
     if (slot < 0 || slot >= equip.socketMax) {
-      await client.query("ROLLBACK");
       return { success: false, message: "孔位参数错误" };
     }
   
@@ -2667,13 +2608,11 @@ await lockCharacterInventoryMutexTx(client, characterId);
       gemItemInstanceId,
     );
     if (!gemRes.success || !gemRes.gem) {
-      await client.query("ROLLBACK");
       return { success: false, message: gemRes.message };
     }
     const gem = gemRes.gem;
   
     if (!isGemTypeAllowedInSlot(equip.gemSlotTypes, slot, gem.gemType)) {
-      await client.query("ROLLBACK");
       return { success: false, message: "该宝石类型与孔位不匹配" };
     }
   
@@ -2683,7 +2622,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
         clampInt(Number(entry.slot) || 0, 0, 999) !== slot,
     );
     if (duplicatedGem) {
-      await client.query("ROLLBACK");
       return { success: false, message: "同一件装备不可镶嵌相同宝石" };
     }
   
@@ -2698,7 +2636,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
       },
     );
     if (!currencyRes.success) {
-      await client.query("ROLLBACK");
       return { success: false, message: currencyRes.message };
     }
   
@@ -2719,7 +2656,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
         1,
       );
       if (!consumeGemRes.success) {
-        await client.query("ROLLBACK");
         return { success: false, message: consumeGemRes.message };
       }
     }
@@ -2737,7 +2673,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
       beforeDiffRes.before,
     );
     if (!applyDiffRes.success) {
-      await client.query("ROLLBACK");
       return { success: false, message: applyDiffRes.message };
     }
 await invalidateCharacterComputedCache(characterId);
@@ -2859,7 +2794,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
       expandSize,
     );
     if (!result.success) {
-      await client.query("ROLLBACK");
       return result;
     }
 return result;
@@ -2911,7 +2845,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
     );
   
     if (itemResult.rows.length === 0) {
-      await client.query("ROLLBACK");
       return { success: false, message: "物品不存在" };
     }
   
@@ -2929,7 +2862,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
   
     const itemDef = getStaticItemDef(item.item_def_id);
     if (!itemDef) {
-      await client.query("ROLLBACK");
       return { success: false, message: "物品不存在" };
     }
     const itemCategory = String(itemDef.category || "");
@@ -2939,33 +2871,27 @@ await lockCharacterInventoryMutexTx(client, characterId);
     const resolvedQualityRank = item.instance_quality_rank ?? defQualityRank;
   
     if (item.locked) {
-      await client.query("ROLLBACK");
       return { success: false, message: "物品已锁定" };
     }
   
     if (item.location === "equipped") {
       if (itemCategory !== "equipment") {
-        await client.query("ROLLBACK");
         return { success: false, message: "该物品当前位置不可分解" };
       }
-      await client.query("ROLLBACK");
       return { success: false, message: "穿戴中的装备不可分解" };
     }
   
     if (item.location !== "bag" && item.location !== "warehouse") {
-      await client.query("ROLLBACK");
       return { success: false, message: "该物品当前位置不可分解" };
     }
   
     const rowQty = Math.max(0, Number(item.qty) || 0);
     if (rowQty < 1) {
-      await client.query("ROLLBACK");
       return { success: false, message: "物品数量异常" };
     }
   
     const consumeQty = Math.max(1, Math.floor(Number(qty) || 0));
     if (consumeQty > rowQty) {
-      await client.query("ROLLBACK");
       return { success: false, message: "道具数量不足" };
     }
   
@@ -2980,7 +2906,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
       qty: consumeQty,
     });
     if (!rewardPlan.success) {
-      await client.query("ROLLBACK");
       return { success: false, message: rewardPlan.message };
     }
   
@@ -2991,7 +2916,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
       consumeQty,
     );
     if (!consumeRes.success) {
-      await client.query("ROLLBACK");
       return { success: false, message: consumeRes.message };
     }
   
@@ -3009,7 +2933,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
         },
       );
       if (!addResult.success) {
-        await client.query("ROLLBACK");
         return addResult as { success: false; message: string };
       }
       grantedItemRewards.push({
@@ -3028,7 +2951,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
         },
       );
       if (!addCurrencyRes.success) {
-        await client.query("ROLLBACK");
         return { success: false, message: addCurrencyRes.message };
       }
     }
@@ -3107,7 +3029,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
     );
   
     if (itemResult.rows.length !== uniqueIds.length) {
-      await client.query("ROLLBACK");
       return { success: false, message: "包含不存在的物品" };
     }
   
@@ -3142,7 +3063,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
       const itemDefId = String(row.item_def_id || "").trim();
       const itemDef = staticDefMap.get(itemDefId);
       if (!itemDef) {
-        await client.query("ROLLBACK");
         return { success: false, message: "包含不存在的物品" };
       }
   
@@ -3150,18 +3070,15 @@ await lockCharacterInventoryMutexTx(client, characterId);
       // 这里统一转为 number 再参与 Map<number, number> 查找，避免误报 items参数错误。
       const rowId = Number(row.id);
       if (!Number.isInteger(rowId) || rowId <= 0) {
-        await client.query("ROLLBACK");
         return { success: false, message: "items参数错误" };
       }
   
       const requestQty = qtyById.get(rowId) ?? 0;
       if (requestQty <= 0) {
-        await client.query("ROLLBACK");
         return { success: false, message: "items参数错误" };
       }
       const rowQty = Math.max(0, Number(row.qty) || 0);
       if (rowQty < requestQty) {
-        await client.query("ROLLBACK");
         return { success: false, message: "包含数量不足的物品" };
       }
       if (row.location === "equipped") {
@@ -3169,7 +3086,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
         continue;
       }
       if (row.location !== "bag" && row.location !== "warehouse") {
-        await client.query("ROLLBACK");
         return { success: false, message: "包含不可分解位置的物品" };
       }
       if (row.locked) {
@@ -3191,7 +3107,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
         qty: requestQty,
       });
       if (!rewardPlan.success) {
-        await client.query("ROLLBACK");
         return { success: false, message: rewardPlan.message };
       }
   
@@ -3209,7 +3124,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
     }
   
     if (consumeOperations.length === 0) {
-      await client.query("ROLLBACK");
       return { success: false, message: "没有可分解的物品" };
     }
   
@@ -3242,7 +3156,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
         },
       );
       if (!addRes.success) {
-        await client.query("ROLLBACK");
         return addRes as { success: false; message: string };
       }
       grantedItemRewards.push({
@@ -3259,7 +3172,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
         { silver: totalSilver },
       );
       if (!addCurrencyRes.success) {
-        await client.query("ROLLBACK");
         return { success: false, message: addCurrencyRes.message };
       }
     }
@@ -3332,7 +3244,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
     );
   
     if (itemResult.rows.length !== uniqueIds.length) {
-      await client.query("ROLLBACK");
       return { success: false, message: "包含不存在的物品" };
     }
   
@@ -3355,24 +3266,19 @@ await lockCharacterInventoryMutexTx(client, characterId);
     }>) {
       const itemDef = staticDefMap.get(String(row.item_def_id || "").trim());
       if (!itemDef) {
-        await client.query("ROLLBACK");
         return { success: false, message: "包含不存在的物品" };
       }
       if (row.location === "equipped") {
-        await client.query("ROLLBACK");
         return { success: false, message: "包含穿戴中的物品" };
       }
       if (row.location !== "bag" && row.location !== "warehouse") {
-        await client.query("ROLLBACK");
         return { success: false, message: "包含不可丢弃位置的物品" };
       }
       if (itemDef.destroyable !== true) {
-        await client.query("ROLLBACK");
         return { success: false, message: "包含不可丢弃的物品" };
       }
       const rowId = Number(row.id);
       if (!Number.isInteger(rowId) || rowId <= 0) {
-        await client.query("ROLLBACK");
         return { success: false, message: "itemIds参数错误" };
       }
   
@@ -3388,7 +3294,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
     }
   
     if (removableIds.length === 0) {
-      await client.query("ROLLBACK");
       return { success: false, message: "没有可丢弃的物品" };
     }
   

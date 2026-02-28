@@ -106,7 +106,6 @@ export const upgradeBuilding = async (characterId: number, buildingType: string)
   return await withTransaction(async (client) => {
 const member = await assertMember(characterId, client);
     if (!hasPermission(member.position, 'building')) {
-      await client.query('ROLLBACK');
       return { success: false, message: '无权限升级建筑' };
     }
   
@@ -115,31 +114,26 @@ const member = await assertMember(characterId, client);
       [member.sectId, HALL_BUILDING_TYPE]
     );
     if (buildingRes.rows.length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '建筑不存在' };
     }
   
     const building = buildingRes.rows[0] as SectBuildingRow;
     const currentLevel = toNumber(building.level);
     if (currentLevel >= BUILDING_MAX_LEVEL) {
-      await client.query('ROLLBACK');
       return { success: false, message: FULLY_UPGRADED_MESSAGE };
     }
   
     const cost = calcHallUpgradeCost(currentLevel);
     const sectRes = await client.query(`SELECT funds, build_points FROM sect_def WHERE id = $1 FOR UPDATE`, [member.sectId]);
     if (sectRes.rows.length === 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '宗门不存在' };
     }
     const funds = toNumber(sectRes.rows[0].funds);
     const buildPoints = toNumber(sectRes.rows[0].build_points);
     if (funds < cost.funds) {
-      await client.query('ROLLBACK');
       return { success: false, message: '宗门资金不足' };
     }
     if (buildPoints < cost.buildPoints) {
-      await client.query('ROLLBACK');
       return { success: false, message: '建设点不足' };
     }
   

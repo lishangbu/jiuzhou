@@ -281,7 +281,6 @@ const existingRes = await client.query(
     );
   
     if ((existingRes.rows?.length ?? 0) > 0) {
-      await client.query('ROLLBACK');
       return {
         settled: false,
         weekStartLocalDate,

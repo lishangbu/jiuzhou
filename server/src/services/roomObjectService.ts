@@ -1059,14 +1059,12 @@ await lockCharacterInventoryMutexTx(client, characterId);
   
     if (cdUntilMs && Number.isFinite(cdUntilMs) && now.getTime() < cdUntilMs) {
       const remaining = Math.max(1, Math.ceil((cdUntilMs - now.getTime()) / 1000));
-      await client.query('ROLLBACK');
       return { success: false, message: `资源尚未刷新，剩余${remaining}秒` };
     }
   
     const normalizedUsed = cdUntilMs && now.getTime() >= cdUntilMs ? 0 : usedCount;
     const remainingBefore = Math.max(0, cfg.collectLimit - normalizedUsed);
     if (remainingBefore <= 0) {
-      await client.query('ROLLBACK');
       return { success: false, message: '资源已耗尽' };
     }
   
@@ -1125,7 +1123,6 @@ return {
   
     const nextUsed = normalizedUsed + 1;
     if (nextUsed > cfg.collectLimit) {
-      await client.query('ROLLBACK');
       return { success: false, message: '资源已耗尽' };
     }
   
@@ -1170,7 +1167,6 @@ return {
       obtainedFrom: 'gather',
     });
     if (!addResult.success) {
-      await client.query('ROLLBACK');
       return { success: false, message: addResult.message || '采集失败' };
     }
     await recordGatherResourceEvent(characterId, resourceId, 1);
@@ -1287,7 +1283,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
       const usedRaw = row?.used_count === null || row?.used_count === undefined ? 0 : Number(row.used_count);
       const usedCount = Number.isFinite(usedRaw) && usedRaw > 0 ? Math.floor(usedRaw) : 0;
       if (usedCount >= 1) {
-        await client.query('ROLLBACK');
         return { success: false, message: '该物品已拾取' };
       }
   
@@ -1319,7 +1314,6 @@ await lockCharacterInventoryMutexTx(client, characterId);
       obtainedFrom: 'pickup',
     });
     if (!addResult.success) {
-      await client.query('ROLLBACK');
       return { success: false, message: addResult.message || '拾取失败' };
     }
     await recordGatherResourceEvent(characterId, itemDefId, 1);
