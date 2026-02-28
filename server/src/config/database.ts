@@ -341,13 +341,21 @@ const decoratePoolClient = (client: PoolClient): PoolClient => {
   client.release = ((err?: Error | boolean) => {
     if (state.released) return;
 
+    // 标记为即将释放，防止并发调用
+    state.released = true;
+
     if (state.depth > 0) {
       // 释放前强制回滚未结束事务，避免连接污染回池。
-      void executeRawQueryAsPromise(rawQuery, 'ROLLBACK').catch(() => undefined);
-      resetClientTransactionState(client, state);
+      // 必须等待 ROLLBACK 完成后再释放连接，避免时序问题
+      void executeRawQueryAsPromise(rawQuery, 'ROLLBACK')
+        .catch(() => undefined)
+        .finally(() => {
+          resetClientTransactionState(client, state);
+          rawRelease(err);
+        });
+      return;
     }
 
-    state.released = true;
     rawRelease(err);
   }) as PoolClient['release'];
 
