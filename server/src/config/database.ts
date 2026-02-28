@@ -495,8 +495,8 @@ export const withTransaction = async <T>(
     const state = decoratedClient.__txState;
 
     // 如果客户端已被释放或状态异常，忽略这个僵尸上下文，创建新的根事务
-    if (state?.released || !state || state.depth <= 0) {
-      console.warn('检测到无效的事务上下文，创建新的根事务', {
+    if (state?.released || !state) {
+      console.warn('检测到无效的事务上下文（已释放或无状态），创建新的根事务', {
         clientId: state?.clientId,
         released: state?.released,
         depth: state?.depth,
@@ -504,9 +504,48 @@ export const withTransaction = async <T>(
       // 清除僵尸上下文
       transactionContextStorage.enterWith(null);
       // 继续执行，会走到下面的根事务创建逻辑
+    } else if (state.depth <= 0) {
+      // depth <= 0 说明没有活动事务，但上下文仍然存在（僵尸上下文）
+      console.warn('检测到无效的事务上下文（depth <= 0），创建新的根事务', {
+        clientId: state.clientId,
+        depth: state.depth,
+      });
+      // 清除僵尸上下文
+      transactionContextStorage.enterWith(null);
+      // 继续执行，会走到下面的根事务创建逻辑
     } else {
       // 父上下文有效，执行嵌套事务
-      await parentContext.client.query('BEGIN');
+      try {
+        await parentContext.client.query('BEGIN');
+      } catch (error) {
+        // 如果 BEGIN 失败（例如，SAVEPOINT 错误），说明上下文状态与数据库状态不一致
+        if (error && typeof error === 'object' && 'code' in error && error.code === '25P01') {
+          console.warn('检测到无效的事务上下文（SAVEPOINT 失败），创建新的根事务', {
+            clientId: state.clientId,
+            depth: state.depth,
+            error: String((error as { message?: unknown }).message || error),
+          });
+          // 清除僵尸上下文并重置客户端状态
+          transactionContextStorage.enterWith(null);
+          resetClientTransactionState(parentContext.client, state);
+          // 创建新的根事务
+          const client = await pool.connect();
+          const rootContext: TransactionContext = { client };
+          try {
+            await client.query('BEGIN');
+            const result = await transactionContextStorage.run(rootContext, async () => callback(client));
+            await client.query('COMMIT');
+            client.release();
+            return result;
+          } catch (err) {
+            await client.query('ROLLBACK');
+            client.release();
+            throw err;
+          }
+        }
+        throw error;
+      }
+
       try {
         const result = await callback(parentContext.client);
         await parentContext.client.query('COMMIT');
