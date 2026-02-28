@@ -1,4 +1,4 @@
-import { withTransaction } from '../../config/database.js';
+import { withTransactionAuto } from '../../config/database.js';
 import {
   asFiniteNonNegativeInt,
   asNonEmptyString,
@@ -131,7 +131,7 @@ export const updateAchievementProgress = async (
   const candidates = buildTrackKeyCandidates(key);
   if (candidates.length === 0) return;
 
-  return await withTransaction(async (client) => {
+  return await withTransactionAuto(async (client) => {
 await ensureCharacterAchievementPoints(cid, client);
 
     const defs = getAchievementDefinitions()

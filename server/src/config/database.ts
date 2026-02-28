@@ -517,6 +517,40 @@ export const withTransaction = async <T>(
   }
 };
 
+/**
+ * 智能事务执行器（自动检测事务上下文）
+ *
+ * 作用：
+ * - 如果已在事务中，直接使用现有连接（避免嵌套 SAVEPOINT）
+ * - 如果不在事务中，创建新事务
+ *
+ * 使用场景：
+ * - 服务函数既可能被独立调用（从路由），也可能被嵌套调用（从其他服务）
+ * - 避免不必要的 SAVEPOINT 开销
+ *
+ * 示例：
+ * ```typescript
+ * export const updateAchievementProgress = async (...) => {
+ *   return await withTransactionAuto(async (client) => {
+ *     // 业务逻辑
+ *   });
+ * };
+ * ```
+ */
+export const withTransactionAuto = async <T>(
+  callback: (client: PoolClient) => Promise<T>,
+): Promise<T> => {
+  const existingClient = getTransactionClient();
+
+  // 如果已在事务中，直接使用现有连接
+  if (existingClient) {
+    return await callback(existingClient);
+  }
+
+  // 否则创建新事务
+  return await withTransaction(callback);
+};
+
 // 延迟函数
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 

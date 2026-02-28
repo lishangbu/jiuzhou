@@ -1,4 +1,4 @@
-import { pool, query, withTransaction } from '../../config/database.js';
+import { pool, query, withTransaction, withTransactionAuto } from '../../config/database.js';
 import type { PoolClient } from 'pg';
 import {
   loadDialogue,
@@ -945,7 +945,7 @@ export const updateSectionProgress = async (
   const cid = Number(characterId);
   if (!Number.isFinite(cid) || cid <= 0) return { success: false, message: '角色不存在', updated: false, completed: false };
 
-  return await withTransaction(async (client) => {
+  return await withTransactionAuto(async (client) => {
 const progressRes = await client.query(
       `SELECT current_section_id, section_status, objectives_progress
        FROM character_main_quest_progress
