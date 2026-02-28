@@ -333,7 +333,7 @@ export const ensureMainQuestProgressForNewChapters = async (characterId: number)
   const progressRes = await client.query(
         `SELECT current_chapter_id, current_section_id, section_status, completed_chapters, completed_sections
          FROM character_main_quest_progress
-         WHERE character_id = $1 FOR UPDATE`,
+         WHERE character_id = $1 FOR UPDATE NOWAIT`,
         [cid],
       );
   
@@ -423,7 +423,11 @@ export const ensureMainQuestProgressForNewChapters = async (characterId: number)
   
     });
   } catch (error) {
-console.error('修复主线新增章节进度失败:', error);
+    // 如果行被锁定（55P03），说明有其他请求正在处理，直接返回
+    if (error && typeof error === 'object' && 'code' in error && error.code === '55P03') {
+      return;
+    }
+    console.error('修复主线新增章节进度失败:', error);
   }
 };
 
