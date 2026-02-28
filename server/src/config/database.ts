@@ -85,6 +85,25 @@ const getActiveTransactionContext = (): TransactionContext | null => {
   return transactionContextStorage.getStore() ?? null;
 };
 
+const isUsableTransactionState = (
+  state: ClientTransactionState | undefined,
+): state is ClientTransactionState => {
+  return state !== undefined && !state.released && state.depth > 0;
+};
+
+const getUsableTransactionContext = (): TransactionContext | null => {
+  const context = getActiveTransactionContext();
+  if (!context) return null;
+
+  const decoratedClient = context.client as DecoratedPoolClient;
+  const state = decoratedClient.__txState;
+  if (!isUsableTransactionState(state)) {
+    return null;
+  }
+
+  return context;
+};
+
 const stripLeadingSqlComments = (sql: string): string => {
   let text = sql.trim();
 
@@ -363,9 +382,18 @@ const decoratePoolClient = (client: PoolClient): PoolClient => {
         depth: state.depth,
         savepointStack: state.savepointStack
       });
-      // 重置状态并销毁连接，避免把潜在脏连接回收到连接池。
-      resetClientTransactionState(state);
-      rawRelease(true);
+      // 尽力先回滚再释放，避免直接断连影响同调用链后续逻辑。
+      void executeRawQueryAsPromise(rawQuery, 'ROLLBACK')
+        .catch((rollbackError) => {
+          console.error('错误：释放连接时回滚失败', {
+            clientId: state.clientId,
+            error: rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
+          });
+        })
+        .finally(() => {
+          resetClientTransactionState(state);
+          rawRelease(err);
+        });
       return;
     }
 
@@ -436,7 +464,7 @@ const executeWriteWithAutoTransaction = (
   sql: string,
 ): Promise<unknown> => {
   return withTransaction(async () => {
-    const context = getActiveTransactionContext();
+    const context = getUsableTransactionContext();
     if (!context) {
       throw new Error('自动写事务初始化失败：缺少事务上下文');
     }
@@ -457,14 +485,14 @@ const executeWriteWithAutoTransaction = (
  * - 普通业务应优先调用 `query`，避免与事务生命周期耦合。
  */
 export const getTransactionClient = (): PoolClient | null => {
-  return getActiveTransactionContext()?.client ?? null;
+  return getUsableTransactionContext()?.client ?? null;
 };
 
 /**
  * 当前调用链是否处于事务上下文中。
  */
 export const isInTransaction = (): boolean => {
-  return Boolean(getActiveTransactionContext());
+  return Boolean(getUsableTransactionContext());
 };
 
 /**
@@ -476,7 +504,7 @@ export const isInTransaction = (): boolean => {
  */
 export const query = ((...queryArgs: unknown[]) => {
   const sql = extractSqlTextFromQueryArgs(queryArgs);
-  const context = getActiveTransactionContext();
+  const context = getUsableTransactionContext();
 
   if (!context && STRICT_WRITE_TRANSACTION && sql && isWriteSql(sql)) {
     return executeWriteWithAutoTransaction(queryArgs, sql);
@@ -500,27 +528,22 @@ export const query = ((...queryArgs: unknown[]) => {
 export const withTransaction = async <T>(
   callback: (client: PoolClient) => Promise<T>,
 ): Promise<T> => {
-  const parentContext = getActiveTransactionContext();
+  const parentContext = getUsableTransactionContext();
 
   if (parentContext) {
-    const decoratedClient = parentContext.client as DecoratedPoolClient;
-    const state = decoratedClient.__txState;
-
-    // 检测僵尸上下文：如果客户端已释放或 depth <= 0，说明上下文已失效
-    if (!state || state.released || state.depth <= 0) {
-      // 忽略僵尸上下文，创建新的根事务
-      // 不记录日志，因为这是正常的异步边界情况
-    } else {
-      // 父上下文有效，执行嵌套事务
-      await parentContext.client.query('BEGIN');
+    // 父上下文有效，执行嵌套事务
+    await parentContext.client.query('BEGIN');
+    try {
+      const result = await callback(parentContext.client);
+      await parentContext.client.query('COMMIT');
+      return result;
+    } catch (error) {
       try {
-        const result = await callback(parentContext.client);
-        await parentContext.client.query('COMMIT');
-        return result;
-      } catch (error) {
         await parentContext.client.query('ROLLBACK');
-        throw error;
+      } catch {
+        // 嵌套回滚失败不覆盖主异常，主异常继续上抛。
       }
+      throw error;
     }
   }
 
@@ -534,7 +557,11 @@ export const withTransaction = async <T>(
     client.release();
     return result;
   } catch (error) {
-    await client.query('ROLLBACK');
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      // 根事务回滚失败不覆盖主异常，主异常继续上抛。
+    }
     client.release();
     throw error;
   }
