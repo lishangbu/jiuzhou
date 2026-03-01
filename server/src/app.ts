@@ -9,6 +9,7 @@ import { initGameServer } from './game/gameServer.js';
 import { buildCorsOriginOption } from './bootstrap/cors.js';
 import { registerRoutes } from './bootstrap/registerRoutes.js';
 import { registerGracefulShutdown, startServerWithPipeline } from './bootstrap/startupPipeline.js';
+import { isTransactionRollbackOnlyError } from './config/database.js';
 
 dotenv.config();
 
@@ -38,6 +39,25 @@ initGameServer(httpServer, corsOriginOption);
 
 registerRoutes(app);
 registerGracefulShutdown(httpServer);
+
+process.on('unhandledRejection', (reason) => {
+  if (isTransactionRollbackOnlyError(reason)) {
+    console.error('捕获未处理的事务回滚异常，已阻止进程崩溃:', reason);
+    return;
+  }
+
+  throw reason instanceof Error ? reason : new Error(String(reason));
+});
+
+process.on('uncaughtException', (error) => {
+  if (isTransactionRollbackOnlyError(error)) {
+    console.error('捕获未处理的事务回滚异常，已阻止进程崩溃:', error);
+    return;
+  }
+
+  console.error('未捕获异常，服务即将退出:', error);
+  process.exit(1);
+});
 
 void startServerWithPipeline({
   httpServer,

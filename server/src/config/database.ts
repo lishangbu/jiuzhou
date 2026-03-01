@@ -5,7 +5,7 @@
  * - 做什么：
  *   1) 提供统一 `query` 查询入口；
  *   2) 提供 `withTransaction` 自动事务封装；
- *   3) 支持嵌套事务自动 SAVEPOINT；
+ *   3) 复用当前事务上下文，不创建嵌套事务；
  *   4) 启用严格模式：写语句必须在事务上下文执行。
  * - 不做什么：
  *   1) 不承载业务规则；
@@ -18,12 +18,12 @@
  *
  * 数据流/状态流：
  * - 根事务：`withTransaction` 创建连接并 `BEGIN`，回调成功 `COMMIT`，异常 `ROLLBACK`，最终释放连接。
- * - 嵌套事务：在同一连接上自动创建 `SAVEPOINT`，局部失败仅回滚到当前保存点。
+ * - 内层调用：复用根事务连接，不创建 SAVEPOINT；任一失败将标记根事务必须回滚。
  * - 普通查询：`query` 自动复用当前事务上下文连接；无事务时走连接池直连查询。
  *
  * 关键边界条件与坑点：
  * 1) 统一 `query` 入口上的事务外写语句会自动进入事务；原始 `client.query` 仍要求显式事务语义。
- * 2) 嵌套事务名必须可预测且无注入风险，因此仅使用内部生成的 ASCII 安全标识符。
+ * 2) 同一调用链内一旦出现事务失败，事务会被标记为 rollback-only，禁止后续误提交。
  */
 import pg from 'pg';
 import dotenv from 'dotenv';
@@ -59,7 +59,6 @@ export const pool = new Pool({
 
 type TransactionContext = {
   client: PoolClient;
-  nestedExecutionToken?: number;
 };
 
 type QueryCallable = (...queryArgs: unknown[]) => unknown;
@@ -69,24 +68,36 @@ const transactionContextStorage = new AsyncLocalStorage<TransactionContext | nul
 type ClientTransactionState = {
   depth: number;
   released: boolean;
-  savepointCounter: number;
-  savepointStack: string[];
+  rollbackOnly: boolean;
+  rollbackCause: unknown | null;
   clientId: number;
-  nestedQueue: Promise<void>;
-  nestedExecutionCounter: number;
-  activeNestedExecutionToken: number | null;
 };
 
 type DecoratedPoolClient = PoolClient & {
   __txState?: ClientTransactionState;
   __txRawQuery?: QueryCallable;
-  __txRawRelease?: (err?: Error | boolean) => void;
 };
 
 type ErrorChainEntry = {
   name: string;
   message: string;
   stack?: string;
+};
+
+export class TransactionRollbackOnlyError extends Error {
+  readonly causeDetail: unknown;
+
+  constructor(message: string, causeDetail: unknown) {
+    super(message);
+    this.name = 'TransactionRollbackOnlyError';
+    this.causeDetail = causeDetail;
+  }
+}
+
+export const isTransactionRollbackOnlyError = (
+  error: unknown,
+): error is TransactionRollbackOnlyError => {
+  return error instanceof TransactionRollbackOnlyError;
 };
 
 let decoratedClientIdCounter = 0;
@@ -240,37 +251,19 @@ const executeRawQueryAsPromise = (
 
 const resetClientTransactionState = (state: ClientTransactionState): void => {
   state.depth = 0;
-  state.savepointStack = [];
-  state.activeNestedExecutionToken = null;
-  state.nestedQueue = Promise.resolve();
+  state.rollbackOnly = false;
+  state.rollbackCause = null;
   // 注意：不在这里清除 AsyncLocalStorage
   // AsyncLocalStorage 应该由 transactionContextStorage.run() 自动管理
   // 在这里清除可能会影响其他异步上下文
 };
 
-const enqueueNestedTransaction = <T>(
-  state: ClientTransactionState,
-  task: () => Promise<T>,
-): Promise<T> => {
-  const queuedTask = state.nestedQueue.then(task, task);
-  state.nestedQueue = queuedTask.then(
-    () => undefined,
-    () => undefined,
-  );
-  return queuedTask;
-};
-
-const nextNestedExecutionToken = (state: ClientTransactionState): number => {
-  state.nestedExecutionCounter += 1;
-  return state.nestedExecutionCounter;
-};
-
 const normalizeClientStateOnCheckout = (state: ClientTransactionState): void => {
-  if (state.depth > 0 || state.savepointStack.length > 0) {
+  if (state.depth > 0 || state.rollbackOnly) {
     console.error('错误：连接借出时检测到未完成事务状态，已强制重置', {
       clientId: state.clientId,
       depth: state.depth,
-      savepointStack: state.savepointStack,
+      rollbackOnly: state.rollbackOnly,
       checkoutCallStack: captureCallStack('连接借出时检测到未完成事务状态'),
     });
     resetClientTransactionState(state);
@@ -291,9 +284,34 @@ const createNoopQueryResult = <T extends QueryResultRow>(
   } as QueryResult<T>;
 };
 
-const nextSavepointName = (state: ClientTransactionState): string => {
-  state.savepointCounter += 1;
-  return `sp_auto_client_${state.clientId}_${state.savepointCounter}`;
+const isPoolDoubleReleaseError = (error: unknown): error is Error => {
+  return error instanceof Error && error.message.includes('already been released to the pool');
+};
+
+const safeInvokeRawRelease = (
+  rawRelease: (err?: Error | boolean) => void,
+  err: Error | boolean | undefined,
+  clientId: number,
+  releaseCallStack: string | undefined,
+): void => {
+  try {
+    rawRelease(err);
+  } catch (releaseError) {
+    if (isPoolDoubleReleaseError(releaseError)) {
+      console.warn('警告：检测到连接重复释放，已忽略本次释放异常', {
+        clientId,
+        releaseCallStack,
+        releaseErrorMessage: releaseError.message,
+      });
+      return;
+    }
+
+    console.error('错误：底层连接释放失败，已阻止异常继续冒泡', {
+      clientId,
+      releaseCallStack,
+      errorChain: buildErrorChain(releaseError),
+    });
+  }
 };
 
 const safeReleaseClient = (client: PoolClient): void => {
@@ -307,22 +325,18 @@ const safeReleaseClient = (client: PoolClient): void => {
 const decoratePoolClient = (client: PoolClient): PoolClient => {
   const decoratedClient = client as DecoratedPoolClient;
   const rawQuery = (decoratedClient.__txRawQuery ?? client.query.bind(client)) as QueryCallable;
-  const rawRelease =
-    (decoratedClient.__txRawRelease ?? client.release.bind(client)) as (err?: Error | boolean) => void;
+  // release 回调由 pg-pool 在每次 checkout 时重新绑定，不能跨 checkout 复用旧闭包。
+  const rawRelease = client.release.bind(client) as (err?: Error | boolean) => void;
   const state: ClientTransactionState = decoratedClient.__txState ?? {
     depth: 0,
     released: false,
-    savepointCounter: 0,
-    savepointStack: [],
+    rollbackOnly: false,
+    rollbackCause: null,
     clientId: ++decoratedClientIdCounter,
-    nestedQueue: Promise.resolve(),
-    nestedExecutionCounter: 0,
-    activeNestedExecutionToken: null,
   };
 
   decoratedClient.__txState = state;
   decoratedClient.__txRawQuery = rawQuery;
-  decoratedClient.__txRawRelease = rawRelease;
   normalizeClientStateOnCheckout(state);
 
   client.query = ((...queryArgs: unknown[]) => {
@@ -333,19 +347,16 @@ const decoratePoolClient = (client: PoolClient): PoolClient => {
       if (state.depth <= 0) {
         return executeRawQueryAsPromise(rawQuery, 'BEGIN').then((result) => {
           state.depth = 1;
+          state.rollbackOnly = false;
+          state.rollbackCause = null;
           // 不在这里设置 AsyncLocalStorage
           // AsyncLocalStorage 应该只在 withTransaction 的 transactionContextStorage.run() 中管理
           return result;
         });
       }
 
-      // 嵌套事务：创建 SAVEPOINT
-      const savepointName = nextSavepointName(state);
-      return executeRawQueryAsPromise(rawQuery, `SAVEPOINT ${savepointName}`).then(() => {
-        state.savepointStack.push(savepointName);
-        state.depth += 1;
-        return createNoopQueryResult<QueryResultRow>('BEGIN');
-      });
+      // 已在事务中：不再创建嵌套事务，直接视为 no-op。
+      return Promise.resolve(createNoopQueryResult<QueryResultRow>('BEGIN'));
     }
 
     if (normalizedCommand === 'COMMIT' || normalizedCommand === 'END') {
@@ -353,23 +364,9 @@ const decoratePoolClient = (client: PoolClient): PoolClient => {
         return Promise.resolve(createNoopQueryResult<QueryResultRow>('COMMIT'));
       }
 
-      if (state.depth === 1) {
-        return executeRawQueryAsPromise(rawQuery, 'COMMIT').then((result) => {
-          resetClientTransactionState(state);
-          return result;
-        });
-      }
-
-      const savepointName = state.savepointStack[state.savepointStack.length - 1];
-      if (!savepointName) {
-        state.depth = Math.max(0, state.depth - 1);
-        return Promise.resolve(createNoopQueryResult<QueryResultRow>('COMMIT'));
-      }
-
-      return executeRawQueryAsPromise(rawQuery, `RELEASE SAVEPOINT ${savepointName}`).then(() => {
-        state.savepointStack.pop();
-        state.depth -= 1;
-        return createNoopQueryResult<QueryResultRow>('COMMIT');
+      return executeRawQueryAsPromise(rawQuery, 'COMMIT').then((result) => {
+        resetClientTransactionState(state);
+        return result;
       });
     }
 
@@ -378,26 +375,10 @@ const decoratePoolClient = (client: PoolClient): PoolClient => {
         return Promise.resolve(createNoopQueryResult<QueryResultRow>('ROLLBACK'));
       }
 
-      if (state.depth === 1) {
-        return executeRawQueryAsPromise(rawQuery, 'ROLLBACK').then((result) => {
-          resetClientTransactionState(state);
-          return result;
-        });
-      }
-
-      const savepointName = state.savepointStack[state.savepointStack.length - 1];
-      if (!savepointName) {
-        state.depth = Math.max(0, state.depth - 1);
-        return Promise.resolve(createNoopQueryResult<QueryResultRow>('ROLLBACK'));
-      }
-
-      return executeRawQueryAsPromise(rawQuery, `ROLLBACK TO SAVEPOINT ${savepointName}`)
-        .then(() => executeRawQueryAsPromise(rawQuery, `RELEASE SAVEPOINT ${savepointName}`))
-        .then(() => {
-          state.savepointStack.pop();
-          state.depth -= 1;
-          return createNoopQueryResult<QueryResultRow>('ROLLBACK');
-        });
+      return executeRawQueryAsPromise(rawQuery, 'ROLLBACK').then((result) => {
+        resetClientTransactionState(state);
+        return result;
+      });
     }
 
     if (STRICT_WRITE_TRANSACTION && isWriteSql(sql) && state.depth <= 0) {
@@ -451,7 +432,7 @@ const decoratePoolClient = (client: PoolClient): PoolClient => {
       console.error('错误：事务未结束就释放连接', {
         clientId: state.clientId,
         depth: state.depth,
-        savepointStack: state.savepointStack,
+        rollbackOnly: state.rollbackOnly,
         releaseCallStack,
       });
       // 尽力先回滚再释放，避免直接断连影响同调用链后续逻辑。
@@ -465,12 +446,12 @@ const decoratePoolClient = (client: PoolClient): PoolClient => {
         })
         .finally(() => {
           resetClientTransactionState(state);
-          rawRelease(err);
+          safeInvokeRawRelease(rawRelease, err, state.clientId, releaseCallStack);
         });
       return;
     }
 
-    rawRelease(err);
+    safeInvokeRawRelease(rawRelease, err, state.clientId, releaseCallStack);
   }) as PoolClient['release'];
 
   return client;
@@ -595,8 +576,8 @@ export const query = ((...queryArgs: unknown[]) => {
  *
  * 语义：
  * - 根调用：开启真实事务；
- * - 嵌套调用：自动 SAVEPOINT；
- * - 失败时只回滚当前层级并继续抛错。
+ * - 内层调用：复用当前事务，不创建子事务；
+ * - 任一层失败都会将根事务标记为 rollback-only，最终统一回滚。
  */
 export const withTransaction = async <T>(
   callback: (client: PoolClient) => Promise<T>,
@@ -604,60 +585,22 @@ export const withTransaction = async <T>(
   const parentContext = getUsableTransactionContext();
 
   if (parentContext) {
-    // 父上下文有效，执行嵌套事务
+    // 父上下文有效：直接复用同一事务连接，不创建嵌套事务。
     const decoratedClient = parentContext.client as DecoratedPoolClient;
     const state = decoratedClient.__txState;
     if (!state) {
-      throw new Error('事务状态缺失：嵌套事务无法执行');
+      throw new Error('事务状态缺失：无法复用当前事务');
     }
-
-    const runNestedTransaction = async (nestedToken: number): Promise<T> => {
-      await parentContext.client.query('BEGIN');
-      try {
-        const nestedContext: TransactionContext = {
-          client: parentContext.client,
-          nestedExecutionToken: nestedToken,
-        };
-        const result = await transactionContextStorage.run(
-          nestedContext,
-          async () => callback(parentContext.client),
-        );
-        await parentContext.client.query('COMMIT');
-        return result;
-      } catch (error) {
-        console.error('错误：嵌套事务执行失败，准备回滚到 SAVEPOINT', {
-          errorChain: buildErrorChain(error),
-          callStack: captureCallStack('withTransaction 嵌套事务异常调用栈'),
-        });
-        try {
-          await parentContext.client.query('ROLLBACK');
-        } catch (rollbackError) {
-          console.error('错误：嵌套事务回滚失败', {
-            errorChain: buildErrorChain(rollbackError),
-            callStack: captureCallStack('withTransaction 嵌套事务回滚失败调用栈'),
-          });
-          // 嵌套回滚失败不覆盖主异常，主异常继续上抛。
-        }
-        throw error;
+    try {
+      return await callback(parentContext.client);
+    } catch (error) {
+      // 内层一旦失败，即使上层捕获，也必须阻止根事务提交。
+      if (!state.rollbackOnly) {
+        state.rollbackOnly = true;
+        state.rollbackCause = error;
       }
-    };
-
-    const inheritedToken = parentContext.nestedExecutionToken;
-    if (inheritedToken !== undefined && state.activeNestedExecutionToken === inheritedToken) {
-      return runNestedTransaction(inheritedToken);
+      throw error;
     }
-
-    const nestedToken = nextNestedExecutionToken(state);
-    return enqueueNestedTransaction(state, async () => {
-      state.activeNestedExecutionToken = nestedToken;
-      try {
-        return await runNestedTransaction(nestedToken);
-      } finally {
-        if (state.activeNestedExecutionToken === nestedToken) {
-          state.activeNestedExecutionToken = null;
-        }
-      }
-    });
   }
 
   const client = await pool.connect();
@@ -666,6 +609,17 @@ export const withTransaction = async <T>(
   try {
     await client.query('BEGIN');
     const result = await transactionContextStorage.run(rootContext, async () => callback(client));
+    const state = (client as DecoratedPoolClient).__txState;
+    if (state?.rollbackOnly) {
+      const causeMessage =
+        state.rollbackCause instanceof Error
+          ? `${state.rollbackCause.name}: ${state.rollbackCause.message}`
+          : '未知错误';
+      throw new TransactionRollbackOnlyError(
+        `事务已标记为回滚：调用链中存在失败操作（${causeMessage}）`,
+        state.rollbackCause,
+      );
+    }
     await client.query('COMMIT');
     client.release();
     return result;
@@ -692,12 +646,12 @@ export const withTransaction = async <T>(
  * 智能事务执行器（自动检测事务上下文）
  *
  * 作用：
- * - 如果已在事务中，直接使用现有连接（避免嵌套 SAVEPOINT）
+ * - 如果已在事务中，直接使用现有连接
  * - 如果不在事务中，创建新事务
  *
  * 使用场景：
  * - 服务函数既可能被独立调用（从路由），也可能被嵌套调用（从其他服务）
- * - 避免不必要的 SAVEPOINT 开销
+ * - 避免重复开启事务
  *
  * 示例：
  * ```typescript
