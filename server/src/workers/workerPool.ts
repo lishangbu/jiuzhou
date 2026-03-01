@@ -83,13 +83,15 @@ export class WorkerPool {
    * 解析 Worker 脚本路径（支持 ESM 和 CommonJS）
    */
   private resolveWorkerScript(): string {
-    // 开发环境：使用 tsx 运行 .ts 文件
-    if (process.env.NODE_ENV !== 'production') {
-      return path.join(process.cwd(), 'server/src/workers/idleBattleWorker.ts');
-    }
-    // 生产环境：使用编译后的 .js 文件
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
+
+    // 开发环境：使用预编译的文件（位于 dist/workers/）
+    if (process.env.NODE_ENV !== 'production') {
+      // 从 src/workers/ 跳转到 dist/workers/
+      return path.join(__dirname, '../../dist/workers/idleBattleWorker.js');
+    }
+    // 生产环境：使用编译后的 .js 文件（同目录）
     return path.join(__dirname, 'idleBattleWorker.js');
   }
 
@@ -114,8 +116,8 @@ export class WorkerPool {
     return new Promise((resolve, reject) => {
       const worker = new Worker(this.options.workerScript, {
         workerData: this.options.workerData,
-        // 开发环境使用 tsx 执行 TypeScript
-        execArgv: process.env.NODE_ENV !== 'production' ? ['--import', 'tsx'] : [],
+        // 开发环境使用包装器脚本，不需要 execArgv
+        // 生产环境直接运行编译后的 JS
       });
 
       const state: WorkerState = {

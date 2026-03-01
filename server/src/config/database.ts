@@ -620,11 +620,12 @@ export const testConnection = async (
       return true;
     } catch (error) {
       retries++;
+      const errorMessage = error instanceof Error ? error.message : String(error);
       if (retries >= maxRetries) {
-        console.error('✗ 数据库连接失败，已达最大重试次数:', error);
+        console.error('✗ 数据库连接失败，已达最大重试次数:', errorMessage);
         return false;
       }
-      console.log(`✗ 数据库连接失败，${delay / 1000}秒后重试 (${retries}/${maxRetries})...`);
+      console.log(`✗ 数据库连接失败 (${errorMessage})，${delay / 1000}秒后重试 (${retries}/${maxRetries})...`);
       await sleep(delay);
       delay = Math.min(delay * 1.5, 10000); // 指数退避，最大 10 秒
     }

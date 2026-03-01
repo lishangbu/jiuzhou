@@ -4,7 +4,7 @@
   "description": "九州修仙录 - 后端服务",
   "main": "dist/app.js",
   "scripts": {
-    "dev": "tsx watch src/app.ts",
+    "dev": "node scripts/build-workers.mjs && tsx watch src/app.ts",
     "build": "tsc",
     "start": "node dist/app.js",
     "db:generate": "prisma generate",

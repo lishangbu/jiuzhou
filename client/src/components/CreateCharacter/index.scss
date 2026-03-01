@@ -1,7 +1,24 @@
+/**
+ * 作用：角色创建弹窗样式，支持浅色/深色双主题
+ *
+ * 输入/输出：
+ * - 输入：通过 className="create-character-modal" 应用到 Modal 组件
+ * - 输出：响应式、双主题适配的角色创建界面
+ *
+ * 数据流/状态流：
+ * - 使用全局 CSS 变量（--text-color、--panel-bg 等）自动响应主题切换
+ * - 主题切换通过 body.theme-dark 类名触发变量更新
+ *
+ * 关键边界条件与坑点：
+ * 1) 必须使用 CSS 变量而非硬编码颜色，否则深色主题下对比度不足
+ * 2) Ant Design 组件需要通过嵌套选择器覆盖默认样式以适配主题
+ */
+
 .create-character-modal {
   .ant-modal-content {
     padding: 32px 24px;
     border-radius: 16px;
+    background: var(--panel-bg);
   }
 
   .modal-header {
@@ -10,45 +27,46 @@
 
     h2 {
       font-size: 24px;
-      color: #1a1a1a;
+      color: var(--text-color);
       margin: 0 0 8px;
       font-weight: 600;
     }
 
     p {
-      color: #666666;
+      color: var(--text-secondary);
       margin: 0;
       font-size: 14px;
     }
   }
 
   .ant-form-item-label > label {
-    color: #1a1a1a;
+    color: var(--text-color);
     font-weight: 500;
   }
 
   .ant-input-affix-wrapper {
-    background: #fafafa;
-    border-color: #e0e0e0;
+    background: var(--panel-bg-soft);
+    border-color: var(--border-color);
 
     &:hover {
-      border-color: #999999;
+      border-color: var(--text-secondary);
     }
 
     &.ant-input-affix-wrapper-focused {
-      border-color: #1a1a1a;
-      box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 2px var(--primary-bg-soft);
     }
 
     .ant-input-prefix {
-      color: #999999;
+      color: var(--text-secondary);
     }
 
     input {
       background: transparent;
+      color: var(--text-color);
 
       &::placeholder {
-        color: #bbbbbb;
+        color: var(--text-secondary);
       }
     }
   }
@@ -63,26 +81,28 @@
       line-height: 42px;
       text-align: center;
       border-radius: 8px;
-      border-color: #e0e0e0;
-      background: #fafafa;
+      border-color: var(--border-color);
+      background: var(--panel-bg-soft);
+      color: var(--text-color);
 
       &:not(:first-child)::before {
         display: none;
       }
 
       &:hover {
-        color: #1a1a1a;
-        border-color: #999999;
+        color: var(--text-color);
+        border-color: var(--text-secondary);
       }
 
       &.ant-radio-button-wrapper-checked {
-        background: #1a1a1a;
-        border-color: #1a1a1a;
+        background: var(--primary-color);
+        border-color: var(--primary-color);
         color: #ffffff;
 
         &:hover {
-          background: #333333;
-          border-color: #333333;
+          background: var(--primary-color);
+          border-color: var(--primary-color);
+          opacity: 0.9;
         }
       }
 
@@ -93,7 +113,7 @@
   }
 
   .ant-btn-primary {
-    background: #1a1a1a;
+    background: var(--primary-color);
     border: none;
     height: 44px;
     font-size: 16px;
@@ -101,7 +121,8 @@
     margin-top: 8px;
 
     &:hover {
-      background: #333333 !important;
+      background: var(--primary-color) !important;
+      opacity: 0.9;
     }
   }
 }
