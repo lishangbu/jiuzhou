@@ -15,11 +15,15 @@
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down"
   },
+  "type": "module",
   "pnpm": {
     "onlyBuiltDependencies": [
       "prisma",
       "esbuild",
       "@prisma/engines"
     ]
+  },
+  "devDependencies": {
+    "sharp": "^0.34.5"
   }
 }

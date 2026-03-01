@@ -3521,7 +3521,7 @@
       "stack_max": 1,
       "bind_type": "equip",
       "tradeable": true,
-      "icon": "/assets/items/shu_tian_xian_zhang.png",
+      "icon": "/assets/images/set-xuying/01-weapon-set-xuying-weapon.png",
       "equip_slot": "weapon",
       "equip_req_realm": "炼神返虚·养神期",
       "base_attrs": {
@@ -3549,7 +3549,7 @@
       "stack_max": 1,
       "bind_type": "equip",
       "tradeable": true,
-      "icon": "/assets/items/icon_Hat_1_16.png",
+      "icon": "/assets/images/set-xuying/02-head-set-xuying-head.png",
       "equip_slot": "head",
       "equip_req_realm": "炼神返虚·养神期",
       "base_attrs": {
@@ -3578,7 +3578,7 @@
       "stack_max": 1,
       "bind_type": "equip",
       "tradeable": true,
-      "icon": "/assets/items/icon_clothes_1_16.png",
+      "icon": "/assets/images/set-xuying/03-clothes-set-xuying-clothes.png",
       "equip_slot": "clothes",
       "equip_req_realm": "炼神返虚·养神期",
       "base_attrs": {
@@ -3606,7 +3606,7 @@
       "stack_max": 1,
       "bind_type": "equip",
       "tradeable": true,
-      "icon": "/assets/items/icon_shoulder armour_1_16.png",
+      "icon": "/assets/images/set-xuying/04-gloves-set-xuying-gloves.png",
       "equip_slot": "gloves",
       "equip_req_realm": "炼神返虚·养神期",
       "base_attrs": {
@@ -3633,7 +3633,7 @@
       "stack_max": 1,
       "bind_type": "equip",
       "tradeable": true,
-      "icon": "/assets/items/icon_pants_1_16.png",
+      "icon": "/assets/images/set-xuying/05-pants-set-xuying-pants.png",
       "equip_slot": "pants",
       "equip_req_realm": "炼神返虚·养神期",
       "base_attrs": {
@@ -3661,7 +3661,7 @@
       "stack_max": 1,
       "bind_type": "equip",
       "tradeable": true,
-      "icon": "/assets/items/icon_Jade pendants_1_16.png",
+      "icon": "/assets/images/set-xuying/06-necklace-set-xuying-necklace.png",
       "equip_slot": "necklace",
       "equip_req_realm": "炼神返虚·养神期",
       "base_attrs": {
@@ -3689,7 +3689,7 @@
       "stack_max": 1,
       "bind_type": "equip",
       "tradeable": true,
-      "icon": "/assets/items/icon_jiezhi_10010.png",
+      "icon": "/assets/images/set-xuying/07-accessory-set-xuying-accessory.png",
       "equip_slot": "accessory",
       "equip_req_realm": "炼神返虚·养神期",
       "base_attrs": {
@@ -3717,7 +3717,7 @@
       "stack_max": 1,
       "bind_type": "equip",
       "tradeable": true,
-      "icon": "/assets/items/guan_tian_jing.png",
+      "icon": "/assets/images/set-xuying/08-artifact-set-xuying-artifact.png",
       "equip_slot": "artifact",
       "equip_req_realm": "炼神返虚·养神期",
       "base_attrs": {

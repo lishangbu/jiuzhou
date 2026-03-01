@@ -61,3 +61,4 @@ coverage/
 *.temp
 local_cache/
 .worktrees/
+scripts/*.png
