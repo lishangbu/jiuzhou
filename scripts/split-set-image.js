@@ -14,7 +14,7 @@
  *
  * 输入/输出：
  * - 输入：`node scripts/split-set-image.js <setName> <imagePathOrUrl> [--include-border] [--debug-mask]`
- * - 输出：8 张 PNG，命名格式如 `01-weapon-set-{setName}-weapon.png`。
+ * - 输出：8 张 WebP，命名格式如 `01-weapon-set-{setName}-weapon.webp`。
  *
  * 数据流/状态流：
  * 1. 读取图片并转 raw RGBA。
@@ -49,6 +49,11 @@ const EQUIPMENT_ORDER = [
   { index: '07', type: 'accessory', label: '戒指' },
   { index: '08', type: 'artifact', label: '法宝' },
 ];
+const OUTPUT_IMAGE_EXT = 'webp';
+const OUTPUT_WEBP_OPTIONS = {
+  quality: 82,
+  effort: 6,
+};
 
 /**
  * @typedef {{
@@ -1082,6 +1087,17 @@ function resolveOutputDir(setName) {
   return outputDir;
 }
 
+function buildOutputFileName(setName, slot) {
+  return `${slot.index}-${slot.type}-set-${setName}-${slot.type}.${OUTPUT_IMAGE_EXT}`;
+}
+
+async function saveExtractedEquipmentImage(imageBuffer, extractRegion, outputPath) {
+  await sharp(imageBuffer)
+    .extract(extractRegion)
+    .webp(OUTPUT_WEBP_OPTIONS)
+    .toFile(outputPath);
+}
+
 function evaluateProfile(pixelData, imageWidth, imageHeight, channels, profile) {
   const rawMask = buildMaskByProfile(pixelData, imageWidth, imageHeight, channels, profile);
   const mask = denoiseMask(rawMask, imageWidth, imageHeight);
@@ -1168,6 +1184,7 @@ async function splitSetImageByBorder({ setName, imageInput, includeBorder, debug
   console.log(`图片尺寸：${width} x ${height}`);
   console.log(`检测到边框网格：${boxes.length} 个，候选框：${candidateCount} 个`);
   console.log(`使用边框 profile：${describeBorderProfile(borderProfile)}`);
+  console.log(`输出格式：WebP（quality=${OUTPUT_WEBP_OPTIONS.quality}, effort=${OUTPUT_WEBP_OPTIONS.effort}）`);
 
   for (let i = 0; i < boxes.length; i += 1) {
     const slot = EQUIPMENT_ORDER[i];
@@ -1180,10 +1197,10 @@ async function splitSetImageByBorder({ setName, imageInput, includeBorder, debug
       ? borderRefinedRegion
       : refineRegionByContentIsolation(pixelData, width, channels, borderRefinedRegion);
 
-    const fileName = `${slot.index}-${slot.type}-set-${setName}-${slot.type}.png`;
+    const fileName = buildOutputFileName(setName, slot);
     const outputPath = join(outputDir, fileName);
 
-    await sharp(imageBuffer).extract(extractRegion).png().toFile(outputPath);
+    await saveExtractedEquipmentImage(imageBuffer, extractRegion, outputPath);
 
     console.log(
       `✓ ${slot.label} -> ${fileName} (left=${extractRegion.left}, top=${extractRegion.top}, width=${extractRegion.width}, height=${extractRegion.height})`,
