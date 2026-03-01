@@ -25,9 +25,9 @@ export const QUALITY_BY_RANK: Record<number, QualityName> = {
 
 export const QUALITY_MULTIPLIER_BY_RANK: Record<number, number> = {
   1: 1,
-  2: 1.2,
-  3: 1.45,
-  4: 1.75,
+  2: 1.1,
+  3: 1.2,
+  4: 1.3,
 };
 
 export const isQualityName = (value: unknown): value is QualityName => {
