@@ -445,6 +445,80 @@
       "shop_id": "shop-jiutai",
       "sort_weight": 236,
       "enabled": true
+    },
+    {
+      "id": "npc-shenshi-watcher",
+      "code": "shenshi_watcher",
+      "name": "荒原守望者",
+      "title": "神识荒原哨卫",
+      "gender": "女",
+      "realm": "炼炁化神·养神期",
+      "avatar": "/assets/npc/teleporter.png",
+      "description": "常驻神识荒原入口，监测虚空裂隙波动与神魂异变，引导修士完成养神前的历练。",
+      "npc_type": "quest",
+      "area": "S",
+      "base_attrs": {
+        "qixue": 10500,
+        "max_qixue": 10500,
+        "wugong": 280,
+        "fagong": 300,
+        "wufang": 240,
+        "fafang": 260,
+        "sudu": 11
+      },
+      "talk_tree_id": "talk-shenshi-watcher",
+      "quest_giver_id": "qg-chapter5-main",
+      "sort_weight": 245,
+      "enabled": true
+    },
+    {
+      "id": "npc-shenshi-guide",
+      "code": "shenshi_guide",
+      "name": "虚灵引路人",
+      "title": "神殿向导",
+      "gender": "男",
+      "realm": "炼炁化神·结胎期",
+      "avatar": "/assets/npc/guide.png",
+      "description": "熟知虚灵神殿内部构造，负责引导修士进入神殿试炼。",
+      "npc_type": "quest",
+      "area": "S",
+      "base_attrs": {
+        "qixue": 9000,
+        "max_qixue": 9000,
+        "wugong": 240,
+        "fagong": 270,
+        "wufang": 210,
+        "fafang": 230,
+        "sudu": 12
+      },
+      "talk_tree_id": "talk-shenshi-guide",
+      "quest_giver_id": "qg-chapter5-main",
+      "sort_weight": 247,
+      "enabled": true
+    },
+    {
+      "id": "npc-shenshi-merchant",
+      "code": "shenshi_merchant",
+      "name": "荒原行商",
+      "title": "虚空材料商",
+      "gender": "男",
+      "realm": "炼炁化神·结胎期",
+      "avatar": "/assets/npc/mysterious_merchant.png",
+      "description": "在神识荒原入口经营神魂材料与养神丹药，货源来自虚空裂隙深处。",
+      "npc_type": "merchant",
+      "area": "S",
+      "base_attrs": {
+        "qixue": 8500,
+        "max_qixue": 8500,
+        "wugong": 220,
+        "fagong": 250,
+        "wufang": 200,
+        "fafang": 220,
+        "sudu": 10
+      },
+      "talk_tree_id": "talk-shenshi-merchant",
+      "sort_weight": 246,
+      "enabled": true
     }
   ],
   "talk_trees": [
@@ -589,6 +663,39 @@
       ],
       "enabled": true,
       "sort_weight": 77,
+      "version": 1
+    },
+    {
+      "id": "talk-shenshi-watcher",
+      "name": "荒原守望者对话",
+      "greeting_lines": [
+        "虚空裂隙又在扩张，神魂波动越来越不稳。",
+        "你若要深入荒原，先确认自己的神识不会被吞噬。"
+      ],
+      "enabled": true,
+      "sort_weight": 245,
+      "version": 1
+    },
+    {
+      "id": "talk-shenshi-guide",
+      "name": "虚灵引路人对话",
+      "greeting_lines": [
+        "虚灵神殿不认修为，只认神魂。",
+        "进去之前，把杂念清干净。"
+      ],
+      "enabled": true,
+      "sort_weight": 247,
+      "version": 1
+    },
+    {
+      "id": "talk-shenshi-merchant",
+      "name": "荒原行商对话",
+      "greeting_lines": [
+        "虚空深处的东西，外面买不到。",
+        "神魂凝晶不够的话，我这里可以补。"
+      ],
+      "enabled": true,
+      "sort_weight": 246,
       "version": 1
     }
   ]
