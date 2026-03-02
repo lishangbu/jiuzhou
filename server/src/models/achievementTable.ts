@@ -1,6 +1,9 @@
-import { query } from '../config/database.js';
-import { runDbMigrationOnce } from './migrationHistoryTable.js';
-import { PVP_WEEKLY_TITLE_BY_RANK, PVP_WEEKLY_TITLE_VALID_DAYS } from '../services/achievement/pvpWeeklyTitleConfig.js';
+import { query } from "../config/database.js";
+import { runDbMigrationOnce } from "./migrationHistoryTable.js";
+import {
+  PVP_WEEKLY_TITLE_BY_RANK,
+  PVP_WEEKLY_TITLE_VALID_DAYS,
+} from "../services/achievement/pvpWeeklyTitleConfig.js";
 
 const characterAchievementTableSQL = `
 CREATE TABLE IF NOT EXISTS character_achievement (
@@ -86,13 +89,17 @@ CREATE INDEX IF NOT EXISTS idx_character_title_equipped
  * 2. COMMENT 语句需要在列存在后执行，否则会直接失败中断初始化。
  */
 const migrateCharacterTitleExpiresAt = async (): Promise<void> => {
-  await query('ALTER TABLE character_title ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ');
-  await query(`COMMENT ON COLUMN character_title.expires_at IS '称号过期时间；NULL表示永久有效'`);
   await query(
-    'CREATE INDEX IF NOT EXISTS idx_character_title_active_validity ON character_title(character_id, is_equipped, expires_at)',
+    "ALTER TABLE character_title ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ",
   );
   await query(
-    'CREATE INDEX IF NOT EXISTS idx_character_title_expires_at ON character_title(expires_at) WHERE expires_at IS NOT NULL',
+    `COMMENT ON COLUMN character_title.expires_at IS '称号过期时间；NULL表示永久有效'`,
+  );
+  await query(
+    "CREATE INDEX IF NOT EXISTS idx_character_title_active_validity ON character_title(character_id, is_equipped, expires_at)",
+  );
+  await query(
+    "CREATE INDEX IF NOT EXISTS idx_character_title_expires_at ON character_title(expires_at) WHERE expires_at IS NOT NULL",
   );
 };
 
@@ -119,19 +126,20 @@ const migrateCharacterTitleExpiresAt = async (): Promise<void> => {
  * 1. 仅修复 `expires_at` 精确等于“该周 week_end_local_date 00:00（上海时区）”的记录，避免误改已正确数据。
  * 2. 同角色可能命中多个周称号，邮件按角色聚合为 1 封，避免重复通知刷屏。
  */
-const migratePvpWeeklyTitleExpireFixAndCompensationMailV1 = async (): Promise<void> => {
-  const timezone = 'Asia/Shanghai';
-  const championTitleId = PVP_WEEKLY_TITLE_BY_RANK[1];
-  const runnerupTitleId = PVP_WEEKLY_TITLE_BY_RANK[2];
-  const thirdTitleId = PVP_WEEKLY_TITLE_BY_RANK[3];
-  const mailSource = 'migration-pvp-weekly-title-expire-fix-v1';
-  const mailTitle = '竞技场周称号有效期修复通知';
-  const mailContent =
-    '因竞技场周结算称号有效期配置异常，系统已为你修复相关称号有效期。' +
-    '请前往“成就-称号”面板查看并手动装备。给你带来的困扰，敬请谅解。';
+const migratePvpWeeklyTitleExpireFixAndCompensationMailV1 =
+  async (): Promise<void> => {
+    const timezone = "Asia/Shanghai";
+    const championTitleId = PVP_WEEKLY_TITLE_BY_RANK[1];
+    const runnerupTitleId = PVP_WEEKLY_TITLE_BY_RANK[2];
+    const thirdTitleId = PVP_WEEKLY_TITLE_BY_RANK[3];
+    const mailSource = "migration-pvp-weekly-title-expire-fix-v1";
+    const mailTitle = "竞技场周称号有效期修复通知";
+    const mailContent =
+      "因竞技场周结算称号有效期配置异常，系统已为你修复相关称号有效期。" +
+      "请前往“成就-称号”面板查看并手动装备。给你带来的困扰，敬请谅解。";
 
-  await query(
-    `
+    await query(
+      `
       WITH weekly_awards AS (
         SELECT aws.champion_character_id AS character_id, $1::varchar AS title_id, aws.week_end_local_date
         FROM arena_weekly_settlement aws
@@ -190,7 +198,7 @@ const migratePvpWeeklyTitleExpireFixAndCompensationMailV1 = async (): Promise<vo
         NOW() + INTERVAL '30 day',
         $8,
         jsonb_build_object(
-          'migration_key', $9,
+          'migration_key', $9::text,
           'fixed_title_count', fcs.fixed_title_count,
           'earliest_expire_at', fcs.earliest_expire_at,
           'latest_expire_at', fcs.latest_expire_at
@@ -200,33 +208,34 @@ const migratePvpWeeklyTitleExpireFixAndCompensationMailV1 = async (): Promise<vo
       FROM fixed_character_stats fcs
       INNER JOIN characters c ON c.id = fcs.character_id
     `,
-    [
-      championTitleId,
-      runnerupTitleId,
-      thirdTitleId,
-      PVP_WEEKLY_TITLE_VALID_DAYS,
-      timezone,
-      mailTitle,
-      mailContent,
-      mailSource,
-      'character_title_pvp_weekly_expire_fix_and_compensation_mail_v1',
-    ],
-  );
-};
+      [
+        championTitleId,
+        runnerupTitleId,
+        thirdTitleId,
+        PVP_WEEKLY_TITLE_VALID_DAYS,
+        timezone,
+        mailTitle,
+        mailContent,
+        mailSource,
+        "character_title_pvp_weekly_expire_fix_and_compensation_mail_v1",
+      ],
+    );
+  };
 
 export const initAchievementTables = async (): Promise<void> => {
   await query(characterAchievementTableSQL);
   await query(characterAchievementPointsTableSQL);
   await query(characterTitleTableSQL);
   await runDbMigrationOnce({
-    migrationKey: 'character_title_expires_at_v1',
-    description: '角色称号表增加 expires_at 字段与有效期查询索引',
+    migrationKey: "character_title_expires_at_v1",
+    description: "角色称号表增加 expires_at 字段与有效期查询索引",
     execute: migrateCharacterTitleExpiresAt,
   });
   await runDbMigrationOnce({
-    migrationKey: 'character_title_pvp_weekly_expire_fix_and_compensation_mail_v1',
-    description: '修复历史PVP周称号有效期并向受影响玩家补发说明邮件',
+    migrationKey:
+      "character_title_pvp_weekly_expire_fix_and_compensation_mail_v1",
+    description: "修复历史PVP周称号有效期并向受影响玩家补发说明邮件",
     execute: migratePvpWeeklyTitleExpireFixAndCompensationMailV1,
   });
-  console.log('✓ 成就与称号系统表检测完成');
+  console.log("✓ 成就与称号系统表检测完成");
 };
