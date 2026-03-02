@@ -396,6 +396,27 @@ async function restoreBattleStartResourcesInDb(
   await recoverBattleStartResourcesByUserIds(userIds);
 }
 
+type SyncBattleStartResourcesOptions = {
+  queryExecutor?: QueryExecutor;
+  context: string;
+};
+
+async function syncBattleStartResourcesForUsers(
+  userIds: number[],
+  options: SyncBattleStartResourcesOptions,
+): Promise<void> {
+  try {
+    await restoreBattleStartResourcesInDb(userIds, options.queryExecutor);
+    const gameServer = getGameServer();
+    for (const userId of userIds) {
+      if (!Number.isFinite(userId) || userId <= 0) continue;
+      void gameServer.pushCharacterUpdate(userId);
+    }
+  } catch (error) {
+    console.warn(`[battle] ${options.context}失败:`, error);
+  }
+}
+
 function cleanupBattleStartCooldownCache(now: number): void {
   for (const [
     characterId,
@@ -1400,7 +1421,8 @@ async function attachSetBonusEffectsToCharacterData<T extends CharacterData>(
       ...data,
       setBonusEffects: mergedEffects,
     };
-  } catch {
+  } catch (error) {
+    console.warn("[battle] 读取角色战斗效果失败，已回退为基础角色数据:", error);
     return data;
   }
 }
@@ -1518,7 +1540,8 @@ async function getUserIdByCharacterId(
     if (!Number.isFinite(userId) || userId <= 0) return null;
     characterOwnerCache.set(characterId, { userId, at: now });
     return userId;
-  } catch {
+  } catch (error) {
+    console.warn("[battle] 查询角色归属用户失败:", error);
     return null;
   }
 }
@@ -1587,33 +1610,10 @@ function emitBattleUpdate(battleId: string, payload: any): void {
         void saveBattleToRedis(battleId, engine, participants);
       }
     }
-  } catch {
-    // 忽略
+  } catch (error) {
+    console.warn(`[battle] 推送战斗更新失败: ${battleId}`, error);
   }
 }
-
-const hasPgErrorCode = (error: unknown, code: string): boolean => {
-  if (!error || typeof error !== "object") return false;
-  return "code" in error && (error as { code?: unknown }).code === code;
-};
-
-const rethrowIfTransactionAborted = (error: unknown): void => {
-  if (hasPgErrorCode(error, "25P02")) {
-    throw error;
-  }
-};
-
-const handleOptionalBattleSideEffectError = (
-  context: string,
-  error: unknown,
-): void => {
-  rethrowIfTransactionAborted(error);
-  console.warn(`[battle] ${context} 失败:`, error);
-};
-
-const isTransientBattleTickError = (error: unknown): boolean => {
-  return hasPgErrorCode(error, "55P03") || hasPgErrorCode(error, "57014");
-};
 
 const resolveAutoSkipTargetIds = (
   state: BattleState,
@@ -1760,13 +1760,6 @@ async function tickBattle(battleId: string): Promise<void> {
       state: engine.getState(),
     });
   } catch (error) {
-    if (isTransientBattleTickError(error)) {
-      console.warn(
-        `[battle] tickBattle 发生可重试异常，等待下个 tick 重试: ${battleId}`,
-        error,
-      );
-      return;
-    }
     console.error(
       `[battle] tickBattle 发生未处理异常，已停止 ticker: ${battleId}`,
       error,
@@ -1979,16 +1972,9 @@ export async function startPVEBattle(
       }
     }
 
-    try {
-      await restoreBattleStartResourcesInDb(participantUserIds);
-      const gameServer = getGameServer();
-      for (const uid of participantUserIds) {
-        if (!Number.isFinite(uid) || uid <= 0) continue;
-        void gameServer.pushCharacterUpdate(uid);
-      }
-    } catch (error) {
-      handleOptionalBattleSideEffectError("同步战前资源（普通战斗）", error);
-    }
+    await syncBattleStartResourcesForUsers(participantUserIds, {
+      context: "同步战前资源（普通战斗）",
+    });
 
     const playerCount = validTeamMembers.length + 1;
     const maxMonsters = playerCount > 1 ? Math.min(playerCount, 5) : 2;
@@ -2258,19 +2244,10 @@ export async function startDungeonPVEBattle(
       }
     }
 
-    try {
-      await restoreBattleStartResourcesInDb(
-        participantUserIds,
-        options?.resourceSyncClient,
-      );
-      const gameServer = getGameServer();
-      for (const uid of participantUserIds) {
-        if (!Number.isFinite(uid) || uid <= 0) continue;
-        void gameServer.pushCharacterUpdate(uid);
-      }
-    } catch (error) {
-      handleOptionalBattleSideEffectError("同步战前资源（秘境战斗）", error);
-    }
+    await syncBattleStartResourcesForUsers(participantUserIds, {
+      queryExecutor: options?.resourceSyncClient,
+      context: "同步战前资源（秘境战斗）",
+    });
 
     const playerCount = validTeamMembers.length + 1;
     const maxMonsters = Math.min(
@@ -2426,22 +2403,10 @@ export async function startPVPBattle(
     );
     const opponentSkills = await getCharacterBattleSkillData(oppId);
 
-    try {
-      await restoreBattleStartResourcesInDb(
-        isArenaBattle ? [userId] : [userId, opponentUserId],
-      );
-      const gameServer = getGameServer();
-      if (Number.isFinite(userId) && userId > 0)
-        void gameServer.pushCharacterUpdate(userId);
-      if (
-        !isArenaBattle &&
-        Number.isFinite(opponentUserId) &&
-        opponentUserId > 0
-      )
-        void gameServer.pushCharacterUpdate(opponentUserId);
-    } catch (error) {
-      handleOptionalBattleSideEffectError("同步战前资源（PVP战斗）", error);
-    }
+    await syncBattleStartResourcesForUsers(
+      isArenaBattle ? [userId] : [userId, opponentUserId],
+      { context: "同步战前资源（PVP战斗）" },
+    );
 
     const finalBattleId = requestedBattleId
       ? requestedBattleId
@@ -2689,7 +2654,7 @@ async function finishBattleCore(
           }
         }
       } catch (error) {
-        handleOptionalBattleSideEffectError("记录击杀怪物事件", error);
+        console.warn("[battle] 记录击杀怪物事件失败:", error);
       }
     } else if (result.result === "defender_win") {
       for (const participantUserId of participantUserIds) {
@@ -2789,8 +2754,8 @@ async function finishBattleCore(
         });
       }
     }
-  } catch {
-    // 忽略
+  } catch (error) {
+    console.warn(`[battle] 推送战斗结束事件失败: ${battleId}`, error);
   }
 
   activeBattles.delete(state.battleId);
@@ -2947,8 +2912,8 @@ export async function abandonBattle(
         }
       }
     }
-  } catch {
-    // 忽略
+  } catch (error) {
+    console.warn(`[battle] 推送放弃战斗事件失败: ${battleId}`, error);
   }
 
   activeBattles.delete(battleId);
@@ -3053,8 +3018,8 @@ export async function onUserJoinTeam(userId: number): Promise<void> {
     if (playerCount > 1) continue;
     try {
       await abandonBattle(userId, battleId);
-    } catch {
-      // 忽略
+    } catch (error) {
+      console.warn(`[battle] onUserJoinTeam 自动退出战斗失败: ${battleId}`, error);
     }
   }
 }
@@ -3117,8 +3082,8 @@ export async function onUserLeaveTeam(userId: number): Promise<void> {
         success: true,
         message: "已离开队伍，退出队伍战斗",
       });
-    } catch {
-      // 忽略
+    } catch (error) {
+      console.warn(`[battle] onUserLeaveTeam 推送退出战斗失败: ${battleId}`, error);
     }
   }
 }
