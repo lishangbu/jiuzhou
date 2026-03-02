@@ -136,6 +136,20 @@ const formatScaledValue = (effect: Record<string, unknown>, kind: 'damage' | 'he
     return `比例 ${formatPercent(value)}%`;
   }
 
+  // combined: 固定基础值 + 属性加成（如：50 + 法攻*0.5）
+  if (valueType === 'combined') {
+    const baseValue = toNumber(effect.baseValue) ?? value;
+    const rate = scaleRate ?? 0;
+    const parts: string[] = [];
+    if (baseValue !== null && baseValue > 0) {
+      parts.push(`固定 ${Math.floor(baseValue)}`);
+    }
+    if (rate > 0 && scaleAttrText) {
+      parts.push(`${scaleAttrText}*${formatPercent(rate)}%`);
+    }
+    return parts.length > 0 ? parts.join(' + ') : '';
+  }
+
   if (value === null || value <= 0) return '';
   return `数值 ${Math.floor(value)}`;
 };
@@ -183,7 +197,24 @@ const formatBuffName = (buffIdRaw: string, effectType: 'buff' | 'debuff'): { nam
 };
 
 const formatBuffValue = (effect: Record<string, unknown>, attr: string): string => {
+  const valueType = toText(effect.valueType) || 'flat';
   const raw = toNumber(effect.value);
+
+  // combined: 固定基础值 + 属性加成（如：50 + 法攻*0.5）
+  if (valueType === 'combined') {
+    const baseValue = toNumber(effect.baseValue) ?? raw;
+    const scaleRate = toNumber(effect.scaleRate);
+    const scaleAttrText = describeScaleAttr(effect.scaleAttr);
+    const parts: string[] = [];
+    if (baseValue !== null && baseValue > 0) {
+      parts.push(`固定 ${Math.floor(baseValue)}`);
+    }
+    if (scaleRate !== null && scaleRate > 0 && scaleAttrText) {
+      parts.push(`${scaleAttrText}*${formatPercent(scaleRate)}%`);
+    }
+    return parts.length > 0 ? parts.join(' + ') : '';
+  }
+
   if (raw === null || raw <= 0) return '';
   if (attr && PERCENT_BUFF_ATTR_SET.has(attr)) return `幅度 ${formatPercent(raw)}%`;
   return `数值 ${Math.floor(raw)}`;
