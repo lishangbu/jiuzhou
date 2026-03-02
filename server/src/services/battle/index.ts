@@ -72,6 +72,7 @@ const activeBattles = new Map<string, BattleEngine>();
 // 战斗参与者映射（battleId -> userId[]）
 const battleParticipants = new Map<string, number[]>();
 const finishedBattleResults = new Map<string, { result: BattleResult; at: number }>();
+const finishingBattleResults = new Map<string, Promise<BattleResult>>();
 const FINISHED_BATTLE_TTL_MS = 2 * 60 * 1000;
 const battleTickers = new Map<string, ReturnType<typeof setInterval>>();
 const battleTickLocks = new Set<string>();
@@ -100,6 +101,16 @@ const BATTLE_SET_BONUS_EFFECT_TYPE_SET = new Set([
   'resource',
   'shield',
 ]);
+
+const getFinishedBattleResultIfFresh = (battleId: string): BattleResult | null => {
+  const cached = finishedBattleResults.get(battleId);
+  if (!cached) return null;
+  if (Date.now() - cached.at > FINISHED_BATTLE_TTL_MS) {
+    finishedBattleResults.delete(battleId);
+    return null;
+  }
+  return cached.result;
+};
 
 /**
  * 挂机中检查 — 若角色有活跃挂机会话则拒绝发起战斗
@@ -1364,6 +1375,15 @@ function emitBattleUpdate(battleId: string, payload: any): void {
   }
 }
 
+const hasPgErrorCode = (error: unknown, code: string): boolean => {
+  if (!error || typeof error !== 'object') return false;
+  return 'code' in error && (error as { code?: unknown }).code === code;
+};
+
+const isTransientBattleTickError = (error: unknown): boolean => {
+  return hasPgErrorCode(error, '55P03') || hasPgErrorCode(error, '57014');
+};
+
 async function tickBattle(battleId: string): Promise<void> {
   if (battleTickLocks.has(battleId)) return;
   battleTickLocks.add(battleId);
@@ -1409,6 +1429,13 @@ async function tickBattle(battleId: string): Promise<void> {
 
     engine.aiAction();
     emitBattleUpdate(battleId, { kind: 'battle_state', battleId, state: engine.getState() });
+  } catch (error) {
+    if (isTransientBattleTickError(error)) {
+      console.warn(`[battle] tickBattle 发生可重试异常，等待下个 tick 重试: ${battleId}`, error);
+      return;
+    }
+    console.error(`[battle] tickBattle 发生未处理异常，已停止 ticker: ${battleId}`, error);
+    stopBattleTicker(battleId);
   } finally {
     battleTickLocks.delete(battleId);
   }
@@ -2097,7 +2124,7 @@ async function settleArenaBattleIfNeeded(
   );
 }
 
-async function finishBattle(
+async function finishBattleCore(
   battleId: string,
   engine: BattleEngine,
   monsters: MonsterData[]
@@ -2249,6 +2276,30 @@ async function finishBattle(
   return battleResult;
 }
 
+async function finishBattle(
+  battleId: string,
+  engine: BattleEngine,
+  monsters: MonsterData[],
+): Promise<BattleResult> {
+  const cachedResult = getFinishedBattleResultIfFresh(battleId);
+  if (cachedResult) {
+    return cachedResult;
+  }
+
+  const inflightResult = finishingBattleResults.get(battleId);
+  if (inflightResult) {
+    return inflightResult;
+  }
+
+  const settlePromise = finishBattleCore(battleId, engine, monsters);
+  finishingBattleResults.set(battleId, settlePromise);
+  try {
+    return await settlePromise;
+  } finally {
+    finishingBattleResults.delete(battleId);
+  }
+}
+
 /**
  * 获取战斗状态
  */
@@ -2256,10 +2307,8 @@ export async function getBattleState(battleId: string): Promise<BattleResult> {
   const engine = activeBattles.get(battleId);
 
   if (!engine) {
-    const cached = finishedBattleResults.get(battleId);
-    if (cached && Date.now() - cached.at <= FINISHED_BATTLE_TTL_MS) {
-      return cached.result;
-    }
+    const cachedResult = getFinishedBattleResultIfFresh(battleId);
+    if (cachedResult) return cachedResult;
     return { success: false, message: '战斗不存在' };
   }
 

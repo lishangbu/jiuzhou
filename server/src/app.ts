@@ -24,6 +24,15 @@ const PORT = Number(process.env.PORT || 6011);
 const corsOriginOption = buildCorsOriginOption(process.env.CORS_ORIGIN);
 const corsOrigin = corsOriginOption as CorsOptions['origin'];
 
+const hasPgErrorCode = (error: unknown, code: string): boolean => {
+  if (!error || typeof error !== 'object') return false;
+  return 'code' in error && (error as { code?: unknown }).code === code;
+};
+
+const isTransientPgError = (error: unknown): boolean => {
+  return hasPgErrorCode(error, '55P03') || hasPgErrorCode(error, '57014');
+};
+
 // 中间件
 app.use(cors({ origin: corsOrigin, credentials: true }));
 app.use(express.json());
@@ -45,6 +54,10 @@ process.on('unhandledRejection', (reason) => {
     console.error('捕获未处理的事务回滚异常，已阻止进程崩溃:', reason);
     return;
   }
+  if (isTransientPgError(reason)) {
+    console.error('捕获未处理的瞬时数据库异常，已阻止进程崩溃:', reason);
+    return;
+  }
 
   throw reason instanceof Error ? reason : new Error(String(reason));
 });
@@ -52,6 +65,10 @@ process.on('unhandledRejection', (reason) => {
 process.on('uncaughtException', (error) => {
   if (isTransactionRollbackOnlyError(error)) {
     console.error('捕获未处理的事务回滚异常，已阻止进程崩溃:', error);
+    return;
+  }
+  if (isTransientPgError(error)) {
+    console.error('捕获未处理的瞬时数据库异常，已阻止进程崩溃:', error);
     return;
   }
 

@@ -408,10 +408,7 @@ const getMainQuestProgressLegacy = async (characterId: number): Promise<MainQues
     }
   }
 
-  // 兼容历史数据：玩家曾“全章节完结”后，后续新章节上线时自动补推进到新章节首节。
-  await ensureMainQuestProgressForNewChapters(cid);
-  await syncCurrentSectionStaticProgress(cid);
-  progressRes = await query(`SELECT * FROM character_main_quest_progress WHERE character_id = $1`, [cid]);
+  // 读接口保持纯读取，不在此处执行写事务（推进章节/同步目标应在写路径触发）。
 
   const progress = progressRes.rows?.[0] as
     | {
@@ -1385,7 +1382,7 @@ const setMainQuestTrackedLegacy = async (
  *
  * 关键边界：
  * - 使用 @Transactional 确保进度更新与奖励发放的原子性
- * - ensureProgressForNewChapters 使用 FOR UPDATE NOWAIT 避免并发冲突
+ * - getProgress 仅做读取，章节补推进仅在写路径触发，避免读写锁冲突
  */
 class MainQuestService {
   /**
@@ -1400,7 +1397,7 @@ class MainQuestService {
     const progressRes = await query(
       `SELECT current_chapter_id, current_section_id, section_status, completed_chapters, completed_sections
        FROM character_main_quest_progress
-       WHERE character_id = $1 FOR UPDATE NOWAIT`,
+       WHERE character_id = $1 FOR UPDATE`,
       [cid],
     );
 
