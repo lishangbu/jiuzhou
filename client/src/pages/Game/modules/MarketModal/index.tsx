@@ -311,7 +311,7 @@ const parseMaybeNumber = (v: string) => {
   return n;
 };
 
-const MARKET_LISTING_FEE_SILVER_PER_SPIRIT_STONE = 10;
+const MARKET_LISTING_FEE_SILVER_PER_SPIRIT_STONE = 5;
 
 const calculateListingFeeSilver = (priceInput: string, qtyInput: string): number | null => {
   const unitPrice = parseMaybeNumber(priceInput);
