@@ -1084,6 +1084,70 @@
   font-size: 12px;
 }
 
+.bag-gem-convert {
+  border: 1px solid var(--border-color-soft);
+  border-radius: 12px;
+  background: var(--panel-bg-soft);
+  padding: 20px;
+  min-height: 220px;
+  display: flex;
+  align-items: flex-start;
+}
+
+.bag-gem-convert-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bag-gem-convert-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.bag-gem-convert-level {
+  width: 260px;
+}
+
+.bag-gem-convert-times {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.bag-gem-convert-formula {
+  padding: 10px 12px;
+  border: 1px dashed var(--border-color);
+  border-radius: 10px;
+  background: var(--panel-bg);
+  color: var(--text-color);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.bag-gem-convert-summary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  color: var(--text-secondary);
+  font-size: 13px;
+
+  strong {
+    color: var(--text-color);
+  }
+}
+
+.bag-gem-convert-hint {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
 @media screen and (max-width: 768px) {
   .bag-modal-shell {
     height: 82vh;
@@ -1141,5 +1205,24 @@
   .bag-gem-quick-estimate {
     gap: 8px;
     font-size: 12px;
+  }
+
+  .bag-gem-convert {
+    padding: 14px;
+    min-height: auto;
+  }
+
+  .bag-gem-convert-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .bag-gem-convert-level {
+    width: 100% !important;
+  }
+
+  .bag-gem-convert-times {
+    width: 100%;
+    justify-content: space-between;
   }
 }

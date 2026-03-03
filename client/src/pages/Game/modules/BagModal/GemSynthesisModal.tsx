@@ -2,9 +2,12 @@ import { App, Button, Empty, InputNumber, Modal, Segmented, Select, Spin, Tag } 
 import { formatPercent } from '../../shared/formatAttr';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  convertInventoryGem,
+  getInventoryGemConvertOptions,
   getInventoryGemSynthesisRecipes,
   synthesizeInventoryGem,
   synthesizeInventoryGemBatch,
+  type GemConvertOptionDto,
   type GemSynthesisRecipeDto,
   type GemType,
 } from '../../../../services/api';
@@ -22,7 +25,7 @@ const gemTypeLabel: Record<GemType, string> = {
   all: '通用',
 };
 
-type SynthesisMode = 'quick' | 'single';
+type SynthesisMode = 'quick' | 'single' | 'convert';
 
 const clampSynthesizeTimes = (value: number, maxValue: number): number => {
   const safeMax = Math.max(1, Math.floor(maxValue || 1));
@@ -48,7 +51,7 @@ const EMPTY_ESTIMATE: BatchEstimate = { byLevel: [], silver: 0, spiritStones: 0 
  * 上一步的产出会累加到下一步的可用材料中。
  *
  * 输入：该系列的配方列表、目标等级、当前钱包
- * 输出：{ output: 预估产出数, silver: 预估银两消耗, spiritStones: 预估灵石消耗 }
+ * 输出：{ byLevel, silver, spiritStones }
  *
  * 边界：
  * - 某一级配方缺失时链条中断，返回全0
@@ -62,36 +65,37 @@ const estimateBatchOutput = (
   const zero: BatchEstimate = EMPTY_ESTIMATE;
   if (!wallet || seriesRecipes.length === 0 || targetLevel < 2) return zero;
 
-  /* 构建 fromLevel → recipe 映射 */
   const recipeByFromLevel = new Map<number, GemSynthesisRecipeDto>();
-  for (const r of seriesRecipes) {
-    if (!recipeByFromLevel.has(r.fromLevel)) {
-      recipeByFromLevel.set(r.fromLevel, r);
+  for (const recipe of seriesRecipes) {
+    if (!recipeByFromLevel.has(recipe.fromLevel)) {
+      recipeByFromLevel.set(recipe.fromLevel, recipe);
     }
   }
 
-  let carry = 0; /* 上一步产出的宝石数 */
+  let carry = 0;
   let remainingSilver = wallet.silver;
   let remainingSpiritStones = wallet.spiritStones;
   let totalSilver = 0;
   let totalSpiritStones = 0;
   const byLevel: Array<{ level: number; count: number }> = [];
 
-  for (let fromLv = 1; fromLv < targetLevel; fromLv++) {
-    const recipe = recipeByFromLevel.get(fromLv);
-    if (!recipe) return EMPTY_ESTIMATE; /* 链条中断 */
+  for (let fromLevel = 1; fromLevel < targetLevel; fromLevel += 1) {
+    const recipe = recipeByFromLevel.get(fromLevel);
+    if (!recipe) return EMPTY_ESTIMATE;
 
     const available = recipe.input.owned + carry;
     const maxByGems = recipe.input.qty > 0 ? Math.floor(available / recipe.input.qty) : 0;
     const maxBySilver = recipe.costs.silver > 0 ? Math.floor(remainingSilver / recipe.costs.silver) : maxByGems;
-    const maxBySpirit = recipe.costs.spiritStones > 0 ? Math.floor(remainingSpiritStones / recipe.costs.spiritStones) : maxByGems;
+    const maxBySpirit =
+      recipe.costs.spiritStones > 0
+        ? Math.floor(remainingSpiritStones / recipe.costs.spiritStones)
+        : maxByGems;
     const times = Math.max(0, Math.min(maxByGems, maxBySilver, maxBySpirit));
 
-    /* 记录该等级消耗后的余量 */
     const consumed = times * recipe.input.qty;
     const remainder = available - consumed;
     if (remainder > 0) {
-      byLevel.push({ level: fromLv, count: remainder });
+      byLevel.push({ level: fromLevel, count: remainder });
     }
 
     const silverCost = times * recipe.costs.silver;
@@ -101,14 +105,12 @@ const estimateBatchOutput = (
     totalSilver += silverCost;
     totalSpiritStones += spiritCost;
 
-    /* 期望产出 = 次数 × 成功率 × 每次产出数量（保守取 floor） */
     carry = Math.floor(times * recipe.successRate) * recipe.output.qty;
     if (carry <= 0) {
       return { byLevel, silver: totalSilver, spiritStones: totalSpiritStones };
     }
   }
 
-  /* 目标等级的产出 */
   if (carry > 0) {
     byLevel.push({ level: targetLevel, count: carry });
   }
@@ -118,7 +120,6 @@ const estimateBatchOutput = (
 
 /**
  * 从配方列表中提取系列选项
- * 按 seriesKey 分组，取每组最低等级配方的输出名称去掉等级后缀作为系列显示名
  *
  * 输入：当前宝石类型下的配方列表
  * 输出：[{ value: seriesKey, label: 系列显示名 }]
@@ -127,7 +128,6 @@ const buildSeriesOptions = (recipes: GemSynthesisRecipeDto[]) => {
   const map = new Map<string, string>();
   for (const recipe of recipes) {
     if (!map.has(recipe.seriesKey)) {
-      /* 从输出名称中去掉末尾的"·N级"得到系列名，如 "灵焰石·法攻·2级" → "灵焰石·法攻" */
       const displayName = recipe.output.name.replace(/·\d+级$/, '') || recipe.seriesKey;
       map.set(recipe.seriesKey, displayName);
     }
@@ -135,25 +135,46 @@ const buildSeriesOptions = (recipes: GemSynthesisRecipeDto[]) => {
   return [...map.entries()].map(([value, label]) => ({ value, label }));
 };
 
+/**
+ * 构建宝石转换等级选项
+ *
+ * 输入：后端返回的转换选项数组（2~10级）
+ * 输出：Select 可用选项（包含可转次数，且不可转等级禁用）
+ */
+const buildConvertLevelOptions = (options: GemConvertOptionDto[]) => {
+  return options
+    .slice()
+    .sort((a, b) => a.inputLevel - b.inputLevel)
+    .map((option) => ({
+      value: option.inputLevel,
+      label: `${option.inputLevel}级（可转${option.maxConvertTimes}次）`,
+      disabled: option.maxConvertTimes <= 0,
+    }));
+};
+
 const GemSynthesisModal: React.FC<GemSynthesisModalProps> = ({ open, onClose, onSuccess }) => {
   const { message } = App.useApp();
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [batchSubmitting, setBatchSubmitting] = useState(false);
+  const [convertSubmitting, setConvertSubmitting] = useState(false);
   const [gemType, setGemType] = useState<GemType>('attack');
   const [recipes, setRecipes] = useState<GemSynthesisRecipeDto[]>([]);
+  const [convertOptions, setConvertOptions] = useState<GemConvertOptionDto[]>([]);
   const [wallet, setWallet] = useState<{ silver: number; spiritStones: number } | null>(null);
   const [mode, setMode] = useState<SynthesisMode>('quick');
 
-  /* 单次合成状态 */
   const [selectedRecipeId, setSelectedRecipeId] = useState('');
   const [times, setTimes] = useState(1);
   const selectedRecipeIdRef = useRef('');
 
-  /* 快捷合成状态 */
   const [batchSeriesKey, setBatchSeriesKey] = useState('');
   const [targetLevel, setTargetLevel] = useState(2);
   const targetLevelRef = useRef(2);
+
+  const [convertInputLevel, setConvertInputLevel] = useState(2);
+  const [convertTimes, setConvertTimes] = useState(1);
+  const convertInputLevelRef = useRef(2);
 
   useEffect(() => {
     selectedRecipeIdRef.current = selectedRecipeId;
@@ -163,40 +184,74 @@ const GemSynthesisModal: React.FC<GemSynthesisModalProps> = ({ open, onClose, on
     targetLevelRef.current = targetLevel;
   }, [targetLevel]);
 
+  useEffect(() => {
+    convertInputLevelRef.current = convertInputLevel;
+  }, [convertInputLevel]);
+
+  /**
+   * 刷新宝石合成与转换数据
+   *
+   * 数据流：
+   * - 并发请求配方与转换选项
+   * - 统一更新钱包/合成状态/转换状态
+   * - 尽量保留用户已选项（配方、目标等级、转换等级）
+   */
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await getInventoryGemSynthesisRecipes();
-      if (!res.success || !res.data) throw new Error(res.message || '加载宝石配方失败');
-      const nextRecipes = res.data.recipes || [];
+      const [synthesisRes, convertRes] = await Promise.all([
+        getInventoryGemSynthesisRecipes(),
+        getInventoryGemConvertOptions(),
+      ]);
+      if (!synthesisRes.success || !synthesisRes.data) {
+        throw new Error(synthesisRes.message || '加载宝石配方失败');
+      }
+      if (!convertRes.success || !convertRes.data) {
+        throw new Error(convertRes.message || '加载宝石转换配置失败');
+      }
+
+      const nextRecipes = synthesisRes.data.recipes || [];
+      const nextConvertOptions = (convertRes.data.options || []).slice().sort((a, b) => a.inputLevel - b.inputLevel);
       setRecipes(nextRecipes);
-      setWallet(res.data.character);
+      setConvertOptions(nextConvertOptions);
+      setWallet(synthesisRes.data.character);
 
       const sameTypeRecipes = nextRecipes
         .filter((recipe) => recipe.gemType === gemType)
         .sort((a, b) => a.seriesKey.localeCompare(b.seriesKey) || a.fromLevel - b.fromLevel);
 
-      /* 单次合成：保持选中配方 */
       const currentSelectedRecipeId = selectedRecipeIdRef.current;
-      const nextSelected = sameTypeRecipes.find((recipe) => recipe.recipeId === currentSelectedRecipeId)
+      const nextSelectedRecipeId = sameTypeRecipes.some((recipe) => recipe.recipeId === currentSelectedRecipeId)
         ? currentSelectedRecipeId
         : sameTypeRecipes[0]?.recipeId || '';
-      setSelectedRecipeId(nextSelected);
-      const selected = sameTypeRecipes.find((recipe) => recipe.recipeId === nextSelected) ?? sameTypeRecipes[0] ?? null;
-      setTimes(clampSynthesizeTimes(1, selected?.maxSynthesizeTimes ?? 1));
+      setSelectedRecipeId(nextSelectedRecipeId);
+      const selectedRecipe =
+        sameTypeRecipes.find((recipe) => recipe.recipeId === nextSelectedRecipeId) ?? sameTypeRecipes[0] ?? null;
+      setTimes(clampSynthesizeTimes(1, selectedRecipe?.maxSynthesizeTimes ?? 1));
 
-      /* 快捷合成：保持目标等级 */
       const currentTargetLevel = targetLevelRef.current;
-      const allToLevels = [...new Set(sameTypeRecipes.map((r) => r.toLevel))];
-      const maxLevel = allToLevels.length > 0 ? Math.max(...allToLevels) : 2;
-      setTargetLevel(Math.max(2, Math.min(maxLevel, currentTargetLevel)));
+      const allToLevels = [...new Set(sameTypeRecipes.map((recipe) => recipe.toLevel))];
+      const maxToLevel = allToLevels.length > 0 ? Math.max(...allToLevels) : 2;
+      setTargetLevel(Math.max(2, Math.min(maxToLevel, currentTargetLevel)));
+
+      const currentConvertLevel = convertInputLevelRef.current;
+      const nextConvertLevel = nextConvertOptions.some((option) => option.inputLevel === currentConvertLevel)
+        ? currentConvertLevel
+        : nextConvertOptions[0]?.inputLevel || 2;
+      setConvertInputLevel(nextConvertLevel);
+      const selectedConvertOption =
+        nextConvertOptions.find((option) => option.inputLevel === nextConvertLevel) ?? nextConvertOptions[0] ?? null;
+      setConvertTimes(clampSynthesizeTimes(1, selectedConvertOption?.maxConvertTimes ?? 1));
     } catch (error: unknown) {
       void 0;
       setRecipes([]);
+      setConvertOptions([]);
       setWallet(null);
       setSelectedRecipeId('');
       setTimes(1);
       setTargetLevel(2);
+      setConvertInputLevel(2);
+      setConvertTimes(1);
     } finally {
       setLoading(false);
     }
@@ -207,15 +262,11 @@ const GemSynthesisModal: React.FC<GemSynthesisModalProps> = ({ open, onClose, on
     void refresh();
   }, [open, refresh]);
 
-  /* ========== 通用派生数据 ========== */
-
   const filteredRecipes = useMemo(() => {
     return recipes
       .filter((recipe) => recipe.gemType === gemType)
       .sort((a, b) => a.seriesKey.localeCompare(b.seriesKey) || a.fromLevel - b.fromLevel);
   }, [gemType, recipes]);
-
-  /* ========== 快捷合成派生数据 ========== */
 
   const seriesOptions = useMemo(() => buildSeriesOptions(filteredRecipes), [filteredRecipes]);
 
@@ -224,18 +275,18 @@ const GemSynthesisModal: React.FC<GemSynthesisModalProps> = ({ open, onClose, on
       setBatchSeriesKey('');
       return;
     }
-    if (!seriesOptions.some((opt) => opt.value === batchSeriesKey)) {
+    if (!seriesOptions.some((option) => option.value === batchSeriesKey)) {
       setBatchSeriesKey(seriesOptions[0].value);
     }
   }, [batchSeriesKey, seriesOptions]);
 
   const batchTargetLevelOptions = useMemo(() => {
     if (!batchSeriesKey) return [];
-    const seriesRecipes = filteredRecipes.filter((r) => r.seriesKey === batchSeriesKey);
-    const levels = [...new Set(seriesRecipes.map((r) => r.toLevel))]
-      .filter((lv) => lv > 1)
+    const seriesRecipes = filteredRecipes.filter((recipe) => recipe.seriesKey === batchSeriesKey);
+    const levels = [...new Set(seriesRecipes.map((recipe) => recipe.toLevel))]
+      .filter((level) => level > 1)
       .sort((a, b) => a - b);
-    return levels.map((lv) => ({ value: lv, label: `${lv}级` }));
+    return levels.map((level) => ({ value: level, label: `${level}级` }));
   }, [batchSeriesKey, filteredRecipes]);
 
   useEffect(() => {
@@ -243,24 +294,20 @@ const GemSynthesisModal: React.FC<GemSynthesisModalProps> = ({ open, onClose, on
       setTargetLevel(2);
       return;
     }
-    if (!batchTargetLevelOptions.some((opt) => opt.value === targetLevel)) {
+    if (!batchTargetLevelOptions.some((option) => option.value === targetLevel)) {
       setTargetLevel(batchTargetLevelOptions[0].value);
     }
   }, [targetLevel, batchTargetLevelOptions]);
 
-  /* 预估能合成多少个目标等级宝石及消耗 */
   const batchEstimate = useMemo((): BatchEstimate => {
     if (!batchSeriesKey) return EMPTY_ESTIMATE;
-    const seriesRecipes = filteredRecipes.filter((r) => r.seriesKey === batchSeriesKey);
+    const seriesRecipes = filteredRecipes.filter((recipe) => recipe.seriesKey === batchSeriesKey);
     return estimateBatchOutput(seriesRecipes, targetLevel, wallet);
   }, [batchSeriesKey, filteredRecipes, targetLevel, wallet]);
 
-  /* ========== 单次合成派生数据 ========== */
-
   const selectedRecipe = useMemo(() => {
     if (filteredRecipes.length === 0) return null;
-    const found = filteredRecipes.find((recipe) => recipe.recipeId === selectedRecipeId);
-    return found ?? filteredRecipes[0];
+    return filteredRecipes.find((recipe) => recipe.recipeId === selectedRecipeId) ?? filteredRecipes[0];
   }, [filteredRecipes, selectedRecipeId]);
 
   useEffect(() => {
@@ -271,7 +318,19 @@ const GemSynthesisModal: React.FC<GemSynthesisModalProps> = ({ open, onClose, on
     setTimes((prev) => clampSynthesizeTimes(prev, selectedRecipe.maxSynthesizeTimes));
   }, [selectedRecipe]);
 
-  /* ========== 操作回调 ========== */
+  const convertLevelOptions = useMemo(() => buildConvertLevelOptions(convertOptions), [convertOptions]);
+  const selectedConvertOption = useMemo(() => {
+    if (convertOptions.length === 0) return null;
+    return convertOptions.find((option) => option.inputLevel === convertInputLevel) ?? convertOptions[0];
+  }, [convertInputLevel, convertOptions]);
+
+  useEffect(() => {
+    if (!selectedConvertOption) {
+      setConvertTimes(1);
+      return;
+    }
+    setConvertTimes((prev) => clampSynthesizeTimes(prev, selectedConvertOption.maxConvertTimes));
+  }, [selectedConvertOption]);
 
   const handleExecute = useCallback(async () => {
     if (!selectedRecipe) return;
@@ -325,26 +384,60 @@ const GemSynthesisModal: React.FC<GemSynthesisModalProps> = ({ open, onClose, on
     }
   }, [batchSeriesKey, gemType, message, onSuccess, refresh, targetLevel]);
 
+  const handleConvert = useCallback(async () => {
+    if (!selectedConvertOption) return;
+    if (selectedConvertOption.maxConvertTimes <= 0) return;
+
+    const executeTimes = clampSynthesizeTimes(convertTimes, selectedConvertOption.maxConvertTimes);
+    setConvertSubmitting(true);
+    try {
+      const res = await convertInventoryGem({
+        inputLevel: selectedConvertOption.inputLevel,
+        times: executeTimes,
+      });
+      if (!res.success || !res.data) throw new Error(res.message || '宝石转换失败');
+
+      const producedSummary = (res.data.produced.items || [])
+        .map((item) => `${item.name}×${item.qty}`)
+        .join('、');
+      if (producedSummary) {
+        message.success(`${res.message || '宝石转换成功'}：${producedSummary}`);
+      } else {
+        message.success(res.message || '宝石转换成功');
+      }
+      await onSuccess();
+      await refresh();
+    } catch (error: unknown) {
+      void 0;
+    } finally {
+      setConvertSubmitting(false);
+    }
+  }, [convertTimes, message, onSuccess, refresh, selectedConvertOption]);
+
   const canSynthesize = !!selectedRecipe && selectedRecipe.maxSynthesizeTimes > 0;
   const canBatch = !!batchSeriesKey && batchTargetLevelOptions.length > 0 && !batchSubmitting;
+  const canConvert =
+    !!selectedConvertOption &&
+    selectedConvertOption.maxConvertTimes > 0 &&
+    selectedConvertOption.candidateGemCount > 0 &&
+    !convertSubmitting;
 
   return (
     <Modal
       open={open}
       onCancel={() => {
-        if (submitting || batchSubmitting) return;
+        if (submitting || batchSubmitting || convertSubmitting) return;
         onClose();
       }}
       footer={null}
       centered
       width={980}
-      title="宝石合成"
+      title="宝石工坊"
       className="bag-gem-modal"
       destroyOnHidden
-      maskClosable={!(submitting || batchSubmitting)}
+      maskClosable={!(submitting || batchSubmitting || convertSubmitting)}
     >
       <div className="bag-gem-shell">
-        {/* 顶部：模式切换 + 宝石类型 + 钱包 */}
         <div className="bag-gem-top">
           <div className="bag-gem-top-left">
             <Segmented
@@ -352,21 +445,24 @@ const GemSynthesisModal: React.FC<GemSynthesisModalProps> = ({ open, onClose, on
               options={[
                 { label: '快捷合成', value: 'quick' },
                 { label: '单次合成', value: 'single' },
+                { label: '宝石转换', value: 'convert' },
               ]}
               onChange={(value) => setMode(value as SynthesisMode)}
             />
-            <Segmented
-              value={gemType}
-              options={(Object.keys(gemTypeLabel) as GemType[]).map((type) => ({
-                label: gemTypeLabel[type],
-                value: type,
-              }))}
-              onChange={(value) => {
-                setGemType(value as GemType);
-                setSelectedRecipeId('');
-                setBatchSeriesKey('');
-              }}
-            />
+            {mode !== 'convert' ? (
+              <Segmented
+                value={gemType}
+                options={(Object.keys(gemTypeLabel) as GemType[]).map((type) => ({
+                  label: gemTypeLabel[type],
+                  value: type,
+                }))}
+                onChange={(value) => {
+                  setGemType(value as GemType);
+                  setSelectedRecipeId('');
+                  setBatchSeriesKey('');
+                }}
+              />
+            ) : null}
           </div>
           {wallet ? (
             <div className="bag-gem-wallet">
@@ -376,7 +472,6 @@ const GemSynthesisModal: React.FC<GemSynthesisModalProps> = ({ open, onClose, on
           ) : null}
         </div>
 
-        {/* 快捷合成模式 */}
         {mode === 'quick' ? (
           <div className="bag-gem-quick">
             {loading && recipes.length === 0 ? (
@@ -435,8 +530,7 @@ const GemSynthesisModal: React.FC<GemSynthesisModalProps> = ({ open, onClose, on
               </div>
             )}
           </div>
-        ) : (
-          /* 单次合成模式：左侧配方列表 + 右侧详情 */
+        ) : mode === 'single' ? (
           <div className="bag-gem-body">
             {loading && recipes.length === 0 ? (
               <div className="bag-gem-loading"><Spin /></div>
@@ -525,6 +619,66 @@ const GemSynthesisModal: React.FC<GemSynthesisModalProps> = ({ open, onClose, on
                   )}
                 </div>
               </>
+            )}
+          </div>
+        ) : (
+          <div className="bag-gem-convert">
+            {loading && convertOptions.length === 0 ? (
+              <div className="bag-gem-loading"><Spin /></div>
+            ) : convertOptions.length === 0 ? (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无可用转换配置" />
+            ) : (
+              <div className="bag-gem-convert-form">
+                <div className="bag-gem-convert-row">
+                  <Select
+                    value={selectedConvertOption?.inputLevel}
+                    options={convertLevelOptions}
+                    onChange={(value) => setConvertInputLevel(Number(value) || 2)}
+                    className="bag-gem-convert-level"
+                    placeholder="选择输入等级"
+                  />
+                  <div className="bag-gem-convert-times">
+                    <span>转换次数</span>
+                    <InputNumber
+                      min={1}
+                      max={Math.max(1, selectedConvertOption?.maxConvertTimes ?? 1)}
+                      value={convertTimes}
+                      onChange={(value) =>
+                        setConvertTimes(clampSynthesizeTimes(Number(value || 1), selectedConvertOption?.maxConvertTimes ?? 1))
+                      }
+                    />
+                    <span>最多 {selectedConvertOption?.maxConvertTimes ?? 0}</span>
+                  </div>
+                  <Button
+                    type="primary"
+                    disabled={!canConvert}
+                    loading={convertSubmitting}
+                    onClick={() => void handleConvert()}
+                  >
+                    执行转换
+                  </Button>
+                </div>
+
+                {selectedConvertOption ? (
+                  <>
+                    <div className="bag-gem-convert-formula">
+                      {selectedConvertOption.inputGemQtyPerConvert}颗{selectedConvertOption.inputLevel}级任意宝石
+                      {' -> '}
+                      1颗{selectedConvertOption.outputLevel}级随机宝石
+                    </div>
+                    <div className="bag-gem-convert-summary">
+                      <span>当前持有 <strong>{selectedConvertOption.ownedInputGemQty}</strong></span>
+                      <span>单次消耗灵石 <strong>{selectedConvertOption.costSpiritStonesPerConvert.toLocaleString()}</strong></span>
+                      <span>随机池数量 <strong>{selectedConvertOption.candidateGemCount}</strong></span>
+                      <span>最大可转换 <strong>{selectedConvertOption.maxConvertTimes}</strong> 次</span>
+                    </div>
+                  </>
+                ) : null}
+
+                <div className="bag-gem-convert-hint">
+                  仅消耗背包内未锁定宝石，转换结果为目标等级全宝石等概率随机。
+                </div>
+              </div>
             )}
           </div>
         )}

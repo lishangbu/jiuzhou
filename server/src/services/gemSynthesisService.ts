@@ -4,7 +4,11 @@ import { randomInt } from 'crypto';
 import { addItemToInventoryTx } from './inventory/index.js';
 import { lockCharacterInventoryMutexTx } from './inventoryMutex.js';
 import { getCharacterComputedByCharacterId } from './characterComputedService.js';
-import { getItemDefinitionsByIds, getItemRecipeDefinitionsByType } from './staticConfigLoader.js';
+import {
+  getEnabledItemDefinitions,
+  getItemDefinitionsByIds,
+  getItemRecipeDefinitionsByType,
+} from './staticConfigLoader.js';
 
 export type GemType = 'attack' | 'defense' | 'survival' | 'all';
 type GemTypeToken = 'atk' | 'def' | 'sur' | 'all';
@@ -165,6 +169,57 @@ export type GemSynthesisBatchResult =
     }
   | { success: false; message: string };
 
+export type GemConvertOptionView = {
+  inputLevel: number;
+  outputLevel: number;
+  inputGemQtyPerConvert: number;
+  ownedInputGemQty: number;
+  costSpiritStonesPerConvert: number;
+  maxConvertTimes: number;
+  canConvert: boolean;
+  candidateGemCount: number;
+};
+
+export type GemConvertOptionListResult =
+  | {
+      success: true;
+      message: string;
+      data: {
+        character: CharacterWallet;
+        options: GemConvertOptionView[];
+      };
+    }
+  | { success: false; message: string };
+
+export type GemConvertExecuteResult =
+  | {
+      success: true;
+      message: string;
+      data: {
+        inputLevel: number;
+        outputLevel: number;
+        times: number;
+        consumed: {
+          inputGemQty: number;
+        };
+        spent: {
+          spiritStones: number;
+        };
+        produced: {
+          totalQty: number;
+          items: Array<{
+            itemDefId: string;
+            name: string;
+            icon: string | null;
+            qty: number;
+            itemIds: number[];
+          }>;
+        };
+        character: unknown;
+      };
+    }
+  | { success: false; message: string };
+
 const GEM_TYPE_TOKEN_TO_TYPE: Record<GemTypeToken, GemType> = {
   atk: 'attack',
   def: 'defense',
@@ -180,6 +235,15 @@ const GEM_TYPE_SORT_WEIGHT: Record<GemType, number> = {
 };
 
 const GEM_ITEM_DEF_RE = /^gem-(atk|def|sur|all)(?:-([a-z0-9_]+))?-([1-9]|10)$/;
+type MaterialLocation = 'bag' | 'warehouse';
+const DEFAULT_MATERIAL_LOCATIONS: readonly MaterialLocation[] = ['bag', 'warehouse'];
+const GEM_CONVERT_MATERIAL_LOCATIONS: readonly MaterialLocation[] = ['bag'];
+const GEM_CONVERT_INPUT_QTY = 2;
+const GEM_CONVERT_MIN_LEVEL = 2;
+const GEM_CONVERT_MAX_LEVEL = 10;
+const GEM_MIN_LEVEL = 1;
+const GEM_MAX_LEVEL = 10;
+const GEM_CONVERT_OBTAINED_FROM = 'gem-convert';
 
 const toInt = (value: unknown, fallback = 0): number => {
   const n = typeof value === 'number' ? value : Number(value);
@@ -282,6 +346,15 @@ const parseRecipeModel = (row: GemRecipeRow): GemRecipeModel | null => {
   };
 };
 
+const normalizeMaterialLocations = (
+  locations: readonly MaterialLocation[] | undefined,
+): MaterialLocation[] => {
+  if (!locations || locations.length === 0) {
+    return [...DEFAULT_MATERIAL_LOCATIONS];
+  }
+  return [...new Set(locations)];
+};
+
 const getCharacterWalletTx = async (
   characterId: number,
   forUpdate: boolean,
@@ -363,9 +436,11 @@ const getItemDefMap = async (
 const getItemOwnedQtyMapTx = async (
   characterId: number,
   itemDefIds: string[],
+  options: { locations?: readonly MaterialLocation[] } = {},
 ): Promise<Map<string, number>> => {
   const ids = [...new Set(itemDefIds.map((x) => x.trim()).filter((x) => x.length > 0))];
   if (ids.length === 0) return new Map();
+  const locations = normalizeMaterialLocations(options.locations);
 
   const result = await query(
     `
@@ -374,10 +449,10 @@ const getItemOwnedQtyMapTx = async (
       WHERE owner_character_id = $1
         AND item_def_id = ANY($2::text[])
         AND locked = false
-        AND location IN ('bag', 'warehouse')
+        AND location = ANY($3::text[])
       GROUP BY item_def_id
     `,
-    [characterId, ids],
+    [characterId, ids, locations],
   );
 
   const map = new Map<string, number>();
@@ -387,32 +462,41 @@ const getItemOwnedQtyMapTx = async (
   return map;
 };
 
-const consumeItemDefQtyTx = async (
+const consumeItemDefIdsQtyTx = async (
   characterId: number,
-  itemDefId: string,
+  itemDefIds: string[],
   qty: number,
+  options: {
+    locations?: readonly MaterialLocation[];
+    insufficientMessage?: string;
+  } = {},
 ): Promise<{ success: boolean; message: string }> => {
   const need = clampInt(qty, 1, Number.MAX_SAFE_INTEGER);
   if (need <= 0) return { success: true, message: '无需扣除材料' };
+  const ids = [...new Set(itemDefIds.map((entry) => String(entry || '').trim()).filter((entry) => entry.length > 0))];
+  if (ids.length === 0) {
+    return { success: false, message: options.insufficientMessage || '材料不足' };
+  }
+  const locations = normalizeMaterialLocations(options.locations);
 
   const result = await query(
     `
       SELECT id, qty
       FROM item_instance
       WHERE owner_character_id = $1
-        AND item_def_id = $2
+        AND item_def_id = ANY($2::text[])
         AND locked = false
-        AND location IN ('bag', 'warehouse')
+        AND location = ANY($3::text[])
       ORDER BY CASE WHEN location = 'bag' THEN 0 ELSE 1 END ASC, qty DESC, id ASC
       FOR UPDATE
     `,
-    [characterId, itemDefId],
+    [characterId, ids, locations],
   );
 
   const rows = result.rows as Array<{ id: number; qty: unknown }>;
   const total = rows.reduce((sum, row) => sum + clampInt(row.qty, 0, Number.MAX_SAFE_INTEGER), 0);
   if (total < need) {
-    return { success: false, message: '宝石数量不足' };
+    return { success: false, message: options.insufficientMessage || '材料不足' };
   }
 
   let remaining = need;
@@ -432,6 +516,21 @@ const consumeItemDefQtyTx = async (
   }
 
   return { success: true, message: '扣除材料成功' };
+};
+
+const consumeItemDefQtyTx = async (
+  characterId: number,
+  itemDefId: string,
+  qty: number,
+  options: {
+    locations?: readonly MaterialLocation[];
+    insufficientMessage?: string;
+  } = {},
+): Promise<{ success: boolean; message: string }> => {
+  return consumeItemDefIdsQtyTx(characterId, [itemDefId], qty, {
+    insufficientMessage: options.insufficientMessage || '宝石数量不足',
+    ...(options.locations ? { locations: options.locations } : {}),
+  });
 };
 
 const calcMaxSynthesizeTimes = (params: {
@@ -464,22 +563,216 @@ const updateCharacterWalletTx = async (characterId: number, wallet: CharacterWal
   );
 };
 
+type GemConvertContext = {
+  gemItemDefIdsByLevel: Map<number, string[]>;
+  gemLevelByItemDefId: Map<string, number>;
+  spiritCostByInputLevel: Map<number, number>;
+};
+
+type GemConvertContextResult =
+  | { success: true; data: GemConvertContext }
+  | { success: false; message: string };
+
+/**
+ * 收集当前开启状态下的宝石定义并按等级分组
+ *
+ * 作用：
+ * - 构造“等级 → 宝石定义ID数组”索引，供转换随机池与材料统计复用
+ *
+ * 输入：
+ * - 无（读取静态配置 item_def/gem_def/equipment_def 合并快照）
+ *
+ * 输出：
+ * - Map<number, string[]>，键为宝石等级，值为稳定排序后的宝石定义 ID 列表
+ *
+ * 关键边界条件与坑点：
+ * 1) 仅纳入 enabled !== false 且 category = gem 的定义，避免关闭条目进入随机池
+ * 2) 仅接受可被 parseGemItemDefId 解析的标准宝石 ID，避免脏数据影响等级索引
+ */
+const buildGemItemDefIdsByLevel = (): Map<number, string[]> => {
+  const setByLevel = new Map<number, Set<string>>();
+  for (let level = GEM_MIN_LEVEL; level <= GEM_MAX_LEVEL; level += 1) {
+    setByLevel.set(level, new Set<string>());
+  }
+
+  const enabledItemDefs = getEnabledItemDefinitions();
+  for (const itemDef of enabledItemDefs) {
+    const category = String(itemDef.category || '').trim().toLowerCase();
+    if (category !== 'gem') continue;
+
+    const itemDefId = String(itemDef.id || '').trim();
+    const parsed = parseGemItemDefId(itemDefId);
+    if (!parsed) continue;
+
+    const levelSet = setByLevel.get(parsed.level);
+    if (!levelSet) continue;
+    levelSet.add(itemDefId);
+  }
+
+  const map = new Map<number, string[]>();
+  for (let level = GEM_MIN_LEVEL; level <= GEM_MAX_LEVEL; level += 1) {
+    const ids = [...(setByLevel.get(level) ?? new Set<string>())].sort((a, b) => a.localeCompare(b));
+    map.set(level, ids);
+  }
+  return map;
+};
+
+/**
+ * 构建宝石转换上下文
+ *
+ * 作用：
+ * - 提供转换所需的单一数据源：等级随机池 + 等级灵石消耗映射
+ *
+ * 输入：
+ * - 已解析的宝石合成配方模型（仅 gem_synthesis）
+ *
+ * 输出：
+ * - 成功时返回 GemConvertContext
+ * - 配置冲突/缺失时返回失败消息（不做兜底）
+ *
+ * 数据流：
+ * - recipes -> spiritCostByInputLevel（toLevel 作为转换输入等级）
+ * - item definitions -> gemItemDefIdsByLevel
+ *
+ * 关键边界条件与坑点：
+ * 1) 同一输入等级若映射出多个灵石消耗，视为配置冲突并直接失败
+ * 2) 输入等级 2~10 必须都有消耗定义，否则视为配置缺失
+ */
+const buildGemConvertContext = (recipes: GemRecipeModel[]): GemConvertContextResult => {
+  const spiritCostByInputLevel = new Map<number, number>();
+  for (const recipe of recipes) {
+    const inputLevel = recipe.toLevel;
+    if (inputLevel < GEM_CONVERT_MIN_LEVEL || inputLevel > GEM_CONVERT_MAX_LEVEL) continue;
+    const existing = spiritCostByInputLevel.get(inputLevel);
+    if (existing === undefined) {
+      spiritCostByInputLevel.set(inputLevel, recipe.costSpiritStones);
+      continue;
+    }
+    if (existing !== recipe.costSpiritStones) {
+      return {
+        success: false,
+        message: `宝石转换配置冲突：${inputLevel}级存在多个灵石消耗`,
+      };
+    }
+  }
+
+  for (let level = GEM_CONVERT_MIN_LEVEL; level <= GEM_CONVERT_MAX_LEVEL; level += 1) {
+    if (!spiritCostByInputLevel.has(level)) {
+      return {
+        success: false,
+        message: `宝石转换配置缺失：${level}级灵石消耗未定义`,
+      };
+    }
+  }
+
+  const gemItemDefIdsByLevel = buildGemItemDefIdsByLevel();
+  const gemLevelByItemDefId = new Map<string, number>();
+  for (const [level, itemDefIds] of gemItemDefIdsByLevel.entries()) {
+    for (const itemDefId of itemDefIds) {
+      gemLevelByItemDefId.set(itemDefId, level);
+    }
+  }
+
+  return {
+    success: true,
+    data: {
+      gemItemDefIdsByLevel,
+      gemLevelByItemDefId,
+      spiritCostByInputLevel,
+    },
+  };
+};
+
+const getGemConvertContext = async (): Promise<GemConvertContextResult> => {
+  const recipeRows = await getGemRecipeRows();
+  const recipes = recipeRows
+    .map((row) => parseRecipeModel(row))
+    .filter((row): row is GemRecipeModel => !!row);
+
+  if (recipes.length <= 0) {
+    return { success: false, message: '宝石转换配置缺失：未找到宝石合成配方' };
+  }
+
+  return buildGemConvertContext(recipes);
+};
+
+/**
+ * 按等级聚合角色宝石持有数量
+ *
+ * 作用：
+ * - 统计指定位置（默认背包）中、未锁定宝石的等级总数
+ *
+ * 输入：
+ * - characterId：角色 ID
+ * - context：转换上下文（包含 itemDefId -> level 索引）
+ * - locations：统计位置
+ *
+ * 输出：
+ * - Map<number, number>（等级 -> 持有总数）
+ */
+const getOwnedGemQtyByLevelTx = async (
+  characterId: number,
+  context: GemConvertContext,
+  locations: readonly MaterialLocation[],
+): Promise<Map<number, number>> => {
+  const allGemItemDefIds = [...context.gemLevelByItemDefId.keys()];
+  const ownedByItemDefId = await getItemOwnedQtyMapTx(characterId, allGemItemDefIds, { locations });
+  const ownedByLevel = new Map<number, number>();
+
+  for (const [itemDefId, qty] of ownedByItemDefId.entries()) {
+    const level = context.gemLevelByItemDefId.get(itemDefId);
+    if (!level) continue;
+    ownedByLevel.set(level, (ownedByLevel.get(level) ?? 0) + qty);
+  }
+
+  return ownedByLevel;
+};
+
+/**
+ * 等概率随机抽取宝石并聚合数量
+ *
+ * 作用：
+ * - 在候选宝石池中执行等概率随机，输出 itemDefId -> qty 聚合映射
+ *
+ * 输入：
+ * - candidateItemDefIds：候选宝石定义 ID 列表（必须非空）
+ * - times：随机次数
+ *
+ * 输出：
+ * - Map<string, number>（宝石定义 ID -> 数量）
+ */
+const rollRandomGemOutputCounts = (
+  candidateItemDefIds: string[],
+  times: number,
+): Map<string, number> => {
+  const out = new Map<string, number>();
+  for (let i = 0; i < times; i += 1) {
+    const rolledIndex = randomInt(0, candidateItemDefIds.length);
+    const itemDefId = candidateItemDefIds[rolledIndex];
+    if (!itemDefId) continue;
+    out.set(itemDefId, (out.get(itemDefId) ?? 0) + 1);
+  }
+  return out;
+};
+
 /**
  * 宝石合成服务
  *
- * 作用：提供宝石合成相关功能，包括配方列表查询、单次合成、批量合成
+ * 作用：提供宝石合成/转换相关功能，包括配方列表查询、单次合成、批量合成、宝石转换
  *
  * 输入/输出：
  * - getGemSynthesisRecipeList: 输入角色ID，输出配方列表及角色钱包信息
+ * - getGemConvertOptions: 输入角色ID，输出宝石转换选项
+ * - convertGem: 输入角色ID、用户ID、输入等级和次数，输出宝石转换结果
  * - synthesizeGem: 输入角色ID、用户ID、配方ID和次数，输出合成结果
  * - synthesizeGemBatch: 输入角色ID、用户ID、宝石类型和目标等级，输出批量合成结果
  *
  * 数据流/状态流：
- * - 查询配方 → 检查材料和货币 → 扣除材料 → 执行合成（概率判定）→ 产出物品 → 更新角色状态
+ * - 查询配方/转换配置 → 检查材料和货币 → 扣除材料 → 执行合成或转换 → 产出物品 → 更新角色状态
  *
  * 关键边界条件与坑点：
- * 1) synthesizeGem 和 synthesizeGemBatch 使用 @Transactional 确保事务一致性
- * 2) getGemSynthesisRecipeList 为纯读操作，不需要事务装饰器
+ * 1) synthesizeGem / synthesizeGemBatch / convertGem 使用 @Transactional 确保事务一致性
+ * 2) getGemSynthesisRecipeList / getGemConvertOptions 为纯读操作，不需要事务装饰器
  */
 class GemSynthesisService {
   async getGemSynthesisRecipeList(characterId: number): Promise<GemSynthesisRecipeListResult> {
@@ -566,6 +859,241 @@ class GemSynthesisService {
       data: {
         character: wallet,
         recipes: views,
+      },
+    };
+  }
+
+  /**
+   * 获取宝石转换可执行选项
+   *
+   * 作用：
+   * - 返回输入等级 2~10 的完整选项集（包含不可转换等级）
+   * - 为前端提供可转换次数、灵石消耗、随机池规模等可视化信息
+   *
+   * 输入：
+   * - characterId：角色 ID
+   *
+   * 输出：
+   * - GemConvertOptionListResult：角色钱包 + 各等级转换选项
+   *
+   * 数据流：
+   * - 读取角色钱包 -> 构建转换上下文 -> 统计背包内各等级宝石数量 -> 计算 maxConvertTimes
+   *
+   * 关键边界条件与坑点：
+   * 1) 选项固定输出 2~10 级，不因背包资源为 0 而删除等级
+   * 2) 转换成本来自 gem_synthesis 配方映射，配置冲突/缺失会直接失败
+   */
+  async getGemConvertOptions(characterId: number): Promise<GemConvertOptionListResult> {
+    const wallet = await getCharacterWalletTx(characterId, false);
+    if (!wallet) return { success: false, message: '角色不存在' };
+
+    const contextResult = await getGemConvertContext();
+    if (!contextResult.success) {
+      return { success: false, message: contextResult.message };
+    }
+
+    const context = contextResult.data;
+    const ownedByLevel = await getOwnedGemQtyByLevelTx(characterId, context, GEM_CONVERT_MATERIAL_LOCATIONS);
+    const options: GemConvertOptionView[] = [];
+
+    for (let inputLevel = GEM_CONVERT_MIN_LEVEL; inputLevel <= GEM_CONVERT_MAX_LEVEL; inputLevel += 1) {
+      const outputLevel = inputLevel - 1;
+      const ownedInputGemQty = ownedByLevel.get(inputLevel) ?? 0;
+      const costSpiritStonesPerConvert = context.spiritCostByInputLevel.get(inputLevel);
+      if (costSpiritStonesPerConvert === undefined) {
+        return {
+          success: false,
+          message: `宝石转换配置缺失：${inputLevel}级灵石消耗未定义`,
+        };
+      }
+
+      const candidateGemCount = (context.gemItemDefIdsByLevel.get(outputLevel) ?? []).length;
+      const maxConvertTimes = calcMaxSynthesizeTimes({
+        ownedInputQty: ownedInputGemQty,
+        needInputQty: GEM_CONVERT_INPUT_QTY,
+        wallet,
+        silverCost: 0,
+        spiritStoneCost: costSpiritStonesPerConvert,
+      });
+
+      options.push({
+        inputLevel,
+        outputLevel,
+        inputGemQtyPerConvert: GEM_CONVERT_INPUT_QTY,
+        ownedInputGemQty,
+        costSpiritStonesPerConvert,
+        maxConvertTimes,
+        canConvert: maxConvertTimes > 0 && candidateGemCount > 0,
+        candidateGemCount,
+      });
+    }
+
+    return {
+      success: true,
+      message: 'ok',
+      data: {
+        character: wallet,
+        options,
+      },
+    };
+  }
+
+  /**
+   * 执行宝石转换
+   *
+   * 规则：
+   * - 输入：2 颗同等级任意宝石（允许混搭）
+   * - 消耗：按输入等级映射的灵石消耗（每次转换）
+   * - 产出：1 颗低 1 级的随机宝石（目标等级全宝石等概率）
+   *
+   * 输入：
+   * - characterId：角色 ID
+   * - userId：用户 ID
+   * - params.inputLevel：输入等级（2~10）
+   * - params.times：转换次数（默认 1）
+   *
+   * 输出：
+   * - GemConvertExecuteResult：消耗、产出、角色快照
+   *
+   * 数据流：
+   * - 事务加锁 -> 校验配置/资源 -> 扣同等级材料 -> 扣灵石 -> 随机产出入包 -> 返回角色最新数据
+   *
+   * 关键边界条件与坑点：
+   * 1) 随机池为空时直接失败，不做默认产物兜底
+   * 2) 扣材料与扣货币都在同一事务内，任一步骤失败会整体回滚
+   */
+  @Transactional
+  async convertGem(
+    characterId: number,
+    userId: number,
+    params: { inputLevel: number; times?: number },
+  ): Promise<GemConvertExecuteResult> {
+    const inputLevel = Number(params.inputLevel);
+    if (!Number.isInteger(inputLevel) || inputLevel < GEM_CONVERT_MIN_LEVEL || inputLevel > GEM_CONVERT_MAX_LEVEL) {
+      return { success: false, message: 'inputLevel参数错误' };
+    }
+
+    const times = clampInt(params.times ?? 1, 1, 999999);
+    const outputLevel = inputLevel - 1;
+
+    const client = getTransactionClient();
+    if (!client) return { success: false, message: '事务上下文缺失' };
+
+    await lockCharacterInventoryMutexTx(client, characterId);
+
+    const wallet = await getCharacterWalletTx(characterId, true);
+    if (!wallet) {
+      return { success: false, message: '角色不存在' };
+    }
+
+    const contextResult = await getGemConvertContext();
+    if (!contextResult.success) {
+      return { success: false, message: contextResult.message };
+    }
+    const context = contextResult.data;
+
+    const inputGemItemDefIds = context.gemItemDefIdsByLevel.get(inputLevel) ?? [];
+    if (inputGemItemDefIds.length <= 0) {
+      return { success: false, message: `宝石转换配置异常：${inputLevel}级宝石池为空` };
+    }
+
+    const candidateOutputItemDefIds = context.gemItemDefIdsByLevel.get(outputLevel) ?? [];
+    if (candidateOutputItemDefIds.length <= 0) {
+      return { success: false, message: `宝石转换配置异常：${outputLevel}级随机池为空` };
+    }
+
+    const costSpiritStonesPerConvert = context.spiritCostByInputLevel.get(inputLevel);
+    if (costSpiritStonesPerConvert === undefined) {
+      return { success: false, message: `宝石转换配置缺失：${inputLevel}级灵石消耗未定义` };
+    }
+
+    const ownedInputGemByDefId = await getItemOwnedQtyMapTx(characterId, inputGemItemDefIds, {
+      locations: GEM_CONVERT_MATERIAL_LOCATIONS,
+    });
+    const ownedInputGemQty = [...ownedInputGemByDefId.values()].reduce((sum, qty) => sum + qty, 0);
+    const maxConvertTimes = calcMaxSynthesizeTimes({
+      ownedInputQty: ownedInputGemQty,
+      needInputQty: GEM_CONVERT_INPUT_QTY,
+      wallet,
+      silverCost: 0,
+      spiritStoneCost: costSpiritStonesPerConvert,
+    });
+
+    if (maxConvertTimes <= 0) {
+      return { success: false, message: '材料或灵石不足' };
+    }
+    if (times > maxConvertTimes) {
+      return { success: false, message: `当前最多可转换${maxConvertTimes}次` };
+    }
+
+    const consumeInputGemQty = GEM_CONVERT_INPUT_QTY * times;
+    const consumeRes = await consumeItemDefIdsQtyTx(characterId, inputGemItemDefIds, consumeInputGemQty, {
+      locations: GEM_CONVERT_MATERIAL_LOCATIONS,
+      insufficientMessage: '同等级宝石数量不足',
+    });
+    if (!consumeRes.success) {
+      return { success: false, message: consumeRes.message };
+    }
+
+    const spentSpiritStones = costSpiritStonesPerConvert * times;
+    wallet.spiritStones -= spentSpiritStones;
+    if (wallet.spiritStones < 0) {
+      return { success: false, message: '灵石不足' };
+    }
+    await updateCharacterWalletTx(characterId, wallet);
+
+    const rolledOutputCounts = rollRandomGemOutputCounts(candidateOutputItemDefIds, times);
+    const producedItemDefIds = [...rolledOutputCounts.keys()].sort((a, b) => a.localeCompare(b));
+    const outputDefMap = await getItemDefMap(producedItemDefIds);
+    const producedItems: Array<{
+      itemDefId: string;
+      name: string;
+      icon: string | null;
+      qty: number;
+      itemIds: number[];
+    }> = [];
+
+    for (const itemDefId of producedItemDefIds) {
+      const produceQty = rolledOutputCounts.get(itemDefId) ?? 0;
+      if (produceQty <= 0) continue;
+
+      const addRes = await addItemToInventoryTx(client, characterId, userId, itemDefId, produceQty, {
+        location: 'bag',
+        obtainedFrom: GEM_CONVERT_OBTAINED_FROM,
+      });
+      if (!addRes.success) {
+        return { success: false, message: addRes.message };
+      }
+
+      const def = outputDefMap.get(itemDefId);
+      producedItems.push({
+        itemDefId,
+        name: def?.name || itemDefId,
+        icon: def?.icon || null,
+        qty: produceQty,
+        itemIds: addRes.itemIds ?? [],
+      });
+    }
+
+    const character = await getCharacterComputedByCharacterId(characterId, { bypassStaticCache: true });
+    return {
+      success: true,
+      message: '宝石转换成功',
+      data: {
+        inputLevel,
+        outputLevel,
+        times,
+        consumed: {
+          inputGemQty: consumeInputGemQty,
+        },
+        spent: {
+          spiritStones: spentSpiritStones,
+        },
+        produced: {
+          totalQty: times,
+          items: producedItems,
+        },
+        character,
       },
     };
   }

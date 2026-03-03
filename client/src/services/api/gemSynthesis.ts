@@ -112,8 +112,62 @@ export interface GemSynthesisBatchResponse {
   };
 }
 
+export interface GemConvertOptionDto {
+  inputLevel: number;
+  outputLevel: number;
+  inputGemQtyPerConvert: number;
+  ownedInputGemQty: number;
+  costSpiritStonesPerConvert: number;
+  maxConvertTimes: number;
+  canConvert: boolean;
+  candidateGemCount: number;
+}
+
+export interface GemConvertOptionListResponse {
+  success: boolean;
+  message: string;
+  data?: {
+    character: {
+      silver: number;
+      spiritStones: number;
+    };
+    options: GemConvertOptionDto[];
+  };
+}
+
+export interface GemConvertExecuteResponse {
+  success: boolean;
+  message: string;
+  data?: {
+    inputLevel: number;
+    outputLevel: number;
+    times: number;
+    consumed: {
+      inputGemQty: number;
+    };
+    spent: {
+      spiritStones: number;
+    };
+    produced: {
+      totalQty: number;
+      items: Array<{
+        itemDefId: string;
+        name: string;
+        icon: string | null;
+        qty: number;
+        itemIds: number[];
+      }>;
+    };
+    character: unknown;
+  };
+}
+
 export const getInventoryGemSynthesisRecipes = (): Promise<GemSynthesisRecipeListResponse> => {
   return api.get('/inventory/gem/recipes');
+};
+
+export const getInventoryGemConvertOptions = (): Promise<GemConvertOptionListResponse> => {
+  return api.get('/inventory/gem/convert/options');
 };
 
 export const synthesizeInventoryGem = (body: {
@@ -130,4 +184,11 @@ export const synthesizeInventoryGemBatch = (body: {
   seriesKey?: string;
 }): Promise<GemSynthesisBatchResponse> => {
   return api.post('/inventory/gem/synthesize/batch', body);
+};
+
+export const convertInventoryGem = (body: {
+  inputLevel: number;
+  times?: number;
+}): Promise<GemConvertExecuteResponse> => {
+  return api.post('/inventory/gem/convert', body);
 };

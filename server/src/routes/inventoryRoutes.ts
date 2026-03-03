@@ -140,6 +140,48 @@ router.get('/gem/recipes', asyncHandler(async (req, res) => {
 }));
 
 // ============================================
+// 获取宝石转换选项
+// GET /api/inventory/gem/convert/options
+// ============================================
+router.get('/gem/convert/options', asyncHandler(async (req, res) => {
+    const characterId = req.characterId!;
+
+    const result = await gemSynthesisService.getGemConvertOptions(characterId);
+    return sendResult(res, result);
+}));
+
+// ============================================
+// 执行宝石转换
+// POST /api/inventory/gem/convert
+// Body: { inputLevel: number, times?: number }
+// ============================================
+router.post('/gem/convert', asyncHandler(async (req, res) => {
+    const userId = req.userId!;
+    const characterId = req.characterId!;
+
+    const inputLevel = Number(req.body?.inputLevel);
+    if (!Number.isInteger(inputLevel) || inputLevel < 2 || inputLevel > 10) {
+      throw new BusinessError('inputLevel参数错误');
+    }
+
+    const parsedTimes = parseOptionalPositiveInt(req.body?.times);
+    if (Number.isNaN(parsedTimes)) {
+      throw new BusinessError('times参数错误');
+    }
+
+    const result = await gemSynthesisService.convertGem(characterId, userId, {
+      inputLevel,
+      ...(parsedTimes !== undefined ? { times: parsedTimes } : {}),
+    });
+
+    if (result.success) {
+      await safePushCharacterUpdate(userId);
+    }
+
+    return sendResult(res, result);
+}));
+
+// ============================================
 // 执行宝石合成
 // POST /api/inventory/gem/synthesize
 // Body: { recipeId: string, times?: number }
