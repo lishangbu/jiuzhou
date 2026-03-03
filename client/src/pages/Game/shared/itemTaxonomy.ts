@@ -62,7 +62,7 @@ const SUB_CATEGORY_OPTIONS_BASE: LabeledOption[] = [
   { label: '护腿', value: 'legguards' },
   { label: '戒指', value: 'ring' },
   { label: '项链', value: 'necklace' },
-  { label: '护符', value: 'talisman' },
+  { label: '项链', value: 'talisman' },
   { label: '宝镜', value: 'mirror' },
   { label: '配饰', value: 'accessory' },
   { label: '护甲', value: 'armor' },
@@ -92,7 +92,7 @@ const SUB_CATEGORY_OPTIONS_BASE: LabeledOption[] = [
   { label: '卷轴', value: 'scroll' },
   { label: '功法材料', value: 'technique' },
   { label: '功法书', value: 'technique_book' },
-  { label: '代币', value: 'token' },
+  { label: '法宝', value: 'token' },
   { label: '木材', value: 'wood' },
 ];
 

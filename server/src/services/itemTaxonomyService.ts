@@ -63,7 +63,7 @@ const SUB_CATEGORY_LABEL_FALLBACK: Record<string, string> = {
   legguards: '护腿',
   ring: '戒指',
   necklace: '项链',
-  talisman: '护符',
+  talisman: '项链',
   mirror: '宝镜',
   accessory: '配饰',
   armor: '护甲',
@@ -93,7 +93,7 @@ const SUB_CATEGORY_LABEL_FALLBACK: Record<string, string> = {
   scroll: '卷轴',
   technique: '功法材料',
   technique_book: '功法书',
-  token: '代币',
+  token: '法宝',
   wood: '木材',
 };
 
