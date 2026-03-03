@@ -18,7 +18,7 @@
  *   2. viewedAt 为 null 表示玩家尚未查看本次挂机结果，用于触发回放弹窗
  */
 
-import type { BattleLogEntryDto } from '../../../../services/api/combat-realm';
+import type { BattleLogEntryDto } from "../../../../services/api/combat-realm";
 
 // ============================================
 // 挂机配置（客户端视图）
@@ -73,7 +73,7 @@ export interface RewardItemEntryDto {
 export interface IdleSessionDto {
   id: string;
   characterId: number;
-  status: 'active' | 'stopping' | 'completed' | 'interrupted';
+  status: "active" | "stopping" | "completed" | "interrupted";
   mapId: string;
   roomId: string;
   maxDurationMs: number;
@@ -84,7 +84,7 @@ export interface IdleSessionDto {
   totalSilver: number;
   rewardItems: RewardItemEntryDto[];
   bagFullFlag: boolean;
-  startedAt: string;   // ISO 8601 字符串，UI 层按需转换为 Date
+  startedAt: string; // ISO 8601 字符串，UI 层按需转换为 Date
   endedAt: string | null;
   viewedAt: string | null;
   /** 目标怪物定义 ID（由服务端从 sessionSnapshot 提取） */
@@ -106,7 +106,7 @@ export interface IdleBatchDto {
   id: string;
   sessionId: string;
   batchIndex: number;
-  result: 'attacker_win' | 'defender_win' | 'draw';
+  result: "attacker_win" | "defender_win" | "draw";
   roundCount: number;
   randomSeed: number;
   expGained: number;
@@ -114,42 +114,36 @@ export interface IdleBatchDto {
   itemsGained: RewardItemEntryDto[];
   battleLog: BattleLogEntryDto[];
   monsterIds: string[];
-  executedAt: string;  // ISO 8601 字符串
+  executedAt: string; // ISO 8601 字符串
 }
 
 // ============================================
-// API 响应包装类型
+// API 响应数据类型（已在 API 层解包 data）
 // ============================================
 
-/** 通用成功/失败响应 */
-export interface IdleApiResponse {
-  success: boolean;
-  message?: string;
-}
-
-export interface IdleStartResponse extends IdleApiResponse {
+export interface IdleStartResponse {
   sessionId?: string;
   existingSessionId?: string;
 }
 
-export interface IdleStatusResponse extends IdleApiResponse {
+export interface IdleStatusResponse {
   session: IdleSessionDto | null;
 }
 
-export interface IdleHistoryResponse extends IdleApiResponse {
+export interface IdleHistoryResponse {
   history: IdleSessionDto[];
 }
 
-export interface IdleBatchesResponse extends IdleApiResponse {
+export interface IdleBatchesResponse {
   batches: IdleBatchDto[];
 }
 
-export interface IdleProgressResponse extends IdleApiResponse {
+export interface IdleProgressResponse {
   session: IdleSessionDto | null;
   batches: IdleBatchDto[];
 }
 
-export interface IdleConfigResponse extends IdleApiResponse {
+export interface IdleConfigResponse {
   config: IdleConfigDto;
 }
 
