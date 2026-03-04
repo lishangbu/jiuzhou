@@ -1,5 +1,5 @@
-import type { PoolClient, QueryResult } from 'pg';
-import { query } from '../config/database.js';
+import type { QueryResult } from 'pg';
+import { isInTransaction, query } from '../config/database.js';
 
 /**
  * Inventory Mutex — 角色背包互斥锁工具
@@ -14,10 +14,6 @@ import { query } from '../config/database.js';
  *   内部使用 `query()` 自动走事务连接（调用方须处于事务上下文）。
  * - lockCharacterInventoryMutexes(characterIds)
  *   输入角色 ID 列表，内部先去重排序后逐个加锁，输出 Promise<void>。
- *
- * 向后兼容：
- * - 保留 lockCharacterInventoryMutexTx / lockCharacterInventoryMutexesTx 作为别名导出，
- *   签名接受 `client: PoolClient | null` 但内部忽略该参数，供尚未改造的外部调用方过渡使用。
  *
  * 数据流/状态流：
  * - 调用方进入事务后调用本模块；
@@ -65,6 +61,9 @@ export const lockCharacterInventoryMutex = async (
   if (!Number.isInteger(characterId) || characterId <= 0) {
     throw new Error(`角色背包互斥锁参数错误: characterId=${String(characterId)}`);
   }
+  if (!isInTransaction()) {
+    throw new Error('角色背包互斥锁必须在事务上下文中获取，请通过 @Transactional 方法调用');
+  }
 
   const startAt = Date.now();
   while (true) {
@@ -92,21 +91,4 @@ export const lockCharacterInventoryMutexes = async (
   for (const characterId of ids) {
     await lockCharacterInventoryMutex(characterId);
   }
-};
-
-/**
- * 向后兼容别名：接受 client 参数但内部忽略，供尚未改造的外部调用方过渡使用
- */
-export const lockCharacterInventoryMutexTx = async (
-  _client: PoolClient | null,
-  characterId: number
-): Promise<void> => {
-  return lockCharacterInventoryMutex(characterId);
-};
-
-export const lockCharacterInventoryMutexesTx = async (
-  _client: PoolClient | null,
-  characterIds: number[]
-): Promise<void> => {
-  return lockCharacterInventoryMutexes(characterIds);
 };

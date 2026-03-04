@@ -13,14 +13,8 @@
  * - itemQuery.ts — 物品聚合查询
  * - service.ts — InventoryService 单例（@Transactional 装饰器）
  *
- * 向后兼容导出：
- * - addItemToInventoryTx — 旧签名别名，内部忽略 client 参数
- * - findEmptySlotsWithClient — 旧签名别名
- * - getInventoryInfoWithClient — 旧签名别名
- * - expandInventoryWithClient — 旧签名别名
- *
  * 边界条件：
- * 1. 旧别名仅供尚未改造的外部调用方过渡使用，新代码应直接使用无 client 版本
+ * 1. 所有导出统一使用标准签名（不接受 transaction client 参数）
  * 2. 所有类型导出均来自 shared/types.ts，避免循环引用
  */
 
@@ -97,70 +91,3 @@ export {
 // 服务类单例
 // ============================================
 export { inventoryService } from "./service.js";
-
-// ============================================
-// 向后兼容别名：旧签名接受 client 参数但内部忽略
-// ============================================
-import type { PoolClient } from "pg";
-import { addItemToInventory } from "./bag.js";
-import { findEmptySlots } from "./bag.js";
-import { getInventoryInfo } from "./bag.js";
-import { expandInventory as _expandInventory } from "./bag.js";
-import type { SlottedInventoryLocation as _SIL, InventoryInfo as _II } from "./shared/types.js";
-
-/**
- * addItemToInventoryTx 向后兼容别名
- * 接受 client 参数但忽略，内部委托 addItemToInventory
- */
-export const addItemToInventoryTx = async (
-  _client: PoolClient,
-  characterId: number,
-  userId: number,
-  itemDefId: string,
-  qty: number,
-  options: {
-    location?: _SIL;
-    bindType?: string;
-    affixes?: any;
-    obtainedFrom?: string;
-  } = {},
-): Promise<{ success: boolean; message: string; itemIds?: number[] }> => {
-  return addItemToInventory(characterId, userId, itemDefId, qty, options);
-};
-
-/**
- * findEmptySlotsWithClient 向后兼容别名
- * 接受 client 参数但忽略
- */
-export const findEmptySlotsWithClient = async (
-  characterId: number,
-  location: _SIL,
-  count: number = 1,
-  _client: PoolClient | null,
-): Promise<number[]> => {
-  return findEmptySlots(characterId, location, count);
-};
-
-/**
- * getInventoryInfoWithClient 向后兼容别名
- * 接受 client 参数但忽略
- */
-export const getInventoryInfoWithClient = async (
-  characterId: number,
-  _client: PoolClient | null,
-): Promise<_II> => {
-  return getInventoryInfo(characterId);
-};
-
-/**
- * expandInventoryWithClient 向后兼容别名
- * 接受 client 参数但忽略
- */
-export const expandInventoryWithClient = async (
-  _client: PoolClient,
-  characterId: number,
-  location: _SIL,
-  expandSize: number = 10,
-): Promise<{ success: boolean; message: string; newCapacity?: number }> => {
-  return _expandInventory(characterId, location, expandSize);
-};
