@@ -1108,16 +1108,27 @@
   flex-wrap: wrap;
 }
 
-.bag-gem-convert-level {
-  width: 260px;
-}
-
-.bag-gem-convert-times {
+.bag-gem-convert-selected {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.bag-gem-convert-selected-label {
   color: var(--text-secondary);
   font-size: 12px;
+  white-space: nowrap;
+}
+
+.bag-gem-convert-selected-value {
+  color: var(--text-color);
+  font-size: 13px;
+  min-width: 0;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .bag-gem-convert-formula {
@@ -1128,6 +1139,11 @@
   color: var(--text-color);
   font-size: 13px;
   font-weight: 700;
+
+  &.is-warning {
+    border-color: rgba(255, 125, 0, 0.45);
+    color: #d46b08;
+  }
 }
 
 .bag-gem-convert-summary {
@@ -1141,6 +1157,64 @@
   strong {
     color: var(--text-color);
   }
+}
+
+.bag-gem-convert-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.bag-gem-convert-candidate {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--panel-bg);
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+
+  &.is-selected {
+    border-color: var(--brand-primary);
+    background: color-mix(in srgb, var(--brand-primary) 8%, var(--panel-bg));
+  }
+
+  &.is-disabled {
+    opacity: 0.6;
+  }
+}
+
+.bag-gem-convert-candidate-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bag-gem-convert-candidate-name {
+  color: var(--text-color);
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bag-gem-convert-candidate-meta {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.bag-gem-convert-candidate-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-color);
+  font-size: 12px;
 }
 
 .bag-gem-convert-hint {
@@ -1217,12 +1291,18 @@
     align-items: stretch;
   }
 
-  .bag-gem-convert-level {
-    width: 100% !important;
+  .bag-gem-convert-selected {
+    width: 100%;
   }
 
-  .bag-gem-convert-times {
-    width: 100%;
-    justify-content: space-between;
+  .bag-gem-convert-selected-value {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  .bag-gem-convert-list {
+    max-height: 260px;
+    padding-right: 0;
   }
 }

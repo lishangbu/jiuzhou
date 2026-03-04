@@ -53,6 +53,17 @@ const parseNonNegativeIntArray = (value: unknown): number[] | null => {
   return out;
 };
 
+const parsePositiveIntArray = (value: unknown): number[] | null => {
+  if (!Array.isArray(value)) return null;
+  const out: number[] = [];
+  for (const raw of value) {
+    const parsed = Number(raw);
+    if (!Number.isInteger(parsed) || parsed <= 0) return null;
+    out.push(parsed);
+  }
+  return out;
+};
+
 
 router.use(requireCharacter);
 
@@ -153,25 +164,19 @@ router.get('/gem/convert/options', asyncHandler(async (req, res) => {
 // ============================================
 // 执行宝石转换
 // POST /api/inventory/gem/convert
-// Body: { inputLevel: number, times?: number }
+// Body: { selectedGemItemIds: number[] }（必须手动选择2个宝石）
 // ============================================
 router.post('/gem/convert', asyncHandler(async (req, res) => {
     const userId = req.userId!;
     const characterId = req.characterId!;
 
-    const inputLevel = Number(req.body?.inputLevel);
-    if (!Number.isInteger(inputLevel) || inputLevel < 2 || inputLevel > 10) {
-      throw new BusinessError('inputLevel参数错误');
-    }
-
-    const parsedTimes = parseOptionalPositiveInt(req.body?.times);
-    if (Number.isNaN(parsedTimes)) {
-      throw new BusinessError('times参数错误');
+    const selectedGemItemIds = parsePositiveIntArray(req.body?.selectedGemItemIds);
+    if (!selectedGemItemIds || selectedGemItemIds.length !== 2) {
+      throw new BusinessError('selectedGemItemIds参数错误，需要手动选择2个宝石');
     }
 
     const result = await gemSynthesisService.convertGem(characterId, userId, {
-      inputLevel,
-      ...(parsedTimes !== undefined ? { times: parsedTimes } : {}),
+      selectedGemItemIds,
     });
 
     if (result.success) {

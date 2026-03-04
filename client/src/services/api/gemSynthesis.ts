@@ -144,6 +144,7 @@ export interface GemConvertExecuteResponse {
     times: number;
     consumed: {
       inputGemQty: number;
+      selectedGemItemIds: number[];
     };
     spent: {
       spiritStones: number;
@@ -187,8 +188,7 @@ export const synthesizeInventoryGemBatch = (body: {
 };
 
 export const convertInventoryGem = (body: {
-  inputLevel: number;
-  times?: number;
+  selectedGemItemIds: number[];
 }): Promise<GemConvertExecuteResponse> => {
   return api.post('/inventory/gem/convert', body);
 };

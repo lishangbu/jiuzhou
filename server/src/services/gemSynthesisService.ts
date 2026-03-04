@@ -201,6 +201,7 @@ export type GemConvertExecuteResult =
         times: number;
         consumed: {
           inputGemQty: number;
+          selectedGemItemIds: number[];
         };
         spent: {
           spiritStones: number;
@@ -460,6 +461,67 @@ const getItemOwnedQtyMapTx = async (
     map.set(String(row.item_def_id || '').trim(), clampInt(row.qty, 0, Number.MAX_SAFE_INTEGER));
   }
   return map;
+};
+
+type ItemInstanceMaterialRow = {
+  id: number;
+  itemDefId: string;
+  qty: number;
+  locked: boolean;
+  location: string;
+};
+
+const getItemInstanceRowsByIdsForUpdateTx = async (
+  characterId: number,
+  itemInstanceIds: number[],
+): Promise<ItemInstanceMaterialRow[]> => {
+  const ids = [...new Set(itemInstanceIds.map((id) => clampInt(id, 1, Number.MAX_SAFE_INTEGER)).filter((id) => id > 0))];
+  if (ids.length === 0) return [];
+
+  const result = await query(
+    `
+      SELECT id, item_def_id, qty, locked, location
+      FROM item_instance
+      WHERE owner_character_id = $1
+        AND id = ANY($2::int[])
+      FOR UPDATE
+    `,
+    [characterId, ids],
+  );
+
+  return (result.rows as Array<{
+    id: unknown;
+    item_def_id: unknown;
+    qty: unknown;
+    locked: unknown;
+    location: unknown;
+  }>).map((row) => ({
+    id: clampInt(row.id, 0, Number.MAX_SAFE_INTEGER),
+    itemDefId: String(row.item_def_id || '').trim(),
+    qty: clampInt(row.qty, 0, Number.MAX_SAFE_INTEGER),
+    locked: Boolean(row.locked),
+    location: String(row.location || '').trim(),
+  }));
+};
+
+const consumeSelectedItemInstancesTx = async (
+  consumeQtyByItemId: Map<number, number>,
+  rowsByItemId: Map<number, ItemInstanceMaterialRow>,
+): Promise<{ success: boolean; message: string }> => {
+  for (const [itemId, consumeQtyRaw] of consumeQtyByItemId.entries()) {
+    const consumeQty = clampInt(consumeQtyRaw, 1, Number.MAX_SAFE_INTEGER);
+    const row = rowsByItemId.get(itemId);
+    if (!row) return { success: false, message: '所选宝石不存在' };
+    if (row.qty < consumeQty) return { success: false, message: '所选宝石数量不足' };
+
+    if (row.qty === consumeQty) {
+      await query('DELETE FROM item_instance WHERE id = $1', [itemId]);
+      continue;
+    }
+    await query('UPDATE item_instance SET qty = qty - $1, updated_at = NOW() WHERE id = $2', [consumeQty, itemId]);
+  }
+
+  return { success: true, message: '扣除材料成功' };
 };
 
 const consumeItemDefIdsQtyTx = async (
@@ -763,7 +825,7 @@ const rollRandomGemOutputCounts = (
  * 输入/输出：
  * - getGemSynthesisRecipeList: 输入角色ID，输出配方列表及角色钱包信息
  * - getGemConvertOptions: 输入角色ID，输出宝石转换选项
- * - convertGem: 输入角色ID、用户ID、输入等级和次数，输出宝石转换结果
+ * - convertGem: 输入角色ID、用户ID、手动选择的2个宝石实例ID，输出宝石转换结果
  * - synthesizeGem: 输入角色ID、用户ID、配方ID和次数，输出合成结果
  * - synthesizeGemBatch: 输入角色ID、用户ID、宝石类型和目标等级，输出批量合成结果
  *
@@ -942,39 +1004,49 @@ class GemSynthesisService {
    * 执行宝石转换
    *
    * 规则：
-   * - 输入：2 颗同等级任意宝石（允许混搭）
-   * - 消耗：按输入等级映射的灵石消耗（每次转换）
+   * - 输入：手动选择 2 颗同等级宝石（允许混搭）
+   * - 消耗：按输入等级映射的灵石消耗（固定 1 次）
    * - 产出：1 颗低 1 级的随机宝石（目标等级全宝石等概率）
    *
    * 输入：
    * - characterId：角色 ID
    * - userId：用户 ID
-   * - params.inputLevel：输入等级（2~10）
-   * - params.times：转换次数（默认 1）
+   * - params.selectedGemItemIds：手动选择的 2 个宝石实例 ID（支持同一堆叠重复选择）
    *
    * 输出：
    * - GemConvertExecuteResult：消耗、产出、角色快照
    *
    * 数据流：
-   * - 事务加锁 -> 校验配置/资源 -> 扣同等级材料 -> 扣灵石 -> 随机产出入包 -> 返回角色最新数据
+   * - 事务加锁 -> 校验所选宝石 -> 扣指定宝石 -> 扣灵石 -> 随机产出入包 -> 返回角色最新数据
    *
    * 关键边界条件与坑点：
    * 1) 随机池为空时直接失败，不做默认产物兜底
-   * 2) 扣材料与扣货币都在同一事务内，任一步骤失败会整体回滚
+   * 2) 所选宝石必须都在背包且未锁定，且等级一致，否则直接失败
    */
   @Transactional
   async convertGem(
     characterId: number,
     userId: number,
-    params: { inputLevel: number; times?: number },
+    params: { selectedGemItemIds: number[] },
   ): Promise<GemConvertExecuteResult> {
-    const inputLevel = Number(params.inputLevel);
-    if (!Number.isInteger(inputLevel) || inputLevel < GEM_CONVERT_MIN_LEVEL || inputLevel > GEM_CONVERT_MAX_LEVEL) {
-      return { success: false, message: 'inputLevel参数错误' };
+    const selectedGemItemIdsRaw = Array.isArray(params.selectedGemItemIds) ? params.selectedGemItemIds : [];
+    if (selectedGemItemIdsRaw.length !== GEM_CONVERT_INPUT_QTY) {
+      return { success: false, message: `请选择${GEM_CONVERT_INPUT_QTY}个宝石` };
     }
 
-    const times = clampInt(params.times ?? 1, 1, 999999);
-    const outputLevel = inputLevel - 1;
+    const selectedGemItemIds = selectedGemItemIdsRaw
+      .map((value) => clampInt(value, 1, Number.MAX_SAFE_INTEGER))
+      .filter((value) => value > 0);
+    if (selectedGemItemIds.length !== GEM_CONVERT_INPUT_QTY) {
+      return { success: false, message: 'selectedGemItemIds参数错误' };
+    }
+
+    const consumeQtyByItemId = new Map<number, number>();
+    for (const itemId of selectedGemItemIds) {
+      consumeQtyByItemId.set(itemId, (consumeQtyByItemId.get(itemId) ?? 0) + 1);
+    }
+
+    const times = 1;
 
     const client = getTransactionClient();
     if (!client) return { success: false, message: '事务上下文缺失' };
@@ -992,10 +1064,44 @@ class GemSynthesisService {
     }
     const context = contextResult.data;
 
-    const inputGemItemDefIds = context.gemItemDefIdsByLevel.get(inputLevel) ?? [];
-    if (inputGemItemDefIds.length <= 0) {
-      return { success: false, message: `宝石转换配置异常：${inputLevel}级宝石池为空` };
+    const selectedRows = await getItemInstanceRowsByIdsForUpdateTx(characterId, [...consumeQtyByItemId.keys()]);
+    if (selectedRows.length !== consumeQtyByItemId.size) {
+      return { success: false, message: '所选宝石不存在' };
     }
+
+    const rowsByItemId = new Map<number, ItemInstanceMaterialRow>();
+    const selectedLevels = new Set<number>();
+    for (const row of selectedRows) {
+      rowsByItemId.set(row.id, row);
+
+      if (row.locked) {
+        return { success: false, message: '所选宝石已锁定' };
+      }
+      if (row.location !== 'bag') {
+        return { success: false, message: '仅可选择背包内宝石进行转换' };
+      }
+
+      const requestedQty = consumeQtyByItemId.get(row.id) ?? 0;
+      if (requestedQty <= 0 || row.qty < requestedQty) {
+        return { success: false, message: '所选宝石数量不足' };
+      }
+
+      const level = context.gemLevelByItemDefId.get(row.itemDefId);
+      if (!level) {
+        return { success: false, message: '所选物品不是有效宝石' };
+      }
+      selectedLevels.add(level);
+    }
+
+    if (selectedLevels.size !== 1) {
+      return { success: false, message: '请选择2个同等级宝石' };
+    }
+
+    const [inputLevel] = [...selectedLevels];
+    if (!inputLevel || inputLevel < GEM_CONVERT_MIN_LEVEL || inputLevel > GEM_CONVERT_MAX_LEVEL) {
+      return { success: false, message: '所选宝石等级不支持转换' };
+    }
+    const outputLevel = inputLevel - 1;
 
     const candidateOutputItemDefIds = context.gemItemDefIdsByLevel.get(outputLevel) ?? [];
     if (candidateOutputItemDefIds.length <= 0) {
@@ -1007,42 +1113,21 @@ class GemSynthesisService {
       return { success: false, message: `宝石转换配置缺失：${inputLevel}级灵石消耗未定义` };
     }
 
-    const ownedInputGemByDefId = await getItemOwnedQtyMapTx(characterId, inputGemItemDefIds, {
-      locations: GEM_CONVERT_MATERIAL_LOCATIONS,
-    });
-    const ownedInputGemQty = [...ownedInputGemByDefId.values()].reduce((sum, qty) => sum + qty, 0);
-    const maxConvertTimes = calcMaxSynthesizeTimes({
-      ownedInputQty: ownedInputGemQty,
-      needInputQty: GEM_CONVERT_INPUT_QTY,
-      wallet,
-      silverCost: 0,
-      spiritStoneCost: costSpiritStonesPerConvert,
-    });
-
-    if (maxConvertTimes <= 0) {
-      return { success: false, message: '材料或灵石不足' };
-    }
-    if (times > maxConvertTimes) {
-      return { success: false, message: `当前最多可转换${maxConvertTimes}次` };
+    if (wallet.spiritStones < costSpiritStonesPerConvert) {
+      return { success: false, message: '灵石不足' };
     }
 
-    const consumeInputGemQty = GEM_CONVERT_INPUT_QTY * times;
-    const consumeRes = await consumeItemDefIdsQtyTx(characterId, inputGemItemDefIds, consumeInputGemQty, {
-      locations: GEM_CONVERT_MATERIAL_LOCATIONS,
-      insufficientMessage: '同等级宝石数量不足',
-    });
+    const consumeRes = await consumeSelectedItemInstancesTx(consumeQtyByItemId, rowsByItemId);
     if (!consumeRes.success) {
       return { success: false, message: consumeRes.message };
     }
 
-    const spentSpiritStones = costSpiritStonesPerConvert * times;
+    const consumeInputGemQty = GEM_CONVERT_INPUT_QTY;
+    const spentSpiritStones = costSpiritStonesPerConvert;
     wallet.spiritStones -= spentSpiritStones;
-    if (wallet.spiritStones < 0) {
-      return { success: false, message: '灵石不足' };
-    }
     await updateCharacterWalletTx(characterId, wallet);
 
-    const rolledOutputCounts = rollRandomGemOutputCounts(candidateOutputItemDefIds, times);
+    const rolledOutputCounts = rollRandomGemOutputCounts(candidateOutputItemDefIds, 1);
     const producedItemDefIds = [...rolledOutputCounts.keys()].sort((a, b) => a.localeCompare(b));
     const outputDefMap = await getItemDefMap(producedItemDefIds);
     const producedItems: Array<{
@@ -1085,6 +1170,7 @@ class GemSynthesisService {
         times,
         consumed: {
           inputGemQty: consumeInputGemQty,
+          selectedGemItemIds,
         },
         spent: {
           spiritStones: spentSpiritStones,
