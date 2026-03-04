@@ -163,12 +163,12 @@ class SectShopService {
         `
           SELECT content
           FROM sect_log
-          WHERE sect_id = $1
-            AND log_type = 'shop_buy'
-            AND operator_id = $2
+          WHERE log_type = 'shop_buy'
+            -- 限购按角色+日期统计，不按宗门隔离，避免通过退宗/换宗门重置次数。
+            AND operator_id = $1
             AND created_at::date = CURRENT_DATE
         `,
-        [member.sectId, characterId]
+        [characterId]
       );
       const usedToday = (limitResult.rows as Array<{ content: string | null }>).reduce((sum, row) => {
         const content = typeof row.content === 'string' ? row.content : '';
