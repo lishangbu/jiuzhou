@@ -21,6 +21,10 @@ import {
 } from "../services/arenaWeeklySettlementService.js";
 import { stopBattleService } from "../services/battle/index.js";
 import {
+  startCleanupWorker,
+  stopCleanupWorker,
+} from "../workers/cleanupWorker.js";
+import {
   initializeWorkerPool,
   shutdownWorkerPool,
 } from "../workers/workerPool.js";
@@ -70,6 +74,7 @@ export const startServerWithPipeline = async (
 
   await initGameTimeService();
   await initArenaWeeklySettlementService();
+  await startCleanupWorker();
 
   if (redisConnected) {
     console.log("正在恢复战斗状态...");
@@ -109,6 +114,9 @@ export const registerGracefulShutdown = (httpServer: HttpServer): void => {
 
     stopArenaWeeklySettlementService();
     console.log("✓ 竞技场结算服务已停止");
+
+    stopCleanupWorker();
+    console.log("✓ 清理 Worker 已停止");
 
     stopBattleService();
     console.log("✓ 战斗服务已停止");

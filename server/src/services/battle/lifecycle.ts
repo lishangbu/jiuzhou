@@ -3,8 +3,8 @@
  *
  * 作用：
  * - recoverBattlesFromRedis: 服务启动时从 Redis 恢复活跃战斗
- * - cleanupExpiredBattles: 定期清理超时战斗
- * - stopBattleService: 优雅关闭所有定时器
+ * - cleanupExpiredBattles: 单次执行超时战斗清理（由 cleanupWorker 定时调度）
+ * - stopBattleService: 优雅关闭战斗 ticker 定时器
  *
  * 复用点：startupPipeline.ts 调用 recoverBattlesFromRedis / stopBattleService。
  *
@@ -31,6 +31,7 @@ import {
 } from "./runtime/persistence.js";
 
 const FINISHED_BATTLE_TTL_MS = 2 * 60 * 1000;
+export const BATTLE_EXPIRED_CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 
 export async function recoverBattlesFromRedis(): Promise<number> {
   let recoveredCount = 0;
@@ -128,14 +129,7 @@ export function cleanupExpiredBattles(): void {
   }
 }
 
-// 定期清理过期战斗
-const cleanupTimer = setInterval(cleanupExpiredBattles, 5 * 60 * 1000);
-
 export function stopBattleService(): void {
-  if (cleanupTimer) {
-    clearInterval(cleanupTimer);
-  }
-
   for (const timer of battleTickers.values()) {
     clearInterval(timer);
   }

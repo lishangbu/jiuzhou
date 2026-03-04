@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS idle_battle_batches (
 );
 
 CREATE INDEX IF NOT EXISTS idx_idle_batches_session ON idle_battle_batches(session_id, batch_index);
+CREATE INDEX IF NOT EXISTS idx_idle_batches_executed_at ON idle_battle_batches(executed_at);
 `;
 
 // ─── idle_configs：挂机配置持久化表 ──────────────────────────────────────────

@@ -44,7 +44,12 @@ export { getBattleState } from "./queries.js";
 export { isCharacterInBattle } from "./runtime/state.js";
 
 // ------ 生命周期 ------
-export { recoverBattlesFromRedis, stopBattleService } from "./lifecycle.js";
+export {
+  recoverBattlesFromRedis,
+  cleanupExpiredBattles,
+  BATTLE_EXPIRED_CLEANUP_INTERVAL_MS,
+  stopBattleService,
+} from "./lifecycle.js";
 
 // ------ 组队钩子 ------
 export { onUserJoinTeam, onUserLeaveTeam, syncBattleStateOnReconnect } from "./teamHooks.js";
