@@ -134,10 +134,10 @@ const QUALITY_RANDOM_WEIGHT: Array<{ quality: TechniqueQuality; weight: number }
 ];
 
 const GENERATE_POINT_COST_BY_QUALITY: Record<TechniqueQuality, number> = {
-  黄: 200,
-  玄: 280,
-  地: 360,
-  天: 480,
+  黄: 500,
+  玄: 500,
+  地: 500,
+  天: 500,
 };
 
 const EXCHANGE_POINTS_BY_QUALITY_RANK: Record<number, number> = {
@@ -1092,7 +1092,7 @@ class TechniqueGenerationService {
     );
     const weeklyUsed = Math.max(0, Math.floor(asNumber((usedRes.rows[0] as Record<string, unknown> | undefined)?.cnt, 0)));
     if (weeklyUsed >= WEEKLY_LIMIT) {
-      return { success: false, message: '本周生成功法次数已用尽', code: 'WEEKLY_LIMIT_REACHED' };
+      return { success: false, message: '本周领悟次数已用尽', code: 'WEEKLY_LIMIT_REACHED' };
     }
 
     const quality = resolveQualityByWeight();
@@ -1378,7 +1378,7 @@ class TechniqueGenerationService {
 
     return {
       success: true,
-      message: '生成草稿成功',
+      message: '领悟草稿成功',
       data: {
         draftTechniqueId,
         preview: {
@@ -1476,12 +1476,12 @@ class TechniqueGenerationService {
 
       if (!saveRes.success || !saveRes.data) {
         await this.refundGenerationJobTx(characterId, generationId, saveRes.message || '草稿落库失败，已自动退款');
-        return { success: false, message: saveRes.message || '生成功法失败', code: saveRes.code || 'GENERATION_FAILED' };
+        return { success: false, message: saveRes.message || '领悟失败', code: saveRes.code || 'GENERATION_FAILED' };
       }
 
       return {
         success: true,
-        message: '生成功法草稿成功，请输入自定义名称后发布',
+        message: '领悟草稿成功，请输入自定义名称后发布',
         data: {
           generationId,
           draftTechniqueId: saveRes.data.draftTechniqueId,
@@ -1494,7 +1494,7 @@ class TechniqueGenerationService {
       await this.refundGenerationJobTx(characterId, generationId, 'AI生成异常，已自动退款');
       return {
         success: false,
-        message: `生成功法失败：${error instanceof Error ? error.message : '未知异常'}`,
+        message: `领悟失败：${error instanceof Error ? error.message : '未知异常'}`,
         code: 'GENERATION_FAILED',
       };
     }
@@ -1538,7 +1538,7 @@ class TechniqueGenerationService {
     }
     if (!draftExpireAt || draftExpireAt.getTime() <= Date.now()) {
       await this.refundGenerationJobTx(characterId, generationId, '草稿已过期，已自动退款');
-      return { success: false, message: '草稿已过期，请重新生成', code: 'GENERATION_EXPIRED' };
+      return { success: false, message: '草稿已过期，请重新领悟', code: 'GENERATION_EXPIRED' };
     }
 
     const nameCheck = validateTechniqueCustomName(customName);
@@ -1612,7 +1612,7 @@ class TechniqueGenerationService {
 
     const bookDef = getItemDefinitionById(GENERATED_TECHNIQUE_BOOK_ITEM_DEF_ID);
     if (!bookDef) {
-      return { success: false, message: '系统缺少生成功法书定义，请联系管理员', code: 'ITEM_DEF_MISSING' };
+      return { success: false, message: '系统缺少领悟功法书定义，请联系管理员', code: 'ITEM_DEF_MISSING' };
     }
 
     const qualityText = asString(draftRow.quality) || '黄';
@@ -1629,7 +1629,7 @@ class TechniqueGenerationService {
     });
 
     if (!addRes.success || !addRes.itemIds || addRes.itemIds.length === 0) {
-      return { success: false, message: addRes.message || '发放生成功法书失败', code: 'REWARD_FAILED' };
+      return { success: false, message: addRes.message || '发放领悟功法书失败', code: 'REWARD_FAILED' };
     }
 
     return {
@@ -1654,7 +1654,7 @@ export const safeGetTechniqueGenerationStatus = async (characterId: number): Pro
     if (isUndefinedTableError(error)) {
       return {
         success: true,
-        message: 'AI生成功法系统未初始化',
+        message: 'AI领悟系统未初始化',
         data: {
           pointsBalance: 0,
           weeklyLimit: WEEKLY_LIMIT,

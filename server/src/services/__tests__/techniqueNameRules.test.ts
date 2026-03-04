@@ -25,16 +25,16 @@ test('名称规范化应处理空白与英文大小写', () => {
   assert.equal(normalizeTechniqueName('  A\u3000B   C  '), 'a b c');
 });
 
-test('合法名称应通过校验', () => {
-  const result = validateTechniqueCustomName('太虚·剑诀_01');
+test('合法名称应通过校验并自动添加前缀', () => {
+  const result = validateTechniqueCustomName('太虚剑诀');
   assert.equal(result.success, true);
   if (!result.success) return;
-  assert.equal(result.normalizedName, '太虚·剑诀_01');
-  assert.equal(result.displayName, '太虚·剑诀_01');
+  assert.equal(result.normalizedName, '悟道太虚剑诀');
+  assert.equal(result.displayName, '悟道太虚剑诀');
 });
 
 test('长度越界应返回 NAME_INVALID', () => {
-  const shortName = validateTechniqueCustomName('A');
+  const shortName = validateTechniqueCustomName('剑');
   assert.equal(shortName.success, false);
   if (!shortName.success) {
     assert.equal(shortName.code, 'NAME_INVALID');
@@ -48,7 +48,7 @@ test('长度越界应返回 NAME_INVALID', () => {
 });
 
 test('非法字符应返回 NAME_INVALID', () => {
-  const result = validateTechniqueCustomName('天雷!剑诀');
+  const result = validateTechniqueCustomName('天雷剑诀1');
   assert.equal(result.success, false);
   if (!result.success) {
     assert.equal(result.code, 'NAME_INVALID');
@@ -56,7 +56,7 @@ test('非法字符应返回 NAME_INVALID', () => {
 });
 
 test('敏感词应返回 NAME_SENSITIVE', () => {
-  const result = validateTechniqueCustomName('GM秘典');
+  const result = validateTechniqueCustomName('管理员');
   assert.equal(result.success, false);
   if (!result.success) {
     assert.equal(result.code, 'NAME_SENSITIVE');

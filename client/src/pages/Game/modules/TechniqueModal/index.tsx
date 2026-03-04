@@ -751,7 +751,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose }) => {
       setPublishGenerationId(generateRes.data.generationId);
       setPublishCustomName(generateRes.data.aiSuggestedName || '');
       setPublishOpen(true);
-      message.success('草稿已生成，请输入名称并发布');
+      message.success('已领悟草稿，请输入名称并发布');
       await refreshResearchStatus();
     } catch (error: unknown) {
       message.error(error instanceof Error ? error.message : '生成失败');
@@ -764,8 +764,8 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose }) => {
     if (code === 'NAME_CONFLICT') return '名称已存在，请更换';
     if (code === 'NAME_SENSITIVE') return '名称包含敏感内容，请重填';
     if (code === 'NAME_INVALID') return '名称不符合格式规则';
-    if (code === 'GENERATION_NOT_READY') return '草稿尚未就绪，请先生成';
-    if (code === 'GENERATION_EXPIRED') return '草稿已过期，请重新生成';
+    if (code === 'GENERATION_NOT_READY') return '草稿尚未就绪，请先领悟';
+    if (code === 'GENERATION_EXPIRED') return '草稿已过期，请重新领悟';
     return fallbackMessage || '发布失败';
   };
 
@@ -1349,7 +1349,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose }) => {
           </div>
 
           <div className="tech-research-costs">
-            {(Object.entries(status?.generationCostByQuality || { 黄: 200, 玄: 280, 地: 360, 天: 480 }) as Array<[string, number]>).map(
+            {(Object.entries(status?.generationCostByQuality || { 黄: 500, 玄: 500, 地: 500, 天: 500 }) as Array<[string, number]>).map(
               ([quality, cost]) => (
                 <Tag key={quality} color="default">
                   {quality}品: {cost}点
@@ -1368,7 +1368,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose }) => {
               disabled={!canTryGenerate}
               onClick={() => void handleGenerateResearchDraft()}
             >
-              AI生成草稿
+              开始领悟
             </Button>
             <Button loading={researchLoading} onClick={() => void refreshResearchStatus()}>
               刷新
@@ -1376,8 +1376,8 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose }) => {
           </div>
 
           <div className="tech-research-tips">
-            <div>1. 先将多余功法书兑换为研修点，再进行 AI 生成。</div>
-            <div>2. 生成成功后进入草稿态，需要命名发布才会发放秘卷。</div>
+            <div>1. 先将多余功法书兑换为研修点，再进行领悟。</div>
+            <div>2. 领悟成功后进入草稿态，需要命名发布才会发放秘卷。</div>
             <div>3. 名称一经发布不可修改，且全服唯一。</div>
           </div>
 
@@ -1410,7 +1410,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose }) => {
               </div>
             </div>
           ) : (
-            <div className="tech-empty">暂无草稿，点击“AI生成草稿”开始研修</div>
+            <div className="tech-empty">暂无草稿，点击“开始领悟”开始研修</div>
           )}
         </div>
       </div>
@@ -1508,8 +1508,8 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose }) => {
           <div className="tech-research-publish-rules">
             {(() => {
               const rules = researchStatus?.nameRules;
-              if (!rules) return '名称规则：2~14字符，支持中文、字母、数字、空格、·、-、_。';
-              return `名称规则：${rules.minLength}~${rules.maxLength}字符，${rules.patternHint}。发布后不可改名。`;
+              if (!rules) return '名称规则：2~14个纯中文字符，发布名会自动添加固定前缀。';
+              return `名称规则：${rules.minLength}~${rules.maxLength}字符，${rules.patternHint}。发布名固定前缀「${rules.fixedPrefix}」，发布后不可改名。`;
             })()}
           </div>
         </div>

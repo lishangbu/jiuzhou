@@ -1,8 +1,9 @@
 import { getTechniqueNameSensitiveWords } from '../techniqueNameSensitiveWords.js';
 
-const TECHNIQUE_NAME_ALLOWED_PATTERN = /^[\u4e00-\u9fa5A-Za-z0-9·\-_ ]+$/;
+const TECHNIQUE_NAME_ALLOWED_PATTERN = /^[\u4e00-\u9fa5]+$/;
 const TECHNIQUE_NAME_MIN_LENGTH = 2;
 const TECHNIQUE_NAME_MAX_LENGTH = 14;
+const TECHNIQUE_NAME_FIXED_PREFIX = '『研』';
 
 export type TechniqueNameValidationErrorCode = 'NAME_INVALID' | 'NAME_SENSITIVE';
 
@@ -13,6 +14,7 @@ export type TechniqueNameValidationResult =
 export type TechniqueNameRulesView = {
   minLength: number;
   maxLength: number;
+  fixedPrefix: string;
   patternHint: string;
   immutableAfterPublish: boolean;
 };
@@ -21,7 +23,8 @@ export const getTechniqueNameRulesView = (): TechniqueNameRulesView => {
   return {
     minLength: TECHNIQUE_NAME_MIN_LENGTH,
     maxLength: TECHNIQUE_NAME_MAX_LENGTH,
-    patternHint: '仅支持中文、英文、数字、空格、·、-、_',
+    fixedPrefix: TECHNIQUE_NAME_FIXED_PREFIX,
+    patternHint: '仅支持纯中文（不含空格、符号、字母、数字）',
     immutableAfterPublish: true,
   };
 };
@@ -55,12 +58,12 @@ const containsSensitiveWord = (normalizedLowerName: string): boolean => {
 };
 
 export const validateTechniqueCustomName = (rawName: string): TechniqueNameValidationResult => {
-  const displayName = normalizeDisplayName(rawName);
-  if (!displayName) {
+  const rawDisplayName = normalizeDisplayName(rawName);
+  if (!rawDisplayName) {
     return { success: false, code: 'NAME_INVALID', message: '名称不能为空' };
   }
 
-  const charLength = Array.from(displayName).length;
+  const charLength = Array.from(rawDisplayName).length;
   if (charLength < TECHNIQUE_NAME_MIN_LENGTH || charLength > TECHNIQUE_NAME_MAX_LENGTH) {
     return {
       success: false,
@@ -69,14 +72,15 @@ export const validateTechniqueCustomName = (rawName: string): TechniqueNameValid
     };
   }
 
-  if (!TECHNIQUE_NAME_ALLOWED_PATTERN.test(displayName)) {
+  if (!TECHNIQUE_NAME_ALLOWED_PATTERN.test(rawDisplayName)) {
     return {
       success: false,
       code: 'NAME_INVALID',
-      message: '名称包含非法字符，仅支持中文、英文、数字、空格、·、-、_',
+      message: '名称仅支持纯中文',
     };
   }
 
+  const displayName = `${TECHNIQUE_NAME_FIXED_PREFIX}${rawDisplayName}`;
   const normalizedName = normalizeTechniqueName(displayName);
   if (containsSensitiveWord(normalizedName)) {
     return { success: false, code: 'NAME_SENSITIVE', message: '名称包含敏感词，请重填' };

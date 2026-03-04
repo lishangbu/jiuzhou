@@ -202,6 +202,7 @@ export const unequipCharacterSkill = (characterId: number, slotIndex: number): P
 export type TechniqueResearchNameRulesDto = {
   minLength: number;
   maxLength: number;
+  fixedPrefix: string;
   patternHint: string;
   immutableAfterPublish: boolean;
 };
