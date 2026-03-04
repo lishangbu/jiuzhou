@@ -1,15 +1,22 @@
-import { App, Button, Modal, Table, Tag, Tooltip } from 'antd';
+import { App, Button, Input, Modal, Table, Tag, Tooltip } from 'antd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { resolveIconUrl, DEFAULT_ICON as coin01 } from '../../shared/resolveIcon';
 import { IMG_LINGSHI as lingshiIcon, IMG_TONGQIAN as tongqianIcon } from '../../shared/imageAssets';
 import { gameSocket } from '../../../../services/gameSocket';
 import {
+  INVENTORY_ITEMS_PAGE_SIZE_MAX,
   equipCharacterSkill,
   equipCharacterTechnique,
+  exchangeTechniqueBooksForResearchPoints,
+  generateTechniqueResearchDraft,
   getCharacterTechniqueStatus,
   getCharacterTechniqueUpgradeCost,
+  getInventoryItems,
+  getTechniqueResearchStatus,
   getTechniqueDetail,
+  publishTechniqueResearchDraft,
   type SkillDefDto,
+  type TechniqueResearchStatusResponse,
   type TechniqueDefDto,
   type TechniqueLayerDto,
   type TechniqueUpgradeCostResponse,
@@ -69,7 +76,7 @@ type Technique = {
   layers: TechniqueLayer[];
 };
 
-type TechniquePanel = 'slots' | 'learned' | 'bonus' | 'skills';
+type TechniquePanel = 'slots' | 'learned' | 'bonus' | 'skills' | 'research';
 
 type SlotKey = 'main' | 'sub1' | 'sub2' | 'sub3';
 
@@ -511,6 +518,8 @@ interface TechniqueModalProps {
   onClose: () => void;
 }
 
+type TechniqueResearchStatusData = NonNullable<TechniqueResearchStatusResponse['data']>;
+
 const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose }) => {
   const { message } = App.useApp();
   const [characterId, setCharacterId] = useState<number | null>(() => gameSocket.getCharacter()?.id ?? null);
@@ -542,6 +551,14 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose }) => {
     Array.from({ length: 10 }).map(() => null),
   );
   const [activeSkillSlot, setActiveSkillSlot] = useState<number>(0);
+  const [researchStatus, setResearchStatus] = useState<TechniqueResearchStatusData | null>(null);
+  const [researchLoading, setResearchLoading] = useState(false);
+  const [exchangeSubmitting, setExchangeSubmitting] = useState(false);
+  const [generateSubmitting, setGenerateSubmitting] = useState(false);
+  const [publishSubmitting, setPublishSubmitting] = useState(false);
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishGenerationId, setPublishGenerationId] = useState('');
+  const [publishCustomName, setPublishCustomName] = useState('');
 
   useEffect(() => {
     gameSocket.connect();
@@ -641,6 +658,151 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose }) => {
     if (!open) return;
     void refreshStatus();
   }, [open, refreshStatus]);
+
+  const refreshResearchStatus = useCallback(async () => {
+    if (!characterId) {
+      setResearchStatus(null);
+      return;
+    }
+    setResearchLoading(true);
+    try {
+      const statusRes = await getTechniqueResearchStatus(characterId);
+      if (!statusRes?.success || !statusRes.data) {
+        throw new Error(statusRes?.message || '获取研修状态失败');
+      }
+      setResearchStatus(statusRes.data);
+    } catch {
+      setResearchStatus(null);
+    } finally {
+      setResearchLoading(false);
+    }
+  }, [characterId]);
+
+  useEffect(() => {
+    if (!open) return;
+    void refreshResearchStatus();
+  }, [open, refreshResearchStatus]);
+
+  const collectExchangeItems = useCallback(async (): Promise<Array<{ itemInstanceId: number; qty: number }>> => {
+    if (!characterId) return [];
+
+    const locations: Array<'bag' | 'warehouse'> = ['bag', 'warehouse'];
+    const exchangeItems: Array<{ itemInstanceId: number; qty: number }> = [];
+
+    for (const location of locations) {
+      let page = 1;
+      let total = 0;
+      do {
+        const pageRes = await getInventoryItems(location, page, INVENTORY_ITEMS_PAGE_SIZE_MAX);
+        if (!pageRes?.success || !pageRes.data) break;
+
+        const items = pageRes.data.items || [];
+        total = Number(pageRes.data.total || 0);
+        for (const item of items) {
+          const subCategory = String(item.def?.sub_category || '');
+          if (subCategory !== 'technique_book') continue;
+          if (item.item_def_id === 'book-generated-technique') continue;
+          if (!Number.isInteger(item.id) || item.id <= 0) continue;
+          const qty = Math.max(0, Math.floor(Number(item.qty) || 0));
+          if (qty <= 0) continue;
+          exchangeItems.push({ itemInstanceId: item.id, qty });
+        }
+
+        page += 1;
+      } while ((page - 1) * INVENTORY_ITEMS_PAGE_SIZE_MAX < total);
+    }
+
+    return exchangeItems;
+  }, [characterId]);
+
+  const handleExchangeBooks = useCallback(async () => {
+    if (!characterId || exchangeSubmitting) return;
+    setExchangeSubmitting(true);
+    try {
+      const exchangeItems = await collectExchangeItems();
+      if (exchangeItems.length <= 0) {
+        message.info('背包与仓库暂无可兑换功法书');
+        return;
+      }
+
+      const exchangeRes = await exchangeTechniqueBooksForResearchPoints(characterId, exchangeItems);
+      if (!exchangeRes?.success || !exchangeRes.data) {
+        throw new Error(exchangeRes?.message || '兑换失败');
+      }
+
+      message.success(exchangeRes.message || `已兑换${exchangeRes.data.gainedPoints}研修点`);
+      await Promise.all([refreshResearchStatus(), refreshStatus()]);
+    } catch (error: unknown) {
+      message.error(error instanceof Error ? error.message : '兑换失败');
+    } finally {
+      setExchangeSubmitting(false);
+    }
+  }, [characterId, collectExchangeItems, exchangeSubmitting, message, refreshResearchStatus, refreshStatus]);
+
+  const handleGenerateResearchDraft = useCallback(async () => {
+    if (!characterId || generateSubmitting) return;
+    setGenerateSubmitting(true);
+    try {
+      const generateRes = await generateTechniqueResearchDraft(characterId);
+      if (!generateRes?.success || !generateRes.data) {
+        throw new Error(generateRes?.message || '生成失败');
+      }
+
+      setPublishGenerationId(generateRes.data.generationId);
+      setPublishCustomName(generateRes.data.aiSuggestedName || '');
+      setPublishOpen(true);
+      message.success('草稿已生成，请输入名称并发布');
+      await refreshResearchStatus();
+    } catch (error: unknown) {
+      message.error(error instanceof Error ? error.message : '生成失败');
+    } finally {
+      setGenerateSubmitting(false);
+    }
+  }, [characterId, generateSubmitting, message, refreshResearchStatus]);
+
+  const resolvePublishErrorMessage = (code?: string, fallbackMessage?: string): string => {
+    if (code === 'NAME_CONFLICT') return '名称已存在，请更换';
+    if (code === 'NAME_SENSITIVE') return '名称包含敏感内容，请重填';
+    if (code === 'NAME_INVALID') return '名称不符合格式规则';
+    if (code === 'GENERATION_NOT_READY') return '草稿尚未就绪，请先生成';
+    if (code === 'GENERATION_EXPIRED') return '草稿已过期，请重新生成';
+    return fallbackMessage || '发布失败';
+  };
+
+  const handlePublishResearchDraft = useCallback(async () => {
+    if (!characterId || !publishGenerationId || publishSubmitting) return;
+    const customName = publishCustomName.trim();
+    if (!customName) {
+      message.warning('请输入功法名称');
+      return;
+    }
+
+    setPublishSubmitting(true);
+    try {
+      const publishRes = await publishTechniqueResearchDraft(characterId, publishGenerationId, customName);
+      if (!publishRes?.success || !publishRes.data) {
+        throw new Error(resolvePublishErrorMessage(publishRes?.code, publishRes?.message));
+      }
+
+      message.success(`发布成功，已发放《${publishRes.data.finalName}》秘卷`);
+      setPublishOpen(false);
+      setPublishGenerationId('');
+      setPublishCustomName('');
+      await Promise.all([refreshResearchStatus(), refreshStatus()]);
+    } catch (error: unknown) {
+      message.error(error instanceof Error ? error.message : '发布失败');
+    } finally {
+      setPublishSubmitting(false);
+    }
+  }, [
+    characterId,
+    message,
+    publishCustomName,
+    publishGenerationId,
+    publishSubmitting,
+    refreshResearchStatus,
+    refreshStatus,
+  ]);
 
   const layerText = (layer: number) => `${layer}层`;
 
@@ -772,6 +934,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose }) => {
     { key: 'learned', label: '已学功法' },
     { key: 'bonus', label: '功法加成' },
     { key: 'skills', label: isMobile ? '技能' : '技能配置' },
+    { key: 'research', label: '洞府研修' },
   ];
 
   const renderSlotCard = (k: SlotKey) => {
@@ -1164,6 +1327,96 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose }) => {
     );
   };
 
+  const renderResearchPanel = () => {
+    const status = researchStatus;
+    const draft = status?.currentDraft ?? null;
+    const minCost = status
+      ? Math.min(...Object.values(status.generationCostByQuality || { 黄: 200, 玄: 280, 地: 360, 天: 480 }))
+      : 200;
+    const canTryGenerate =
+      Boolean(status) &&
+      (status?.weeklyRemaining ?? 0) > 0 &&
+      (status?.pointsBalance ?? 0) >= minCost;
+
+    return (
+      <div className="tech-pane">
+        <div className="tech-pane-scroll">
+          <div className="tech-subtitle">洞府研修（每角色每周最多 1 次）</div>
+          <div className="tech-research-stats">
+            <div className="tech-research-stat"><span>研修点</span><strong>{status?.pointsBalance ?? '--'}</strong></div>
+            <div className="tech-research-stat"><span>本周已用</span><strong>{status?.weeklyUsed ?? '--'}</strong></div>
+            <div className="tech-research-stat"><span>本周剩余</span><strong>{status?.weeklyRemaining ?? '--'}</strong></div>
+          </div>
+
+          <div className="tech-research-costs">
+            {(Object.entries(status?.generationCostByQuality || { 黄: 200, 玄: 280, 地: 360, 天: 480 }) as Array<[string, number]>).map(
+              ([quality, cost]) => (
+                <Tag key={quality} color="default">
+                  {quality}品: {cost}点
+                </Tag>
+              ),
+            )}
+          </div>
+
+          <div className="tech-research-actions">
+            <Button loading={exchangeSubmitting} onClick={() => void handleExchangeBooks()}>
+              一键兑换功法书
+            </Button>
+            <Button
+              type="primary"
+              loading={generateSubmitting}
+              disabled={!canTryGenerate}
+              onClick={() => void handleGenerateResearchDraft()}
+            >
+              AI生成草稿
+            </Button>
+            <Button loading={researchLoading} onClick={() => void refreshResearchStatus()}>
+              刷新
+            </Button>
+          </div>
+
+          <div className="tech-research-tips">
+            <div>1. 先将多余功法书兑换为研修点，再进行 AI 生成。</div>
+            <div>2. 生成成功后进入草稿态，需要命名发布才会发放秘卷。</div>
+            <div>3. 名称一经发布不可修改，且全服唯一。</div>
+          </div>
+
+          <div className="tech-subtitle">当前草稿</div>
+          {researchLoading ? (
+            <div className="tech-empty">加载中...</div>
+          ) : draft ? (
+            <div className="tech-research-draft">
+              <div className="tech-research-draft-name">{draft.suggestedName}</div>
+              <div className="tech-research-draft-meta">
+                <Tag color={qualityColor[mapQuality(draft.quality)]}>{qualityText[mapQuality(draft.quality)]}</Tag>
+                <Tag color="default">{draft.type}</Tag>
+                <Tag color="default">最高{draft.maxLayer}层</Tag>
+              </div>
+              <div className="tech-research-draft-desc">{draft.description || '暂无描述'}</div>
+              <div className="tech-research-draft-expire">
+                草稿过期时间：{draft.draftExpireAt ? new Date(draft.draftExpireAt).toLocaleString() : '--'}
+              </div>
+              <div className="tech-research-actions">
+                <Button
+                  type="primary"
+                  onClick={() => {
+                    setPublishGenerationId(draft.generationId);
+                    setPublishCustomName(draft.suggestedName || '');
+                    setPublishOpen(true);
+                  }}
+                >
+                  命名并发布
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="tech-empty">暂无草稿，点击“AI生成草稿”开始研修</div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
 
   const panelContent = () => {
     if (loading) {
@@ -1176,6 +1429,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose }) => {
     if (panel === 'slots') return renderSlotsPanel();
     if (panel === 'learned') return renderLearnedPanel();
     if (panel === 'bonus') return renderBonusPanel();
+    if (panel === 'research') return renderResearchPanel();
     return renderSkillsPanel();
   };
 
@@ -1199,6 +1453,9 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose }) => {
         setActiveTechId('');
         setDetailTechnique(null);
         setUpgradeCost(null);
+        setPublishOpen(false);
+        setPublishGenerationId('');
+        setPublishCustomName('');
       }}
     >
       <div className="tech-modal-shell">
@@ -1223,6 +1480,40 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose }) => {
 
         <div className="tech-modal-right">{panelContent()}</div>
       </div>
+
+      <Modal
+        open={publishOpen}
+        onCancel={() => {
+          if (publishSubmitting) return;
+          setPublishOpen(false);
+        }}
+        title="发布生成功法"
+        centered
+        width="min(520px, calc(100vw - 16px))"
+        className="tech-submodal"
+        destroyOnHidden
+        okText="确认发布"
+        cancelText="取消"
+        onOk={() => void handlePublishResearchDraft()}
+        okButtonProps={{ loading: publishSubmitting }}
+      >
+        <div className="tech-research-publish">
+          <div className="tech-research-publish-label">功法名称</div>
+          <Input
+            value={publishCustomName}
+            maxLength={researchStatus?.nameRules?.maxLength ?? 14}
+            placeholder="请输入功法名称"
+            onChange={(event) => setPublishCustomName(event.target.value)}
+          />
+          <div className="tech-research-publish-rules">
+            {(() => {
+              const rules = researchStatus?.nameRules;
+              if (!rules) return '名称规则：2~14字符，支持中文、字母、数字、空格、·、-、_。';
+              return `名称规则：${rules.minLength}~${rules.maxLength}字符，${rules.patternHint}。发布后不可改名。`;
+            })()}
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         open={detailOpen}

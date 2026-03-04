@@ -2382,6 +2382,35 @@
           }
         }
       ]
+    },
+    {
+      "id": "book-generated-technique",
+      "name": "《无名功法秘卷》",
+      "category": "consumable",
+      "sub_category": "technique_book",
+      "quality": "玄",
+      "stack_max": 1,
+      "bind_type": "none",
+      "tradeable": true,
+      "icon": "/assets/items/icon_bygj.png",
+      "description": "AI研修生成的功法秘卷，使用后学习对应功法",
+      "long_desc": "通过洞府研修推演而成的秘卷。名称与内容会根据发布结果变化。",
+      "tags": [
+        "秘籍",
+        "功法",
+        "研修生成"
+      ],
+      "use_type": "instant",
+      "effect_defs": [
+        {
+          "trigger": "use",
+          "target": "self",
+          "effect_type": "learn_generated_technique"
+        }
+      ],
+      "source_hint": [
+        "洞府研修"
+      ]
     }
   ]
 }

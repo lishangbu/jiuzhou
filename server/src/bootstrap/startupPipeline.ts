@@ -28,6 +28,7 @@ import {
   initializeWorkerPool,
   shutdownWorkerPool,
 } from "../workers/workerPool.js";
+import { refreshGeneratedTechniqueSnapshots } from "../services/staticConfigLoader.js";
 
 export interface StartServerOptions {
   httpServer: HttpServer;
@@ -54,6 +55,7 @@ export const startServerWithPipeline = async (
   }
 
   await initTables();
+  await refreshGeneratedTechniqueSnapshots();
   await clearAllAvatarsOnce();
   await itemDataCleanupService.cleanupUndefinedItemDataOnStartup();
 

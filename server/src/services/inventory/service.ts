@@ -129,6 +129,9 @@ class InventoryService {
       bindType?: string;
       affixes?: any;
       obtainedFrom?: string;
+      metadata?: Record<string, unknown> | null;
+      quality?: string | null;
+      qualityRank?: number | null;
     } = {},
   ): Promise<{ success: boolean; message: string; itemIds?: number[] }> {
     return await addItemToInventory(

@@ -39,6 +39,7 @@ import {
   parseGeneratedAffixesForReroll,
 } from "../equipmentAffixRerollService.js";
 import { resolveQualityRankFromName } from "../shared/itemQuality.js";
+import { resolveGeneratedTechniqueBookDisplay } from "../shared/generatedTechniqueBookView.js";
 import type {
   InventoryItemWithDef,
   InventoryLocation,
@@ -187,24 +188,43 @@ export const getInventoryItemsWithDefs = async (
       | undefined;
     if (!def) return { ...item, def: undefined };
 
+    const generatedTechniqueBookDisplay = resolveGeneratedTechniqueBookDisplay(
+      item.item_def_id,
+      item.metadata,
+    );
+    const normalizedDef = generatedTechniqueBookDisplay
+      ? {
+          ...def,
+          name: generatedTechniqueBookDisplay.name,
+          quality: generatedTechniqueBookDisplay.quality ?? def.quality,
+          description: generatedTechniqueBookDisplay.description,
+          long_desc: generatedTechniqueBookDisplay.longDesc,
+          tags: generatedTechniqueBookDisplay.tags,
+          generated_technique_id: generatedTechniqueBookDisplay.generatedTechniqueId,
+          generated_technique_name: generatedTechniqueBookDisplay.generatedTechniqueName,
+        }
+      : def;
+
     const setId =
-      typeof def.set_id === "string" ? (def.set_id as string).trim() : "";
+      typeof normalizedDef.set_id === "string"
+        ? (normalizedDef.set_id as string).trim()
+        : "";
     const setBonuses = setId ? (setBonusMap.get(setId) || []) : [];
     const setEquippedCount = setId
       ? (equippedSetCountMap.get(setId) || 0)
       : 0;
     const baseDef = {
-      ...def,
+      ...normalizedDef,
       set_id: setId || null,
       set_name: setId ? (setNameMap.get(setId) ?? null) : null,
       set_bonuses: setBonuses,
       set_equipped_count: setEquippedCount,
     };
 
-    if (def.category !== "equipment") return { ...item, def: baseDef };
+    if (normalizedDef.category !== "equipment") return { ...item, def: baseDef };
 
     const defQualityRank = resolveQualityRankFromName(
-      def.quality as string | undefined,
+      normalizedDef.quality as string | undefined,
       1,
     );
     const resolvedQualityRank = Math.max(
@@ -213,7 +233,7 @@ export const getInventoryItemsWithDefs = async (
     );
 
     const displayBaseAttrs = buildEquipmentDisplayBaseAttrs({
-      baseAttrsRaw: def.base_attrs,
+      baseAttrsRaw: normalizedDef.base_attrs,
       defQualityRankRaw: defQualityRank,
       resolvedQualityRankRaw: resolvedQualityRank,
       strengthenLevelRaw: item.strengthen_level,
@@ -223,8 +243,8 @@ export const getInventoryItemsWithDefs = async (
 
     let normalizedAffixes = parseGeneratedAffixesForReroll(item.affixes);
     const affixPoolId =
-      typeof def.affix_pool_id === "string"
-        ? (def.affix_pool_id as string).trim()
+      typeof normalizedDef.affix_pool_id === "string"
+        ? (normalizedDef.affix_pool_id as string).trim()
         : "";
     if (normalizedAffixes.length > 0 && affixPoolId) {
       if (!affixPoolCache.has(affixPoolId)) {
@@ -233,7 +253,7 @@ export const getInventoryItemsWithDefs = async (
       const affixPool = affixPoolCache.get(affixPoolId);
       if (affixPool) {
         const realmRank = getEquipRealmRankForReroll(
-          def.equip_req_realm as string | undefined,
+          normalizedDef.equip_req_realm as string | undefined,
         );
         const resolvedQualityMultiplier =
           getQualityMultiplierForReroll(resolvedQualityRank);
@@ -254,7 +274,7 @@ export const getInventoryItemsWithDefs = async (
 
     const mergedDef = {
       ...baseDef,
-      base_attrs_raw: def.base_attrs,
+      base_attrs_raw: normalizedDef.base_attrs,
       base_attrs: displayBaseAttrs,
     };
 

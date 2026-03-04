@@ -7,6 +7,7 @@ import { asyncHandler } from '../middleware/asyncHandler.js';
 import { requireAuth } from '../middleware/auth.js';
 import {
   characterTechniqueService,
+  techniqueGenerationService,
 } from '../domains/character/index.js';
 import type {
   ServiceResult
@@ -65,6 +66,111 @@ router.get('/:characterId/technique/status', asyncHandler(async (req, res) => {
   }
 
   const result = await characterTechniqueService.getCharacterTechniqueStatus(characterId);
+  sendResult(res, result);
+}));
+
+// ============================================
+// 获取研修状态
+// GET /api/character/:characterId/technique/research/status
+// ============================================
+router.get('/:characterId/technique/research/status', asyncHandler(async (req, res) => {
+  const characterId = parseCharacterIdParam(req);
+  if (characterId === null) {
+    throw new BusinessError('无效的角色ID');
+  }
+
+  const result = await techniqueGenerationService.getResearchStatus(characterId);
+  sendResult(res, result);
+}));
+
+// ============================================
+// 功法书兑换研修点
+// POST /api/character/:characterId/technique/research/exchange-books
+// Body: { items: [{ itemInstanceId: number, qty: number }] }
+// ============================================
+router.post('/:characterId/technique/research/exchange-books', asyncHandler(async (req, res) => {
+  const characterId = parseCharacterIdParam(req);
+  if (characterId === null) {
+    throw new BusinessError('无效的角色ID');
+  }
+  const userId = req.userId!;
+  if (!userId) {
+    throw new BusinessError('登录状态无效，请重新登录', 401);
+  }
+
+  const rawItems = req.body?.items;
+  if (!Array.isArray(rawItems) || rawItems.length === 0) {
+    throw new BusinessError('缺少兑换条目');
+  }
+  const items = rawItems.map((entry) => {
+    const row = entry as { itemInstanceId?: unknown; qty?: unknown };
+    return {
+      itemInstanceId: Number(row.itemInstanceId),
+      qty: Number(row.qty),
+    };
+  });
+
+  const result = await techniqueGenerationService.exchangeTechniqueBooks(characterId, userId, items);
+  if (result.success) {
+    await safePushCharacterUpdate(userId);
+  }
+  sendResult(res, result);
+}));
+
+// ============================================
+// 生成研修功法草稿
+// POST /api/character/:characterId/technique/research/generate
+// ============================================
+router.post('/:characterId/technique/research/generate', asyncHandler(async (req, res) => {
+  const characterId = parseCharacterIdParam(req);
+  if (characterId === null) {
+    throw new BusinessError('无效的角色ID');
+  }
+  const userId = req.userId!;
+  if (!userId) {
+    throw new BusinessError('登录状态无效，请重新登录', 401);
+  }
+
+  const result = await techniqueGenerationService.generateTechniqueDraft(characterId);
+  if (result.success) {
+    await safePushCharacterUpdate(userId);
+  }
+  sendResult(res, result);
+}));
+
+// ============================================
+// 发布研修草稿（命名）
+// POST /api/character/:characterId/technique/research/generate/:generationId/publish
+// Body: { customName: string }
+// ============================================
+router.post('/:characterId/technique/research/generate/:generationId/publish', asyncHandler(async (req, res) => {
+  const characterId = parseCharacterIdParam(req);
+  if (characterId === null) {
+    throw new BusinessError('无效的角色ID');
+  }
+  const userId = req.userId!;
+  if (!userId) {
+    throw new BusinessError('登录状态无效，请重新登录', 401);
+  }
+
+  const generationId = getSingleParam((req.params as Record<string, string | string[] | undefined>).generationId);
+  if (!generationId) {
+    throw new BusinessError('缺少生成任务ID');
+  }
+  const customName = typeof req.body?.customName === 'string' ? req.body.customName : '';
+  if (!customName.trim()) {
+    throw new BusinessError('缺少自定义名称');
+  }
+
+  const result = await techniqueGenerationService.publishGeneratedTechnique({
+    characterId,
+    userId,
+    generationId,
+    customName,
+  });
+  if (result.success) {
+    await safePushCharacterUpdate(userId);
+  }
   sendResult(res, result);
 }));
 

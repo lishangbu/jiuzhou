@@ -22,6 +22,7 @@ import {
   normalizeMarketCategoryFilter,
   resolveMarketItemCategory,
 } from "./shared/marketItemCategory.js";
+import { resolveGeneratedTechniqueBookDisplay } from "./shared/generatedTechniqueBookView.js";
 import { mailService } from "./mailService.js";
 
 export type MarketSort = "timeDesc" | "priceAsc" | "priceDesc" | "qtyDesc";
@@ -105,6 +106,10 @@ const toListingDto = (
   if (!itemDefId) return null;
   const itemDef = getItemDefinitionById(itemDefId);
   if (!itemDef) return null;
+  const generatedTechniqueBookDisplay = resolveGeneratedTechniqueBookDisplay(
+    itemDefId,
+    row.metadata,
+  );
 
   const category = resolveMarketItemCategory(itemDef);
   const defQualityRank = resolveQualityRankFromName(itemDef.quality, 1);
@@ -161,31 +166,34 @@ const toListingDto = (
     id: Number(row.id),
     itemInstanceId: Number(row.item_instance_id),
     itemDefId,
-    name: String(itemDef.name ?? ""),
+    name: generatedTechniqueBookDisplay?.name ?? String(itemDef.name ?? ""),
     icon:
       itemDef.icon === null || itemDef.icon === undefined
         ? null
         : String(itemDef.icon),
     quality:
       row.instance_quality === null || row.instance_quality === undefined
-        ? itemDef.quality === null || itemDef.quality === undefined
-          ? null
-          : String(itemDef.quality)
+        ? generatedTechniqueBookDisplay?.quality ??
+          (itemDef.quality === null || itemDef.quality === undefined
+            ? null
+            : String(itemDef.quality))
         : String(row.instance_quality),
     category: category || null,
     subCategory:
       itemDef.sub_category === null || itemDef.sub_category === undefined
         ? null
         : String(itemDef.sub_category),
-    description:
-      itemDef.description === null || itemDef.description === undefined
+    description: generatedTechniqueBookDisplay
+      ? generatedTechniqueBookDisplay.description
+      : itemDef.description === null || itemDef.description === undefined
         ? null
         : String(itemDef.description),
-    longDesc:
-      itemDef.long_desc === null || itemDef.long_desc === undefined
+    longDesc: generatedTechniqueBookDisplay
+      ? generatedTechniqueBookDisplay.longDesc
+      : itemDef.long_desc === null || itemDef.long_desc === undefined
         ? null
         : String(itemDef.long_desc),
-    tags: itemDef.tags ?? null,
+    tags: generatedTechniqueBookDisplay?.tags ?? itemDef.tags ?? null,
     effectDefs: itemDef.effect_defs ?? null,
     baseAttrs,
     equipSlot:
@@ -343,6 +351,7 @@ class MarketService {
         ii.socketed_gems,
         ii.identified,
         ii.affixes,
+        ii.metadata,
         c.nickname AS seller_name
       FROM market_listing ml
       JOIN item_instance ii ON ii.id = ml.item_instance_id
@@ -410,6 +419,7 @@ class MarketService {
           ii.socketed_gems,
           ii.identified,
           ii.affixes,
+          ii.metadata,
           c.nickname AS seller_name
         FROM market_listing ml
         LEFT JOIN item_instance ii ON ii.id = ml.item_instance_id

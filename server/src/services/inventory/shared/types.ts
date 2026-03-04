@@ -23,6 +23,7 @@ export interface InventoryItem {
   qty: number;
   quality: string | null;
   quality_rank: number | null;
+  metadata: unknown;
   location: InventoryLocation;
   location_slot: number | null;
   equipped_slot: string | null;

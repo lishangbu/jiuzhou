@@ -21,6 +21,7 @@ import { initAchievementTables } from './achievementTable.js';
 import { ensureMigrationHistoryTable } from './migrationHistoryTable.js';
 import { initIdleTables } from './idleTable.js';
 import { initInsightTables } from './insightTable.js';
+import { initTechniqueGenerationTables } from './techniqueGenerationTable.js';
 import { loadAllSeeds } from '../services/seedService.js';
 
 // 用户表结构定义
@@ -111,6 +112,9 @@ export const initTables = async (): Promise<void> => {
     
   // 初始化功法系统表
   await initTechniqueTables();
+
+  // 初始化 AI 生成功法系统表
+  await initTechniqueGenerationTables();
     
   // 初始化组队系统表
   await initTeamTables();

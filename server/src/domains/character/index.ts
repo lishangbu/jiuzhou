@@ -4,5 +4,5 @@
  */
 export * from '../../services/characterService.js';
 export { characterTechniqueService } from '../../services/characterTechniqueService.js';
+export { techniqueGenerationService } from '../../services/techniqueGenerationService.js';
 export type { CharacterTechnique, CharacterSkillSlot, TechniquePassive, UpgradeCost, ServiceResult } from '../../services/characterTechniqueService.js';
-

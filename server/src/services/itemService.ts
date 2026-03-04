@@ -541,6 +541,50 @@ class ItemService {
         });
         continue;
       }
+
+      if (effectType === 'learn_generated_technique') {
+        const metadata =
+          item.metadata && typeof item.metadata === 'object' && !Array.isArray(item.metadata)
+            ? (item.metadata as Record<string, unknown>)
+            : null;
+        const generatedTechniqueId = metadata ? String(metadata.generatedTechniqueId || '').trim() : '';
+        if (!generatedTechniqueId) {
+          return { success: false, message: '生成功法书数据异常，缺少功法标识' };
+        }
+
+        const techniqueDef =
+          getTechniqueDefinitions().find((entry) => entry.id === generatedTechniqueId && entry.enabled !== false) ?? null;
+        if (!techniqueDef) {
+          return { success: false, message: '目标生成功法不存在或未发布' };
+        }
+
+        const requiredRealm = String(techniqueDef.required_realm || '').trim();
+        if (!isRealmSufficient(charRow.realm, requiredRealm, charRow.sub_realm)) {
+          return { success: false, message: `境界不足，需要达到${requiredRealm}` };
+        }
+
+        const existsRes = await query(
+          'SELECT 1 FROM character_technique WHERE character_id = $1 AND technique_id = $2 LIMIT 1',
+          [characterId, generatedTechniqueId]
+        );
+        if (existsRes.rows.length > 0) {
+          return { success: false, message: '已学习该功法' };
+        }
+
+        await query(
+          `INSERT INTO character_technique (
+            character_id, technique_id, current_layer, obtained_from, obtained_ref_id, acquired_at
+          ) VALUES ($1, $2, 1, $3, $4, NOW())`,
+          [characterId, generatedTechniqueId, `use_item:${itemDefId}`, itemDefId]
+        );
+        hasLearnTechnique = true;
+        lootResults.push({
+          type: 'technique',
+          name: String(techniqueDef.name || generatedTechniqueId),
+          amount: 1,
+        });
+        continue;
+      }
   
       const value = Number(effect.value);
       if (!Number.isFinite(value)) continue;

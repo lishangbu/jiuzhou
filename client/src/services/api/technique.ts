@@ -198,3 +198,105 @@ export const equipCharacterSkill = (
 export const unequipCharacterSkill = (characterId: number, slotIndex: number): Promise<{ success: boolean; message: string }> => {
   return api.post(`/character/${characterId}/skill/unequip`, { slotIndex });
 };
+
+export type TechniqueResearchNameRulesDto = {
+  minLength: number;
+  maxLength: number;
+  patternHint: string;
+  immutableAfterPublish: boolean;
+};
+
+export type TechniqueResearchDraftDto = {
+  generationId: string;
+  id: string;
+  quality: '黄' | '玄' | '地' | '天';
+  type: string;
+  maxLayer: number;
+  description: string;
+  longDesc: string;
+  suggestedName: string;
+  draftExpireAt: string;
+};
+
+export interface TechniqueResearchStatusResponse {
+  success: boolean;
+  message: string;
+  code?: string;
+  data?: {
+    pointsBalance: number;
+    weeklyLimit: number;
+    weeklyUsed: number;
+    weeklyRemaining: number;
+    generationCostByQuality: Record<'黄' | '玄' | '地' | '天', number>;
+    currentDraft: TechniqueResearchDraftDto | null;
+    draftExpireAt: string | null;
+    nameRules: TechniqueResearchNameRulesDto;
+  };
+}
+
+export const getTechniqueResearchStatus = (characterId: number): Promise<TechniqueResearchStatusResponse> => {
+  return api.get(`/character/${characterId}/technique/research/status`);
+};
+
+export interface TechniqueResearchExchangeResponse {
+  success: boolean;
+  message: string;
+  code?: string;
+  data?: {
+    gainedPoints: number;
+    pointsBalance: number;
+  };
+}
+
+export const exchangeTechniqueBooksForResearchPoints = (
+  characterId: number,
+  items: Array<{ itemInstanceId: number; qty: number }>,
+): Promise<TechniqueResearchExchangeResponse> => {
+  return api.post(`/character/${characterId}/technique/research/exchange-books`, { items });
+};
+
+export interface TechniqueResearchGenerateResponse {
+  success: boolean;
+  message: string;
+  code?: string;
+  data?: {
+    generationId: string;
+    draftTechniqueId: string;
+    quality: '黄' | '玄' | '地' | '天';
+    aiSuggestedName: string;
+    preview: {
+      draftTechniqueId: string;
+      aiSuggestedName: string;
+      quality: '黄' | '玄' | '地' | '天';
+      type: string;
+      maxLayer: number;
+      description: string;
+      skillNames: string[];
+    };
+  };
+}
+
+export const generateTechniqueResearchDraft = (
+  characterId: number,
+): Promise<TechniqueResearchGenerateResponse> => {
+  return api.post(`/character/${characterId}/technique/research/generate`);
+};
+
+export interface TechniqueResearchPublishResponse {
+  success: boolean;
+  message: string;
+  code?: string;
+  data?: {
+    techniqueId: string;
+    finalName: string;
+    bookItemInstanceId: number;
+  };
+}
+
+export const publishTechniqueResearchDraft = (
+  characterId: number,
+  generationId: string,
+  customName: string,
+): Promise<TechniqueResearchPublishResponse> => {
+  return api.post(`/character/${characterId}/technique/research/generate/${generationId}/publish`, { customName });
+};

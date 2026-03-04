@@ -116,6 +116,7 @@ export const getInventoryItems = async (
       SELECT
         ii.id, ii.item_def_id, ii.qty, ii.location, ii.location_slot,
         ii.quality, ii.quality_rank,
+        ii.metadata,
         ii.equipped_slot, ii.strengthen_level, ii.refine_level,
         ii.socketed_gems,
         ii.affixes, ii.identified, ii.locked, ii.bind_type, ii.created_at
@@ -206,6 +207,9 @@ export const addItemToInventory = async (
     bindType?: string;
     affixes?: any;
     obtainedFrom?: string;
+    metadata?: Record<string, unknown> | null;
+    quality?: string | null;
+    qualityRank?: number | null;
   } = {},
 ): Promise<{ success: boolean; message: string; itemIds?: number[] }> => {
   if (!Number.isInteger(qty) || qty <= 0) {
@@ -229,6 +233,15 @@ export const addItemToInventory = async (
     const obtainedFrom = normalizeItemInstanceObtainedFrom(
       options.obtainedFrom,
     ).value;
+    const metadataJson = options.metadata ? JSON.stringify(options.metadata) : null;
+    const quality = typeof options.quality === "string" && options.quality.trim().length > 0
+      ? options.quality.trim()
+      : null;
+    const qualityRank =
+      options.qualityRank !== undefined && options.qualityRank !== null
+        ? Math.max(1, Math.floor(Number(options.qualityRank) || 1))
+        : null;
+    const canStackByOption = !metadataJson && !quality && qualityRank === null;
 
     const info = await getInventoryInfo(characterId);
     const capacity = getSlottedCapacity(info, location);
@@ -237,12 +250,15 @@ export const addItemToInventory = async (
     let remainingQty = qty;
 
     let stackRows: Array<{ id: number; qty: number }> = [];
-    if (stack_max > 1) {
+    if (stack_max > 1 && canStackByOption) {
       const stackResult = await query(
         `
           SELECT id, qty FROM item_instance
           WHERE owner_character_id = $1 AND item_def_id = $2
             AND location = $3 AND qty < $4 AND bind_type = $5
+            AND metadata IS NULL
+            AND quality IS NULL
+            AND quality_rank IS NULL
           ORDER BY qty DESC
           FOR UPDATE
         `,
@@ -280,7 +296,7 @@ export const addItemToInventory = async (
       }
     }
 
-    if (stack_max > 1 && stackRows.length > 0) {
+    if (stack_max > 1 && canStackByOption && stackRows.length > 0) {
       for (const row of stackRows) {
         if (remainingQty <= 0) break;
 
@@ -318,8 +334,9 @@ export const addItemToInventory = async (
             `
                 INSERT INTO item_instance (
                   owner_user_id, owner_character_id, item_def_id, qty,
-                  location, location_slot, bind_type, affixes, obtained_from
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                  location, location_slot, bind_type, affixes, obtained_from,
+                  metadata, quality, quality_rank
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12)
             `,
             [
               userId,
@@ -331,6 +348,9 @@ export const addItemToInventory = async (
               actualBindType,
               options.affixes ? JSON.stringify(options.affixes) : null,
               obtainedFrom,
+              metadataJson,
+              quality,
+              qualityRank,
             ],
           );
           if (inserted !== null) {

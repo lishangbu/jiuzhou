@@ -1,6 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import {
+  getGeneratedSkillDefinitions,
+  getGeneratedTechniqueDefinitions,
+  getGeneratedTechniqueLayerDefinitions,
+  reloadGeneratedTechniqueConfigStore,
+} from './generatedTechniqueConfigStore.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1355,14 +1361,18 @@ export const getDialogueDefinitions = (): DialogueDefConfig[] => {
 export const getTechniqueDefinitions = (): TechniqueDefConfig[] => {
   if (techniqueDefCache !== undefined) return techniqueDefCache ?? [];
   const file = readJsonFile<TechniqueDefFile>('technique_def.json');
-  techniqueDefCache = Array.isArray(file?.techniques) ? file.techniques : [];
+  const staticDefs = Array.isArray(file?.techniques) ? file.techniques : [];
+  const generatedDefs = getGeneratedTechniqueDefinitions();
+  techniqueDefCache = [...staticDefs, ...generatedDefs];
   return techniqueDefCache;
 };
 
 export const getSkillDefinitions = (): SkillDefConfig[] => {
   if (skillDefCache !== undefined) return skillDefCache ?? [];
   const file = readJsonFile<SkillDefFile>('skill_def.json');
-  skillDefCache = Array.isArray(file?.skills) ? file.skills : [];
+  const staticDefs = Array.isArray(file?.skills) ? file.skills : [];
+  const generatedDefs = getGeneratedSkillDefinitions();
+  skillDefCache = [...staticDefs, ...generatedDefs];
   return skillDefCache;
 };
 
@@ -1404,8 +1414,24 @@ export const getItemSetDefinitions = (): ItemSetDefConfig[] => {
 export const getTechniqueLayerDefinitions = (): TechniqueLayerConfig[] => {
   if (techniqueLayerCache !== undefined) return techniqueLayerCache ?? [];
   const file = readJsonFile<TechniqueLayerFile>('technique_layer.json');
-  techniqueLayerCache = Array.isArray(file?.layers) ? file.layers : [];
+  const staticDefs = Array.isArray(file?.layers) ? file.layers : [];
+  const generatedDefs = getGeneratedTechniqueLayerDefinitions();
+  techniqueLayerCache = [...staticDefs, ...generatedDefs];
   return techniqueLayerCache;
+};
+
+/**
+ * 刷新生成功法缓存并清空功法相关静态快照。
+ *
+ * 注意：
+ * - getTechniqueDefinitions / getSkillDefinitions / getTechniqueLayerDefinitions 是带缓存的同步读取；
+ * - 发布新功法后需要主动调用本函数，确保后续读取可见。
+ */
+export const refreshGeneratedTechniqueSnapshots = async (): Promise<void> => {
+  await reloadGeneratedTechniqueConfigStore();
+  techniqueDefCache = undefined;
+  skillDefCache = undefined;
+  techniqueLayerCache = undefined;
 };
 
 /**
