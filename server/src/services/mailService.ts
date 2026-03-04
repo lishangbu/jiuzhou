@@ -15,11 +15,11 @@
  * - 使用 @Transactional 装饰器替代手动事务管理
  * - 辅助函数改为私有方法，提升内聚性
  */
-import { query, getTransactionClient } from '../config/database.js';
+import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
 import { itemService } from './itemService.js';
-import { getInventoryInfoWithClient, moveItemInstanceToBagWithStacking } from './inventory/index.js';
-import { lockCharacterInventoryMutexTx } from './inventoryMutex.js';
+import { getInventoryInfo, moveItemInstanceToBagWithStacking } from './inventory/index.js';
+import { lockCharacterInventoryMutex } from './inventoryMutex.js';
 import { recordCollectItemEvent } from './taskService.js';
 import { getItemDefinitionsByIds } from './staticConfigLoader.js';
 
@@ -665,19 +665,14 @@ class MailService {
     mailId: number
   ): Promise<{ success: boolean; message: string; rewards?: { silver?: number; spiritStones?: number; itemIds?: number[] } }> {
     const collectCounts = new Map<string, number>();
-    const client = getTransactionClient();
-
-    if (!client) {
-      throw new Error('事务上下文不可用');
-    }
 
     // 1. 先获取角色背包互斥锁，统一“背包锁 → 邮件行锁”的顺序，避免并发领取形成锁等待链。
-    await lockCharacterInventoryMutexTx(client, characterId);
+    await lockCharacterInventoryMutex(characterId);
 
     // 2. 获取邮件并锁定（NOWAIT 避免锁等待拖到 statement_timeout）。
     let mailResult: { rows: ClaimMailRow[] };
     try {
-      const lockedMailResult = await client.query<ClaimMailRow>(`
+      const lockedMailResult = await query<ClaimMailRow>(`
         SELECT id, attach_silver, attach_spirit_stones, attach_items, attach_instance_ids, claimed_at, expire_at
         FROM mail
         WHERE id = $1
@@ -726,7 +721,7 @@ class MailService {
     // 6. 检查背包空间（如果有物品附件）
     if (hasItems) {
       if (attachInstanceIds.length > 0) {
-        const lockedInstanceResult = await client.query<ClaimInstanceRow>(
+        const lockedInstanceResult = await query<ClaimInstanceRow>(
           `
             SELECT id, item_def_id, qty, bind_type
             FROM item_instance
@@ -778,7 +773,7 @@ class MailService {
         requiredSlots = await this.estimateRequiredSlots(attachItems);
       }
 
-      const inventoryInfo = await getInventoryInfoWithClient(characterId, client);
+      const inventoryInfo = await getInventoryInfo(characterId);
       freeSlots = inventoryInfo.bag_capacity - inventoryInfo.bag_used;
       if (freeSlots < requiredSlots) {
         return { success: false, message: `背包空间不足，需要${requiredSlots}格，当前剩余${freeSlots}格` };
@@ -837,8 +832,7 @@ class MailService {
               location: 'bag',
               bindType: attachItem.options?.bindType,
               obtainedFrom: 'mail',
-              equipOptions: attachItem.options?.equipOptions,
-              dbClient: client
+              equipOptions: attachItem.options?.equipOptions
             }
           );
 

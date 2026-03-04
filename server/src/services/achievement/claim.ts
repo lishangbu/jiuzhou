@@ -115,7 +115,6 @@ class AchievementClaimService {
         const qty = Math.max(1, asFiniteNonNegativeInt(row.qty, 1));
 
         const created = await itemService.createItem(userId, characterId, itemDefId, qty, {
-          dbClient: client,
           obtainedFrom,
         });
         if (!created.success) {

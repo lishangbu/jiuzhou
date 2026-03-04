@@ -8,7 +8,7 @@
  * 数据流：遍历 rewards 各字段 → 执行对应 DB 更新/物品创建 → 收集结果。
  *
  * 边界条件：
- * 1) 调用方需保证事务上下文（getTransactionClient），物品创建需要传 dbClient。
+ * 1) 调用方需保证事务上下文（getTransactionClient），物品创建会自动复用当前事务。
  * 2) 任一物品创建失败会抛异常，由事务回滚保证一致性。
  */
 import { query, getTransactionClient } from '../../config/database.js';
@@ -60,7 +60,6 @@ export const grantSectionRewards = async (
     const itemName = asString(itemDef?.name);
     const itemIcon = asString(itemDef?.icon);
     const result = await itemService.createItem(userId, characterId, itemDefId, quantity, {
-      dbClient: client,
       location: 'bag',
       obtainedFrom: 'main_quest',
     });

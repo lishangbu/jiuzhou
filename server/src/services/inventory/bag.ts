@@ -35,6 +35,7 @@ import {
 import { lockCharacterInventoryMutex } from "../inventoryMutex.js";
 import { resolveQualityRankFromName } from "../shared/itemQuality.js";
 import { normalizeItemInstanceObtainedFrom } from "../shared/itemInstanceSource.js";
+import { tryInsertItemInstanceWithSlot } from "../shared/itemInstanceSlotInsert.js";
 import type {
   InventoryInfo,
   InventoryItem,
@@ -207,11 +208,6 @@ export const addItemToInventory = async (
     obtainedFrom?: string;
   } = {},
 ): Promise<{ success: boolean; message: string; itemIds?: number[] }> => {
-  const isUniqueViolation = (error: unknown): boolean => {
-    if (!error || typeof error !== "object") return false;
-    return (error as { code?: unknown }).code === "23505";
-  };
-
   if (!Number.isInteger(qty) || qty <= 0) {
     return { success: false, message: "数量参数错误" };
   }
@@ -318,32 +314,28 @@ export const addItemToInventory = async (
         }
 
         for (const slot of emptySlots) {
-          try {
-            const insertResult = await query(
-              `
+          const inserted = await tryInsertItemInstanceWithSlot(
+            `
                 INSERT INTO item_instance (
                   owner_user_id, owner_character_id, item_def_id, qty,
                   location, location_slot, bind_type, affixes, obtained_from
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                RETURNING id
-              `,
-              [
-                userId,
-                characterId,
-                itemDefId,
-                addQty,
-                location,
-                slot,
-                actualBindType,
-                options.affixes ? JSON.stringify(options.affixes) : null,
-                obtainedFrom,
-              ],
-            );
-            insertedId = Number(insertResult.rows[0]?.id);
+            `,
+            [
+              userId,
+              characterId,
+              itemDefId,
+              addQty,
+              location,
+              slot,
+              actualBindType,
+              options.affixes ? JSON.stringify(options.affixes) : null,
+              obtainedFrom,
+            ],
+          );
+          if (inserted !== null) {
+            insertedId = inserted;
             break;
-          } catch (error) {
-            if (isUniqueViolation(error)) continue;
-            throw error;
           }
         }
       }
@@ -1083,7 +1075,7 @@ export const sortInventory = async (
   const capacity = getSlottedCapacity(info, location);
   const itemResult = await query(
     `
-      SELECT id, item_def_id, qty, quality_rank
+      SELECT id, item_def_id, qty, quality_rank, location_slot
       FROM item_instance
       WHERE owner_character_id = $1 AND location = $2
       FOR UPDATE
@@ -1096,7 +1088,17 @@ export const sortInventory = async (
     item_def_id: string;
     qty: number;
     quality_rank: number | null;
+    location_slot: number | null;
   }>;
+  let minExistingSlot = 0;
+  for (const row of rows) {
+    const slot = Number(row.location_slot);
+    if (Number.isInteger(slot) && slot < minExistingSlot) {
+      minExistingSlot = slot;
+    }
+  }
+  const tempSlotStart = minExistingSlot - rows.length - 1;
+
   const defMap = getItemDefinitionsByIds(
     rows.map((row) => String(row.item_def_id || "").trim()),
   );
@@ -1145,7 +1147,7 @@ export const sortInventory = async (
 
   for (let index = 0; index < sortableRows.length; index += 1) {
     const row = sortableRows[index];
-    const tempSlot = index < capacity ? -1 - index : null;
+    const tempSlot = tempSlotStart + index;
     await query(
       `
         UPDATE item_instance

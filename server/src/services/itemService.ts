@@ -9,19 +9,17 @@
  *
  * 边界条件：
  * 1) useItem 使用 @Transactional 保证物品使用与资源更新的原子性
- * 2) createItem 支持在事务/非事务上下文中调用，通过 dbClient 参数判断
+ * 2) createItem 支持在事务/非事务上下文中调用，内部统一走 query 自动复用事务上下文
  */
-import type { PoolClient } from 'pg';
-import { query, getTransactionClient } from '../config/database.js';
+import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
 import { equipmentService, generateEquipment, type GenerateOptions, type GeneratedEquipment } from './equipmentService.js';
 import {
   addItemToInventory,
-  addItemToInventoryTx,
-  expandInventoryWithClient,
+  expandInventory,
   SlottedInventoryLocation,
 } from './inventory/index.js';
-import { lockCharacterInventoryMutexTx } from './inventoryMutex.js';
+import { lockCharacterInventoryMutex } from './inventoryMutex.js';
 import { buildEquipmentDisplayBaseAttrs } from './equipmentGrowthRules.js';
 import { getRealmRankZeroBased } from './shared/realmRules.js';
 import { resolveQualityRankFromName } from './shared/itemQuality.js';
@@ -52,7 +50,6 @@ export interface CreateItemOptions {
   obtainedFrom?: string;
   // 装备专用选项
   equipOptions?: GenerateOptions;
-  dbClient?: PoolClient;
 }
 
 // 创建物品结果
@@ -128,17 +125,11 @@ const createEquipmentItem = async (
       return { success: false, message: '装备生成失败' };
     }
 
-    const result = options.dbClient
-      ? await equipmentService.createEquipmentInstanceTx(userId, characterId, generated, {
-          location: options.location || 'bag',
-          bindType: options.bindType,
-          obtainedFrom: options.obtainedFrom
-        })
-      : await equipmentService.createEquipmentInstance(userId, characterId, generated, {
-          location: options.location || 'bag',
-          bindType: options.bindType,
-          obtainedFrom: options.obtainedFrom
-        });
+    const result = await equipmentService.createEquipmentInstance(userId, characterId, generated, {
+      location: options.location || 'bag',
+      bindType: options.bindType,
+      obtainedFrom: options.obtainedFrom
+    });
 
     if (!result.success) {
       return { success: false, message: result.message };
@@ -166,17 +157,11 @@ const createNormalItem = async (
   qty: number,
   options: CreateItemOptions
 ): Promise<CreateItemResult> => {
-  const result = options.dbClient
-    ? await addItemToInventoryTx(options.dbClient, characterId, userId, itemDefId, qty, {
-        location: options.location || 'bag',
-        bindType: options.bindType,
-        obtainedFrom: options.obtainedFrom
-      })
-    : await addItemToInventory(characterId, userId, itemDefId, qty, {
-        location: options.location || 'bag',
-        bindType: options.bindType,
-        obtainedFrom: options.obtainedFrom
-      });
+  const result = await addItemToInventory(characterId, userId, itemDefId, qty, {
+    location: options.location || 'bag',
+    bindType: options.bindType,
+    obtainedFrom: options.obtainedFrom
+  });
 
   return {
     success: result.success,
@@ -269,11 +254,7 @@ class ItemService {
     instanceId: number,
     qty: number = 1
   ): Promise<{ success: boolean; message: string; effects?: any[]; character?: any; lootResults?: { type: string; name?: string; amount: number }[] }> {
-    const client = getTransactionClient();
-    if (!client) {
-      throw new Error('事务上下文不存在');
-    }
-    await lockCharacterInventoryMutexTx(client, characterId);
+    await lockCharacterInventoryMutex(characterId);
 
     const charResult = await query(
       'SELECT id, realm, sub_realm FROM characters WHERE id = $1 FOR UPDATE',
@@ -599,7 +580,7 @@ class ItemService {
     }
   
     if (hasExpandEffect) {
-      const expandResult = await expandInventoryWithClient(client, characterId, 'bag', totalExpandSize);
+      const expandResult = await expandInventory(characterId, 'bag', totalExpandSize);
       if (!expandResult.success) {
         return { success: false, message: expandResult.message };
       }
@@ -631,7 +612,7 @@ class ItemService {
     );
   
     for (const lootItem of lootItemsToAdd) {
-      const addRes = await addItemToInventoryTx(client, characterId, userId, lootItem.itemDefId, lootItem.qty, {
+      const addRes = await addItemToInventory(characterId, userId, lootItem.itemDefId, lootItem.qty, {
         location: 'bag',
         obtainedFrom: `use_item:${itemDef.id}`
       });

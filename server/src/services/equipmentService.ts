@@ -10,8 +10,8 @@
  */
 import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
-import { findEmptySlotsWithClient } from './inventory/index.js';
-import { lockCharacterInventoryMutexTx } from './inventoryMutex.js';
+import { findEmptySlots } from './inventory/index.js';
+import { lockCharacterInventoryMutex } from './inventoryMutex.js';
 import {
   QUALITY_MULTIPLIER_BY_RANK,
   QUALITY_ORDER,
@@ -39,6 +39,7 @@ import {
   toRatingAttrKey,
 } from './shared/affixRating.js';
 import { normalizeItemInstanceObtainedFrom } from './shared/itemInstanceSource.js';
+import { tryInsertItemInstanceWithSlot } from './shared/itemInstanceSlotInsert.js';
 
 // ============================================
 // 类型定义
@@ -706,7 +707,7 @@ export const generateEquipment = async (
  *
  * 边界条件：
  * 1) createEquipmentInstance 使用 @Transactional 保证背包槽位分配与写入的原子性
- * 2) createEquipmentInstanceTx 为事务内调用入口，被其他 service 在已有事务中复用
+ * 2) createEquipmentInstanceTx 仅承载创建逻辑本体，统一通过 query 自动复用事务上下文
  */
 class EquipmentService {
   // 创建装备实例（自动开启事务）
@@ -739,33 +740,27 @@ class EquipmentService {
       obtainedFrom?: string;
     } = {}
   ): Promise<{ success: boolean; instanceId?: number; message: string }> {
-    const isUniqueViolation = (error: unknown): boolean => {
-      if (!error || typeof error !== 'object') return false;
-      return (error as { code?: unknown }).code === '23505';
-    };
-
     const location = options.location || 'bag';
     const hasExplicitSlot = options.locationSlot !== undefined && options.locationSlot !== null;
     let locationSlot = options.locationSlot ?? null;
     const obtainedFrom = normalizeItemInstanceObtainedFrom(options.obtainedFrom).value;
 
-    await lockCharacterInventoryMutexTx(null, characterId);
+    await lockCharacterInventoryMutex(characterId);
 
     let attempt = 0;
     while (attempt < 6) {
       attempt += 1;
 
       if ((location === 'bag' || location === 'warehouse') && (locationSlot === null || locationSlot === undefined)) {
-        const slots = await findEmptySlotsWithClient(characterId, location, 6, null);
+        const slots = await findEmptySlots(characterId, location, 6);
         if (slots.length === 0) {
           return { success: false, message: '背包已满' };
         }
         locationSlot = slots[0];
       }
 
-      try {
-        const result = await query(
-          `
+      const insertedId = await tryInsertItemInstanceWithSlot(
+        `
             INSERT INTO item_instance (
               owner_user_id, owner_character_id, item_def_id, qty,
               quality, quality_rank,
@@ -774,35 +769,34 @@ class EquipmentService {
               affix_gen_version,
               obtained_from
             ) VALUES ($1, $2, $3, 1, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-            RETURNING id
-          `,
-          [
-            userId,
-            characterId,
-            generated.itemDefId,
-            generated.quality,
-            generated.qualityRank,
-            location,
-            locationSlot,
-            options.bindType || 'none',
-            generated.seed,
-            JSON.stringify(generated.affixes),
-            options.identified !== false,
-            generated.affixGenVersion || AFFIX_GEN_VERSION,
-            obtainedFrom,
-          ]
-        );
+        `,
+        [
+          userId,
+          characterId,
+          generated.itemDefId,
+          generated.quality,
+          generated.qualityRank,
+          location,
+          locationSlot,
+          options.bindType || 'none',
+          generated.seed,
+          JSON.stringify(generated.affixes),
+          options.identified !== false,
+          generated.affixGenVersion || AFFIX_GEN_VERSION,
+          obtainedFrom,
+        ]
+      );
 
+      if (insertedId !== null) {
         return {
           success: true,
-          instanceId: result.rows[0].id,
+          instanceId: insertedId,
           message: '装备创建成功',
         };
-      } catch (error) {
-        if (!isUniqueViolation(error)) throw error;
-        if (hasExplicitSlot) return { success: false, message: '目标格子已被占用' };
-        locationSlot = null;
       }
+
+      if (hasExplicitSlot) return { success: false, message: '目标格子已被占用' };
+      locationSlot = null;
     }
 
     return {

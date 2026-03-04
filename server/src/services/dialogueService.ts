@@ -184,7 +184,6 @@ export const applyDialogueEffectsTx = async (
         const qty = Number(params.quantity) || 1;
         if (itemDefId && qty > 0) {
           const result = await itemService.createItem(userId, characterId, itemDefId, qty, {
-            dbClient: client,
             location: 'bag',
             obtainedFrom: 'dialogue',
           });
@@ -215,4 +214,3 @@ export const applyDialogueEffectsTx = async (
   }
   return { success: true, message: 'ok', results };
 };
-
