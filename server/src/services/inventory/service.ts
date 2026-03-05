@@ -126,6 +126,7 @@ class InventoryService {
           silverCost: number;
           spiritStoneCost: number;
         } | null;
+        previewBaseAttrs: Record<string, number>;
       };
       refine: {
         currentLevel: number;
@@ -139,6 +140,7 @@ class InventoryService {
           silverCost: number;
           spiritStoneCost: number;
         } | null;
+        previewBaseAttrs: Record<string, number>;
       };
     };
   }> {

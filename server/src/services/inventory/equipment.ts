@@ -29,6 +29,7 @@ import {
   ENHANCE_MAX_LEVEL,
   REFINE_MAX_LEVEL,
   buildEnhanceCostPlan,
+  buildEquipmentDisplayBaseAttrs,
   buildRefineCostPlan,
   getEnhanceFailResultLevel,
   getEnhanceSuccessRatePercent,
@@ -58,6 +59,7 @@ import {
   getRealmRankOneBasedForEquipment,
   getRealmRankOneBasedStrict,
 } from "../shared/realmRules.js";
+import { resolveQualityRankFromName } from "../shared/itemQuality.js";
 import { lockCharacterInventoryMutex } from "../inventoryMutex.js";
 import {
   getEquipmentAttrDeltaByInstanceId,
@@ -655,6 +657,7 @@ export const getEquipmentGrowthCostPreview = async (
         silverCost: number;
         spiritStoneCost: number;
       } | null;
+      previewBaseAttrs: Record<string, number>;
     };
     refine: {
       currentLevel: number;
@@ -668,6 +671,7 @@ export const getEquipmentGrowthCostPreview = async (
         silverCost: number;
         spiritStoneCost: number;
       } | null;
+      previewBaseAttrs: Record<string, number>;
     };
   };
 }> => {
@@ -710,6 +714,54 @@ export const getEquipmentGrowthCostPreview = async (
     ? null
     : buildRefineCostPlan(refineTargetLevel, equipReqRealmRank);
 
+  const itemRowResult = await query(
+    `
+      SELECT ii.item_def_id, ii.quality, ii.quality_rank, ii.socketed_gems
+      FROM item_instance ii
+      WHERE ii.id = $1 AND ii.owner_character_id = $2
+      LIMIT 1
+    `,
+    [itemInstanceId, characterId],
+  );
+  if (itemRowResult.rows.length <= 0) {
+    return { success: false, message: "物品不存在" };
+  }
+  const itemRow = itemRowResult.rows[0] as {
+    item_def_id: string;
+    quality: string | null;
+    quality_rank: number | null;
+    socketed_gems: unknown;
+  };
+  const itemDef = getStaticItemDef(itemRow.item_def_id);
+  if (!itemDef || itemDef.category !== "equipment") {
+    return { success: false, message: "该物品不可强化" };
+  }
+  const defQualityRank = resolveQualityRankFromName(itemDef.quality, 1);
+  const resolvedQualityRank = Math.max(
+    1,
+    Math.floor(
+      Number(itemRow.quality_rank) || resolveQualityRankFromName(itemRow.quality, defQualityRank),
+    ),
+  );
+  const baseAttrsRaw = itemDef.base_attrs ?? {};
+
+  const enhancePreviewBaseAttrs = buildEquipmentDisplayBaseAttrs({
+    baseAttrsRaw,
+    defQualityRankRaw: defQualityRank,
+    resolvedQualityRankRaw: resolvedQualityRank,
+    strengthenLevelRaw: enhanceTargetLevel,
+    refineLevelRaw: refineCurrentLevel,
+    socketedGemsRaw: itemRow.socketed_gems,
+  });
+  const refinePreviewBaseAttrs = buildEquipmentDisplayBaseAttrs({
+    baseAttrsRaw,
+    defQualityRankRaw: defQualityRank,
+    resolvedQualityRankRaw: resolvedQualityRank,
+    strengthenLevelRaw: enhanceCurrentLevel,
+    refineLevelRaw: refineTargetLevel,
+    socketedGemsRaw: itemRow.socketed_gems,
+  });
+
   return {
     success: true,
     message: "ok",
@@ -723,6 +775,7 @@ export const getEquipmentGrowthCostPreview = async (
           : getEnhanceSuccessRatePercent(enhanceTargetLevel),
         downgradeOnFail: enhanceTargetLevel >= 8,
         costs: enhanceCostPlan,
+        previewBaseAttrs: enhancePreviewBaseAttrs,
       },
       refine: {
         currentLevel: refineCurrentLevel,
@@ -733,6 +786,7 @@ export const getEquipmentGrowthCostPreview = async (
           : getRefineSuccessRatePercent(refineTargetLevel),
         downgradeOnFail: refineTargetLevel >= 6,
         costs: refineCostPlan,
+        previewBaseAttrs: refinePreviewBaseAttrs,
       },
     },
   };

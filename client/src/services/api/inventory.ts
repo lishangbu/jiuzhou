@@ -220,6 +220,7 @@ export interface InventoryGrowthCostPreviewResponse {
         silverCost: number;
         spiritStoneCost: number;
       } | null;
+      previewBaseAttrs: Record<string, number>;
     };
     refine: {
       currentLevel: number;
@@ -233,6 +234,7 @@ export interface InventoryGrowthCostPreviewResponse {
         silverCost: number;
         spiritStoneCost: number;
       } | null;
+      previewBaseAttrs: Record<string, number>;
     };
   };
 }

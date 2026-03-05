@@ -2,8 +2,8 @@
  * 装备成长预览 Hook（强化/精炼）
  *
  * 作用（做什么 / 不做什么）：
- * - 做：统一从后端获取装备强化/精炼下一次成长的消耗与成功率，并组装成 UI 可直接使用的状态。
- * - 不做：不发起强化/精炼实际操作，不处理洗炼/镶嵌，不做本地常量成本兜底。
+ * - 做：统一从后端获取装备强化/精炼下一次成长的消耗、成功率、属性预览，并组装成 UI 可直接使用的状态。
+ * - 不做：不发起强化/精炼实际操作，不处理洗炼/镶嵌，不做本地成本/属性公式兜底。
  *
  * 输入/输出：
  * - 输入：当前选中装备 `item`、背包物品列表 `allItems`、是否启用预览 `enabled`。
@@ -14,14 +14,14 @@
  *
  * 关键边界条件与坑点：
  * 1) `item` 不是装备或未启用时，必须清空预览状态，避免展示上一个装备的旧数据。
- * 2) 接口失败时返回 `null` 状态，不在前端回退到本地常量公式，确保成本规则单一来源在后端。
+ * 2) 接口失败时返回 `null` 状态，不在前端回退到本地公式，确保成长规则单一来源在后端。
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
   getInventoryGrowthCostPreview,
   type InventoryGrowthCostPreviewResponse,
 } from '../../../../services/api';
-import { buildGrowthPreviewAttrs, type BagItem } from './bagShared';
+import { type BagItem } from './bagShared';
 
 type GrowthCostPreviewData = NonNullable<InventoryGrowthCostPreviewResponse['data']>;
 type GrowthMode = 'enhance' | 'refine';
@@ -69,7 +69,6 @@ const buildMaterialCountByDefId = (allItems: BagItem[]): Record<string, number> 
 
 const buildStageState = (
   mode: GrowthMode,
-  item: BagItem,
   previewData: GrowthCostPreviewData,
   materialCountByDefId: Record<string, number>,
   materialNameByDefId: Record<string, string>,
@@ -85,22 +84,6 @@ const buildStageState = (
       ? ''
       : materialNameByDefId[materialItemDefId] ?? materialItemDefId;
   const owned = materialItemDefId === null ? 0 : (materialCountByDefId[materialItemDefId] ?? 0);
-  const previewBaseAttrs = buildGrowthPreviewAttrs(
-    {
-      baseAttrsRaw: item.equip?.baseAttrsRaw ?? {},
-      defQualityRankRaw: item.equip?.defQualityRank ?? 1,
-      resolvedQualityRankRaw: item.equip?.resolvedQualityRank ?? 1,
-      strengthenLevelRaw:
-        mode === 'enhance'
-          ? source.currentLevel
-          : (item.equip?.strengthenLevel ?? 0),
-      refineLevelRaw:
-        mode === 'refine'
-          ? source.currentLevel
-          : (item.equip?.refineLevel ?? 0),
-    },
-    mode,
-  );
   return {
     curLv: source.currentLevel,
     targetLv: source.targetLevel,
@@ -113,7 +96,7 @@ const buildStageState = (
     spiritStoneCost,
     successRate: source.successRate,
     downgradeOnFail: source.downgradeOnFail,
-    previewBaseAttrs,
+    previewBaseAttrs: source.previewBaseAttrs,
   };
 };
 
@@ -174,7 +157,6 @@ export const useEquipmentGrowthPreview = ({
     }
     return buildStageState(
       'enhance',
-      item,
       previewData,
       materialCountByDefId,
       materialNameByDefId,
@@ -187,7 +169,6 @@ export const useEquipmentGrowthPreview = ({
     }
     return buildStageState(
       'refine',
-      item,
       previewData,
       materialCountByDefId,
       materialNameByDefId,
