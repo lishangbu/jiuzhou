@@ -47,7 +47,7 @@ const ATTR_LABEL: Record<string, string> = {
   kongzhi_kangxing: '控制抗性',
 };
 
-const BUFF_ID_NAME: Record<string, string> = {
+const BUFF_KEY_NAME: Record<string, string> = {
   'debuff-burn': '灼烧',
   'buff-hot': '持续治疗',
   'buff-dodge-next': '下一次闪避',
@@ -83,6 +83,14 @@ const normalizeAttrKey = (raw: string): string => {
   if (lowered === 'max-lingqi') return 'max_lingqi';
   if (lowered === 'kongzhi-kangxing') return 'kongzhi_kangxing';
   return lowered.replace(/-/g, '_');
+};
+
+const normalizeBuffKey = (raw: unknown): string => toText(raw).toLowerCase();
+
+const normalizeBuffApplyType = (raw: unknown): 'flat' | 'percent' | '' => {
+  const applyType = toText(raw).toLowerCase();
+  if (applyType === 'flat' || applyType === 'percent') return applyType;
+  return '';
 };
 
 const toNumber = (value: unknown): number | null => {
@@ -185,21 +193,39 @@ const formatShieldEffect = (effect: Record<string, unknown>): string => {
   return text;
 };
 
-const formatBuffName = (buffIdRaw: string, effectType: 'buff' | 'debuff'): { name: string; attr: string } => {
-  if (!buffIdRaw) return { name: effectType === 'buff' ? '增益效果' : '减益效果', attr: '' };
-  if (BUFF_ID_NAME[buffIdRaw]) return { name: BUFF_ID_NAME[buffIdRaw], attr: '' };
+const resolveBuffAttr = (effect: Record<string, unknown>, buffKey: string): string => {
+  const attrKey = normalizeAttrKey(toText(effect.attrKey));
+  if (attrKey) return attrKey;
 
-  const matched = /^(buff|debuff)-([a-z0-9-]+)-(up|down)$/.exec(buffIdRaw);
-  if (!matched) return { name: buffIdRaw, attr: '' };
-
-  const attr = normalizeAttrKey(matched[2]);
-  const attrText = ATTR_LABEL[attr] || attr;
-  const trend = matched[3] === 'up' ? '提升' : '降低';
-  return { name: `${attrText}${trend}`, attr };
+  const matched = /^(?:buff|debuff)-([a-z0-9-]+)-(?:up|down)$/.exec(buffKey);
+  if (!matched) return '';
+  return normalizeAttrKey(matched[1]);
 };
 
-const formatBuffValue = (effect: Record<string, unknown>, attr: string): string => {
-  const valueType = toText(effect.valueType) || 'flat';
+const formatBuffName = (
+  effect: Record<string, unknown>,
+  effectType: 'buff' | 'debuff',
+): { name: string; attr: string; buffKey: string } => {
+  const buffKey = normalizeBuffKey(effect.buffKey);
+  const attr = resolveBuffAttr(effect, buffKey);
+
+  if (buffKey && BUFF_KEY_NAME[buffKey]) return { name: BUFF_KEY_NAME[buffKey], attr, buffKey };
+  if (!buffKey && !attr) {
+    return { name: effectType === 'buff' ? '增益效果' : '减益效果', attr: '', buffKey: '' };
+  }
+  if (!attr) return { name: buffKey || (effectType === 'buff' ? '增益效果' : '减益效果'), attr: '', buffKey };
+
+  const attrText = ATTR_LABEL[attr] || attr;
+  const trend = effectType === 'buff' ? '提升' : '降低';
+  return { name: `${attrText}${trend}`, attr, buffKey };
+};
+
+const formatBuffValue = (
+  effect: Record<string, unknown>,
+  attr: string,
+  applyType: 'flat' | 'percent' | '',
+): string => {
+  const valueType = toText(effect.valueType).toLowerCase();
   const raw = toNumber(effect.value);
 
   // combined: 固定基础值 + 属性加成（如：50 + 法攻*0.5）
@@ -217,8 +243,13 @@ const formatBuffValue = (effect: Record<string, unknown>, attr: string): string 
     return parts.length > 0 ? parts.join(' + ') : '';
   }
 
+  if (valueType === 'scale' || valueType === 'percent') {
+    return formatScaledValue(effect, 'shield');
+  }
+
   if (raw === null || raw <= 0) return '';
-  if (attr && PERCENT_BUFF_ATTR_SET.has(attr)) return `幅度 ${formatPercent(raw)}%`;
+  if (applyType === 'percent') return `幅度 ${formatPercent(raw)}%`;
+  if (attr && PERCENT_BUFF_ATTR_SET.has(attr) && valueType !== 'flat') return `幅度 ${formatPercent(raw)}%`;
   return `数值 ${Math.floor(raw)}`;
 };
 
@@ -230,20 +261,20 @@ const formatBuffValue = (effect: Record<string, unknown>, attr: string): string 
  *
  * 输入：
  * - effect: 当前效果对象（由后端技能数据透传）
- * - buffId: Buff 标识
+ * - buffKey: Buff 标识
  *
  * 输出：
  * - 可拼接在括号内的文案片段；无额外规则时返回空字符串
  *
  * 数据流：
- * - effect/buffId -> 匹配对应规则 -> 读取后端字段 -> 产出文案片段
+ * - effect/buffKey -> 匹配对应规则 -> 读取后端字段 -> 产出文案片段
  *
  * 边界条件与坑点：
- * 1) 未识别的 buffId 必须返回空字符串，避免误导性展示。
+ * 1) 未识别的 buffKey 必须返回空字符串，避免误导性展示。
  * 2) 本函数只负责“额外规则文案”，不处理基础 value 格式化，职责与 formatBuffValue 严格分离。
  */
-const formatBuffExtraValue = (effect: Record<string, unknown>, buffId: string): string => {
-  if (buffId === 'debuff-burn') {
+const formatBuffExtraValue = (effect: Record<string, unknown>, buffKey: string): string => {
+  if (buffKey === 'debuff-burn') {
     const burnBonusRate = toNumber(effect.bonusTargetMaxQixueRate);
     if (burnBonusRate !== null && burnBonusRate > 0) {
       return `目标最大气血 ${formatPercent(burnBonusRate)}%`;
@@ -261,7 +292,7 @@ const formatBuffExtraValue = (effect: Record<string, unknown>, buffId: string): 
  *
  * 输入：
  * - effect: 当前效果对象
- * - buffId: Buff 标识
+ * - buffKey: Buff 标识
  * - attr: 解析出的属性标识（用于基础值格式化）
  *
  * 输出：
@@ -269,23 +300,28 @@ const formatBuffExtraValue = (effect: Record<string, unknown>, buffId: string): 
  *
  * 数据流：
  * - effect/attr -> formatBuffValue -> 基础文案
- * - effect/buffId -> formatBuffExtraValue -> 额外文案
+ * - effect/buffKey -> formatBuffExtraValue -> 额外文案
  * - 两段文案按“ + ”连接为最终文案
  *
  * 边界条件与坑点：
  * 1) 任一片段为空时会被过滤，避免出现多余连接符。
  * 2) 保持“ + ”连接语义，明确表示同一效果由多段伤害规则共同组成。
  */
-const formatBuffDetail = (effect: Record<string, unknown>, buffId: string, attr: string): string => {
-  const baseValueText = formatBuffValue(effect, attr);
-  const extraValueText = formatBuffExtraValue(effect, buffId);
+const formatBuffDetail = (
+  effect: Record<string, unknown>,
+  buffKey: string,
+  attr: string,
+  applyType: 'flat' | 'percent' | '',
+): string => {
+  const baseValueText = formatBuffValue(effect, attr, applyType);
+  const extraValueText = formatBuffExtraValue(effect, buffKey);
   return [baseValueText, extraValueText].filter((part) => part.length > 0).join(' + ');
 };
 
 const formatBuffEffect = (effect: Record<string, unknown>, effectType: 'buff' | 'debuff'): string => {
-  const buffId = toText(effect.buffId);
-  const { name, attr } = formatBuffName(buffId, effectType);
-  const valueText = formatBuffDetail(effect, buffId, attr);
+  const applyType = normalizeBuffApplyType(effect.applyType);
+  const { name, attr, buffKey } = formatBuffName(effect, effectType);
+  const valueText = formatBuffDetail(effect, buffKey, attr, applyType);
   const duration = toPositiveInt(effect.duration);
 
   let text = `${effectType === 'buff' ? '施加增益' : '施加减益'}：${name}`;
