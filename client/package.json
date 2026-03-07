@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:no-image": "tsc -b && vite build --mode no-image",
+    "build:no-image": "tsc -b && node ./scripts/build-no-image.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

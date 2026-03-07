@@ -3,6 +3,22 @@ import react from "@vitejs/plugin-react";
 import { visualizer } from "rollup-plugin-visualizer";
 
 /**
+ * 作用：集中解析布尔型构建环境变量，避免在配置文件里重复散落 `"true"` 字符串判断。
+ * 不做什么：不负责加载 `.env` 文件，不做默认值兜底或类型转换以外的逻辑。
+ * 输入/输出：输入为环境变量对象与变量名，输出为该变量是否显式等于 `"true"`。
+ * 数据流/状态流：`loadEnv` / `process.env` -> 本函数归一化 -> 交给各构建开关消费。
+ * 关键边界条件与坑点：
+ * 1. 仅把字符串 `"true"` 视为启用，避免把其它模糊值误判为开启。
+ * 2. 保持纯函数，方便后续新增构建开关时直接复用，而不是继续复制判断语句。
+ */
+function readBooleanEnvFlag(
+  env: Record<string, string | undefined>,
+  key: string,
+): boolean {
+  return env[key] === "true";
+}
+
+/**
  * 作用：统一定义“图片资源”文件后缀匹配规则，避免构建流程中重复维护同类判断逻辑。
  * 不做什么：不参与 JS/CSS chunk 命名，不参与业务资源路径拼接。
  * 输入/输出：输入为产物文件名字符串，输出为是否命中图片后缀的布尔结果。
@@ -47,8 +63,15 @@ function createStripImageAssetsPlugin(enabled: boolean): PluginOption {
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const analyze = env.ANALYZE === "true";
-  const disableImageAssets = mode === "no-image";
+  const buildEnv: Record<string, string | undefined> = {
+    ...env,
+    ...process.env,
+  };
+  const analyze = readBooleanEnvFlag(buildEnv, "ANALYZE");
+  const disableImageAssets = readBooleanEnvFlag(
+    buildEnv,
+    "VITE_DISABLE_IMAGE_ASSETS",
+  );
 
   return {
     plugins: [
