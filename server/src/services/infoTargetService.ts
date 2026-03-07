@@ -38,6 +38,7 @@ type DropEntryRow = {
   item_def_id: string;
   chance: number;
   weight: number;
+  chance_add_by_monster_realm: number;
   qty_min: number;
   qty_max: number;
   qty_multiply_by_monster_realm: number;
@@ -306,6 +307,7 @@ const getDropsByPoolId = async (
   const multiplierOptions = {
     isDungeonBattle: options.isDungeonBattle === true,
     monsterKind: normalizeMonsterKind(options.monsterKind),
+    monsterRealm: options.monsterRealm ?? null,
   };
 
   const mode: 'prob' | 'weight' = pool.mode;
@@ -320,6 +322,7 @@ const getDropsByPoolId = async (
         item_def_id: itemDefId,
         chance: Number(entry.chance) || 0,
         weight: Number(entry.weight) || 0,
+        chance_add_by_monster_realm: Number(entry.chance_add_by_monster_realm) || 0,
         qty_min: qtyMin,
         qty_max: qtyMax,
         qty_multiply_by_monster_realm: Number(entry.qty_multiply_by_monster_realm) || 1,
@@ -380,7 +383,10 @@ const getDropsByPoolId = async (
     const weightVal = Number(r.weight ?? 0);
     const chance = formatChance(
       mode,
-      getAdjustedChance(chanceVal, r.sourceType, r.sourcePoolId, multiplierOptions),
+      getAdjustedChance(chanceVal, r.sourceType, r.sourcePoolId, {
+        ...multiplierOptions,
+        chanceAddByMonsterRealm: r.chance_add_by_monster_realm,
+      }),
       getAdjustedWeight(weightVal, r.sourceType, r.sourcePoolId, multiplierOptions),
       totalWeight,
     );

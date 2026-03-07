@@ -358,6 +358,7 @@ export const getDungeonPreview = async (
     item_def_id: string;
     chance: number;
     weight: number;
+    chance_add_by_monster_realm: number;
     qty_min: number;
     qty_max: number;
     qty_multiply_by_monster_realm: number;
@@ -385,6 +386,7 @@ export const getDungeonPreview = async (
         item_def_id: itemDefId,
         chance: asNumber(entry.chance, 0),
         weight: asNumber(entry.weight, 0),
+        chance_add_by_monster_realm: asNumber(entry.chance_add_by_monster_realm, 0),
         qty_min: qtyMin,
         qty_max: qtyMax,
         qty_multiply_by_monster_realm: asNumber(entry.qty_multiply_by_monster_realm, 1),
@@ -425,6 +427,7 @@ export const getDungeonPreview = async (
       item_def_id: string;
       chance: number;
       weight: number;
+      chance_add_by_monster_realm: number;
       qty_min: number;
       qty_max: number;
       qty_multiply_by_monster_realm: number;
@@ -446,6 +449,7 @@ export const getDungeonPreview = async (
       item_def_id: r.item_def_id,
       chance: mode === 'prob' ? r.chance : 0,
       weight: mode === 'weight' ? r.weight : 0,
+      chance_add_by_monster_realm: r.chance_add_by_monster_realm,
       qty_min: r.qty_min,
       qty_max: r.qty_max,
       qty_multiply_by_monster_realm: r.qty_multiply_by_monster_realm,
@@ -464,6 +468,7 @@ export const getDungeonPreview = async (
       item_def_id: string;
       chance: number;
       weight: number;
+      chance_add_by_monster_realm: number;
       qty_min: number;
       qty_max: number;
       qty_multiply_by_monster_realm: number;
@@ -486,7 +491,7 @@ export const getDungeonPreview = async (
     bind_type: string | null;
   }> => {
     const kind = normalizeMonsterKind(monsterKind);
-    const options = { isDungeonBattle: true, monsterKind: kind };
+    const options = { isDungeonBattle: true, monsterKind: kind, monsterRealm };
     return rows
       .map((r) => {
         const itemMeta = dropPreviewItemMap.get(r.item_def_id);
@@ -508,7 +513,12 @@ export const getDungeonPreview = async (
             icon: itemMeta?.icon ?? null,
           },
           mode: r.mode,
-          chance: r.mode === 'prob' ? getAdjustedChance(r.chance, r.sourceType, r.sourcePoolId, options) : null,
+          chance: r.mode === 'prob'
+            ? getAdjustedChance(r.chance, r.sourceType, r.sourcePoolId, {
+              ...options,
+              chanceAddByMonsterRealm: r.chance_add_by_monster_realm,
+            })
+            : null,
           weight: r.mode === 'weight' ? getAdjustedWeight(r.weight, r.sourceType, r.sourcePoolId, options) : null,
           qty_min: quantityRange.qtyMin,
           qty_max: quantityRange.qtyMax,

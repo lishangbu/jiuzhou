@@ -30,6 +30,7 @@ type ResolvedDropPoolEntry = {
   item_def_id: string;
   chance: number;
   weight: number;
+  chance_add_by_monster_realm: number;
   qty_min: number;
   qty_max: number;
   qty_multiply_by_monster_realm: number;
@@ -85,6 +86,7 @@ const normalizeEntry = (entry: DropPoolEntryConfig): Omit<ResolvedDropPoolEntry,
     item_def_id: itemDefId,
     chance: Math.max(0, toFiniteNumber(entry.chance, 0)),
     weight: Math.max(0, Math.floor(toFiniteNumber(entry.weight, 0))),
+    chance_add_by_monster_realm: Math.max(0, toFiniteNumber(entry.chance_add_by_monster_realm, 0)),
     qty_min: qtyMin,
     qty_max: qtyMax,
     qty_multiply_by_monster_realm: qtyMultiplyByMonsterRealm,

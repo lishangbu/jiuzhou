@@ -3,9 +3,11 @@
  *
  * 作用：
  * 1. 统一通用掉落池倍率规则（副本/世界、普通/精英/BOSS）
- * 2. 给展示层提供“翻倍后”的概率/权重值计算入口
- * 3. 给结算层提供“翻倍后”的数量计算入口（按业务条件开启）
+ * 2. 统一读取条目配置中的境界概率加成，避免战斗结算与预览各写一套
+ * 3. 给展示层提供“翻倍后”的概率/权重值计算入口
+ * 4. 给结算层提供“翻倍后”的数量计算入口（按业务条件开启）
  */
+import { getRealmRankZeroBased } from './realmRules.js';
 
 export type MonsterKind = 'normal' | 'elite' | 'boss';
 export type DropEntrySourceType = 'common' | 'exclusive';
@@ -13,6 +15,8 @@ export type DropEntrySourceType = 'common' | 'exclusive';
 export type DropMultiplierContext = {
   isDungeonBattle?: boolean;
   monsterKind?: MonsterKind;
+  monsterRealm?: string | null;
+  chanceAddByMonsterRealm?: number;
 };
 
 type PoolMultiplierConfig = {
@@ -54,6 +58,20 @@ export const normalizeMonsterKind = (value: unknown): MonsterKind => {
 };
 
 /**
+ * 仅处理“条目已声明”的境界概率加成。
+ * 规则保持在共享层，这样 JSON 配置一旦调整，结算与预览会同步生效。
+ */
+const getRealmScaledChanceBonus = (
+  chanceAddByMonsterRealmRaw: number | undefined,
+  monsterRealmRaw?: string | null,
+): number => {
+  const chanceAddByMonsterRealm = Number(chanceAddByMonsterRealmRaw);
+  if (!Number.isFinite(chanceAddByMonsterRealm) || chanceAddByMonsterRealm <= 0) return 0;
+  const realmRank = Math.max(0, getRealmRankZeroBased(monsterRealmRaw));
+  return realmRank * chanceAddByMonsterRealm;
+};
+
+/**
  * 计算通用掉落池在特定场景下的倍率。
  * 独占池始终为 1；排除列表中的通用池也固定为 1。
  */
@@ -82,7 +100,12 @@ export const getAdjustedChance = (
   options: DropMultiplierContext = {},
 ): number => {
   if (!Number.isFinite(chance) || chance <= 0) return 0;
-  return clamp01(chance * getCommonPoolMultiplier(sourceType, sourcePoolId, options));
+  const multipliedChance = chance * getCommonPoolMultiplier(sourceType, sourcePoolId, options);
+  const itemChanceBonus = getRealmScaledChanceBonus(
+    options.chanceAddByMonsterRealm,
+    options.monsterRealm,
+  );
+  return clamp01(multipliedChance + itemChanceBonus);
 };
 
 export const getAdjustedWeight = (

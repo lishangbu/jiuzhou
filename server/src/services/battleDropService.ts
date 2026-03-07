@@ -48,6 +48,7 @@ interface DropPoolEntry {
   item_def_id: string;
   chance: number;        // 概率模式下的掉落概率 (0-1)
   weight: number;        // 权重模式下的权重
+  chance_add_by_monster_realm: number;
   qty_min: number;
   qty_max: number;
   qty_multiply_by_monster_realm: number;
@@ -226,6 +227,7 @@ class BattleDropService {
         item_def_id: entry.item_def_id,
         chance: entry.chance,
         weight: entry.weight,
+        chance_add_by_monster_realm: entry.chance_add_by_monster_realm,
         qty_min: entry.qty_min,
         qty_max: entry.qty_max,
         qty_multiply_by_monster_realm: entry.qty_multiply_by_monster_realm,
@@ -264,6 +266,8 @@ class BattleDropService {
           getAdjustedChance(entry.chance * chanceMultiplier, entry.sourceType, entry.sourcePoolId, {
             isDungeonBattle,
             monsterKind,
+            monsterRealm,
+            chanceAddByMonsterRealm: entry.chance_add_by_monster_realm,
           }) * realmSuppressionMultiplier,
         );
         if (Math.random() < effectiveChance) {

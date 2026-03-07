@@ -567,6 +567,7 @@ export type DropPoolEntryConfig = {
   item_def_id: string;
   chance?: number;
   weight?: number;
+  chance_add_by_monster_realm?: number;
   qty_min?: number;
   qty_max?: number;
   qty_multiply_by_monster_realm?: number;
