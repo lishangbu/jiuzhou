@@ -833,7 +833,6 @@
         {
           "item_def_id": "box-001",
           "chance": 0.8,
-          "chance_add_by_monster_realm": 0.005,
           "qty_min": 1,
           "qty_max": 3,
           "show_in_ui": true,
