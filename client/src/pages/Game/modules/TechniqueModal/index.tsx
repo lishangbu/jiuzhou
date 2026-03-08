@@ -5,6 +5,7 @@ import { IMG_LINGSHI as lingshiIcon, IMG_TONGQIAN as tongqianIcon } from '../../
 import { gameSocket } from '../../../../services/gameSocket';
 import {
   INVENTORY_ITEMS_PAGE_SIZE_MAX,
+  abandonTechniqueResearchDraft,
   equipCharacterSkill,
   equipCharacterTechnique,
   exchangeTechniqueBooksForResearchPoints,
@@ -30,6 +31,7 @@ import { useIsMobile } from '../../shared/responsive';
 import ResearchPanel from './ResearchPanel';
 import {
   TECHNIQUE_RESEARCH_STATUS_POLL_INTERVAL_MS,
+  resolveTechniqueResearchActionState,
   resolveTechniqueResearchIndicatorStatus,
   shouldPollTechniqueResearchStatus,
   type TechniqueResearchStatusData,
@@ -385,7 +387,7 @@ const TECHNIQUE_RESEARCH_ENABLED = !import.meta.env.PROD;
 type ResearchStatusRefreshMode = 'initial' | 'manual' | 'background';
 
 const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResearchIndicatorChange }) => {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const [characterId, setCharacterId] = useState<number | null>(() => gameSocket.getCharacter()?.id ?? null);
   const [panel, setPanel] = useState<TechniquePanel>('slots');
   const [activeSlot, setActiveSlot] = useState<SlotKey>('main');
@@ -420,6 +422,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
   const [researchRefreshing, setResearchRefreshing] = useState(false);
   const [exchangeSubmitting, setExchangeSubmitting] = useState(false);
   const [generateSubmitting, setGenerateSubmitting] = useState(false);
+  const [abandonSubmitting, setAbandonSubmitting] = useState(false);
   const [publishSubmitting, setPublishSubmitting] = useState(false);
   const markingResearchViewedRef = useRef(false);
   const researchStatusRef = useRef<TechniqueResearchStatusData | null>(null);
@@ -704,6 +707,45 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
       setGenerateSubmitting(false);
     }
   }, [characterId, generateSubmitting, message, refreshResearchStatus]);
+
+  const resolveAbandonResearchErrorMessage = (code?: string, fallbackMessage?: string): string => {
+    if (code === 'GENERATION_NOT_FOUND') return '当前推演任务不存在';
+    if (code === 'GENERATION_NOT_PENDING') return '当前推演已结束，无需放弃';
+    return fallbackMessage || '放弃失败';
+  };
+
+  const handleAbandonResearchDraft = useCallback((generationId: string) => {
+    if (!characterId || abandonSubmitting) return;
+    const actionState = resolveTechniqueResearchActionState(researchStatusRef.current);
+    if (actionState.pendingGenerationId !== generationId) {
+      message.warning('当前推演状态已变化，请先刷新');
+      return;
+    }
+
+    modal.confirm({
+      title: '确认放弃当前洞府推演？',
+      content: '放弃后会立即结束这次推演流程；若本次已消耗研修点，系统会原路退还。',
+      okText: '确认放弃',
+      okButtonProps: { danger: true },
+      cancelText: '继续等待',
+      onOk: async () => {
+        setAbandonSubmitting(true);
+        try {
+          const abandonRes = await abandonTechniqueResearchDraft(characterId, generationId);
+          if (!abandonRes?.success || !abandonRes.data) {
+            throw new Error(resolveAbandonResearchErrorMessage(abandonRes?.code, abandonRes?.message));
+          }
+
+          message.success(abandonRes.message || '已放弃当前洞府推演');
+          await refreshResearchStatus('background');
+        } catch (error: unknown) {
+          message.error(error instanceof Error ? error.message : '放弃失败');
+        } finally {
+          setAbandonSubmitting(false);
+        }
+      },
+    });
+  }, [abandonSubmitting, characterId, message, modal, refreshResearchStatus]);
 
   const resolveCopyResearchBookErrorMessage = (code?: string, fallbackMessage?: string): string => {
     if (code === 'NAME_CONFLICT') return '名称已存在，请更换';
@@ -1277,9 +1319,11 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
         refreshing={researchRefreshing}
         exchangeSubmitting={exchangeSubmitting}
         generateSubmitting={generateSubmitting}
+        abandonSubmitting={abandonSubmitting}
         publishSubmitting={publishSubmitting}
         onExchangeBooks={() => void handleExchangeBooks()}
         onGenerateDraft={() => void handleGenerateResearchDraft()}
+        onAbandonPendingJob={(generationId) => void handleAbandonResearchDraft(generationId)}
         onRefresh={() => void refreshResearchStatus('manual')}
         onCopyResearchBook={(generationId, suggestedName) => void handleCopyResearchBook(generationId, suggestedName)}
       />

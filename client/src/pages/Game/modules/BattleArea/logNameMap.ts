@@ -1,3 +1,6 @@
+import { translateControlName } from "../../shared/controlNameMap";
+export { translateControlName } from "../../shared/controlNameMap";
+
 const ATTR_LABEL_MAP: Record<string, string> = {
   max_qixue: '气血上限',
   max_lingqi: '灵气上限',
@@ -25,16 +28,6 @@ const ATTR_LABEL_MAP: Record<string, string> = {
   shui_kangxing: '水抗性',
   huo_kangxing: '火抗性',
   tu_kangxing: '土抗性',
-};
-
-const CONTROL_LABEL_MAP: Record<string, string> = {
-  stun: '眩晕',
-  freeze: '冻结',
-  silence: '沉默',
-  disarm: '缴械',
-  root: '定身',
-  taunt: '嘲讽',
-  fear: '恐惧',
 };
 
 const SPECIAL_BUFF_LABEL_MAP: Record<string, string> = {
@@ -67,12 +60,6 @@ function translateAttrLabel(raw: string): string | null {
   const key = normalizeAttrKey(raw);
   if (!key) return null;
   return ATTR_LABEL_MAP[key] ?? null;
-}
-
-export function translateControlName(controlType: string | null | undefined): string {
-  const raw = String(controlType ?? '').trim();
-  if (!raw) return '';
-  return CONTROL_LABEL_MAP[raw] ?? raw;
 }
 
 export function translateBuffName(buffName: string | null | undefined): string {

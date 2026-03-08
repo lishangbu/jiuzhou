@@ -332,6 +332,13 @@ export const publishTechniqueResearchDraft = (
   return api.post(`/character/${characterId}/technique/research/generate/${generationId}/publish`, { customName });
 };
 
+export const abandonTechniqueResearchDraft = (
+  characterId: number,
+  generationId: string,
+): Promise<{ success: boolean; message: string; code?: string; data?: { generationId: string; status: 'failed' } }> => {
+  return api.post(`/character/${characterId}/technique/research/generate/${generationId}/abandon`);
+};
+
 export const markTechniqueResearchResultViewed = (
   characterId: number,
 ): Promise<{ success: boolean; message: string; data?: { marked: boolean } }> => {

@@ -2,7 +2,7 @@
  * AI 生成功法服务
  *
  * 作用（做什么 / 不做什么）：
- * 1) 做什么：提供功法书兑换研修点、AI 生成功法草稿、自定义命名发布、状态查询。
+ * 1) 做什么：提供功法书兑换研修点、AI 生成功法草稿、放弃当前推演、自定义命名发布、状态查询。
  * 2) 不做什么：不负责 HTTP 参数解析与鉴权（由路由层处理），不负责前端交互流程。
  *
  * 输入/输出：
@@ -34,6 +34,7 @@ import {
   parseTechniqueTextModelJsonObject,
   resolveTechniqueTextModelEndpoint,
 } from './shared/techniqueTextModelShared.js';
+import { resolveTechniqueGenerationRequestFailure } from './shared/techniqueGenerationRequestFailure.js';
 import {
   buildTechniqueGeneratorPromptInput,
   TECHNIQUE_EFFECT_TYPE_LIST,
@@ -174,6 +175,7 @@ type TechniqueResearchStatusData = {
 
 type TechniqueGenerationAttemptFailureStage =
   | 'config_missing'
+  | 'request_timeout'
   | 'request_failed'
   | 'http_error'
   | 'empty_response'
@@ -713,7 +715,12 @@ const tryCallExternalGenerator = async (quality: TechniqueQuality): Promise<Tech
   const promptSnapshot = serializePromptSnapshot(payload as unknown as Record<string, unknown>);
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 12_000);
+  const timeoutMs = 300_000;
+  let didTimeout = false;
+  const timer = setTimeout(() => {
+    didTimeout = true;
+    controller.abort();
+  }, timeoutMs);
 
   try {
     const resp = await fetch(endpoint, {
@@ -776,9 +783,14 @@ const tryCallExternalGenerator = async (quality: TechniqueQuality): Promise<Tech
       promptSnapshot,
     };
   } catch (error) {
+    const failure = resolveTechniqueGenerationRequestFailure({
+      error,
+      didTimeout,
+      timeoutMs,
+    });
     return buildTechniqueGenerationAttemptFailure({
-      stage: 'request_failed',
-      reason: error instanceof Error ? error.message : '未知异常',
+      stage: failure.stage,
+      reason: failure.reason,
       modelName,
       promptSnapshot,
     });
@@ -898,6 +910,36 @@ class TechniqueGenerationService {
     );
   }
 
+  private async applyGenerationRefundLedgerTx(
+    characterId: number,
+    refundEntries: Array<{ generationId: string; refundPoints: number }>,
+  ): Promise<void> {
+    const refundableEntries = refundEntries.filter((entry) => entry.generationId && entry.refundPoints > 0);
+    if (refundableEntries.length === 0) return;
+
+    const totalRefund = refundableEntries.reduce((sum, entry) => sum + entry.refundPoints, 0);
+    await query(
+      `
+        UPDATE character_research_points
+        SET balance_points = balance_points + $2,
+            total_earned_points = total_earned_points + $2,
+            updated_at = NOW()
+        WHERE character_id = $1
+      `,
+      [characterId, totalRefund],
+    );
+
+    for (const entry of refundableEntries) {
+      await query(
+        `
+          INSERT INTO research_points_ledger (character_id, change_points, reason, ref_type, ref_id)
+          VALUES ($1, $2, 'generate_refund', 'generation_job', $3)
+        `,
+        [characterId, entry.refundPoints, entry.generationId],
+      );
+    }
+  }
+
   @Transactional
   private async refundExpiredDraftJobsTx(characterId: number): Promise<void> {
     await this.ensureResearchPointRowTx(characterId);
@@ -917,34 +959,13 @@ class TechniqueGenerationService {
 
     if (expiredRes.rows.length === 0) return;
 
-    const totalRefund = (expiredRes.rows as Array<Record<string, unknown>>)
-      .map((row) => Math.max(0, Math.floor(asNumber(row.cost_points, 0))))
-      .reduce((sum, val) => sum + val, 0);
-    if (totalRefund <= 0) return;
-
-    await query(
-      `
-        UPDATE character_research_points
-        SET balance_points = balance_points + $2,
-            total_earned_points = total_earned_points + $2,
-            updated_at = NOW()
-        WHERE character_id = $1
-      `,
-      [characterId, totalRefund],
+    await this.applyGenerationRefundLedgerTx(
+      characterId,
+      (expiredRes.rows as Array<Record<string, unknown>>).map((row) => ({
+        generationId: asString(row.id),
+        refundPoints: Math.max(0, Math.floor(asNumber(row.cost_points, 0))),
+      })),
     );
-
-    for (const row of expiredRes.rows as Array<Record<string, unknown>>) {
-      const jobId = asString(row.id);
-      const refundPoints = Math.max(0, Math.floor(asNumber(row.cost_points, 0)));
-      if (!jobId || refundPoints <= 0) continue;
-      await query(
-        `
-          INSERT INTO research_points_ledger (character_id, change_points, reason, ref_type, ref_id)
-          VALUES ($1, $2, 'generate_refund', 'generation_job', $3)
-        `,
-        [characterId, refundPoints, jobId],
-      );
-    }
 
     await query(
       `
@@ -1638,39 +1659,27 @@ class TechniqueGenerationService {
     const row = jobRes.rows[0] as Record<string, unknown>;
     const status = asString(row.status);
     const costPoints = Math.max(0, Math.floor(asNumber(row.cost_points, 0)));
-    if ((status === 'refunded' || status === 'failed' || status === 'published') || costPoints <= 0) return;
+    if (status === 'refunded' || status === 'failed' || status === 'published') return;
 
-    await query(
-      `
-        UPDATE character_research_points
-        SET balance_points = balance_points + $2,
-            total_earned_points = total_earned_points + $2,
-            updated_at = NOW()
-        WHERE character_id = $1
-      `,
-      [characterId, costPoints],
-    );
-
-    await query(
-      `
-        INSERT INTO research_points_ledger (character_id, change_points, reason, ref_type, ref_id)
-        VALUES ($1, $2, 'generate_refund', 'generation_job', $3)
-      `,
-      [characterId, costPoints, generationId],
-    );
+    await this.applyGenerationRefundLedgerTx(characterId, [
+      {
+        generationId,
+        refundPoints: costPoints,
+      },
+    ]);
 
     await query(
       `
         UPDATE technique_generation_job
-        SET status = $4,
-            error_code = $5,
-            error_message = $3,
+        SET status = $2,
+            error_code = $3,
+            error_message = $4,
             finished_at = NOW(),
             failed_viewed_at = NULL,
             updated_at = NOW()
         WHERE id = $1
       `,
-      [generationId, characterId, reason, nextStatus, errorCode],
+      [generationId, nextStatus, errorCode, reason],
     );
   }
 
@@ -1784,6 +1793,41 @@ class TechniqueGenerationService {
 
   async failPendingGenerationJob(characterId: number, generationId: string, reason: string): Promise<void> {
     await this.refundGenerationJobTx(characterId, generationId, reason, 'failed', 'GENERATION_FAILED');
+  }
+
+  @Transactional
+  async abandonPendingGenerationJob(characterId: number, generationId: string): Promise<ServiceResult<{
+    generationId: string;
+    status: 'failed';
+  }>> {
+    const jobRes = await query(
+      `
+        SELECT status
+        FROM technique_generation_job
+        WHERE id = $1 AND character_id = $2
+        FOR UPDATE
+      `,
+      [generationId, characterId],
+    );
+    if (jobRes.rows.length === 0) {
+      return { success: false, message: '当前推演任务不存在', code: 'GENERATION_NOT_FOUND' };
+    }
+
+    const status = asString((jobRes.rows[0] as Record<string, unknown>).status);
+    if (status !== 'pending') {
+      return { success: false, message: '当前推演已结束，无需放弃', code: 'GENERATION_NOT_PENDING' };
+    }
+
+    const reason = '你已主动放弃当前洞府推演，可重新开始领悟。';
+    await this.refundGenerationJobTx(characterId, generationId, reason, 'failed', 'GENERATION_ABORTED');
+    return {
+      success: true,
+      message: '已放弃当前洞府推演',
+      data: {
+        generationId,
+        status: 'failed',
+      },
+    };
   }
 
   @Transactional

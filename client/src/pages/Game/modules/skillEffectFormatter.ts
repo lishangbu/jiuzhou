@@ -1,4 +1,5 @@
 import { formatMarkEffectText } from "../shared/markEffectText";
+import { translateControlName } from "../shared/controlNameMap";
 
 type SkillEffectContext = {
   damageType?: string | null | undefined;
@@ -18,10 +19,6 @@ const ELEMENT_LABEL: Record<string, string> = {
   shui: '水',
   huo: '火',
   tu: '土',
-};
-
-const CONTROL_TYPE_LABEL: Record<string, string> = {
-  freeze: '冰冻',
 };
 
 const RESOURCE_TYPE_LABEL: Record<string, string> = {
@@ -365,7 +362,7 @@ const formatCleanseControlEffect = (effect: Record<string, unknown>): string => 
 
 const formatControlEffect = (effect: Record<string, unknown>): string => {
   const controlTypeRaw = toText(effect.controlType);
-  const controlType = CONTROL_TYPE_LABEL[controlTypeRaw] || controlTypeRaw || '控制';
+  const controlType = translateControlName(controlTypeRaw) || '控制';
   const duration = toPositiveInt(effect.duration);
   const chance = toNumber(effect.chance);
 

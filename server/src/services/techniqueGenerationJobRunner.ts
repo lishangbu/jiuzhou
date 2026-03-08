@@ -149,6 +149,13 @@ class TechniqueGenerationJobRunner {
     });
   }
 
+  async abort(generationId: string): Promise<void> {
+    const worker = this.activeWorkers.get(generationId);
+    if (!worker) return;
+    this.activeWorkers.delete(generationId);
+    await worker.terminate().catch(() => undefined);
+  }
+
   private async recoverPendingJobs(): Promise<void> {
     const result = await query(
       `
@@ -187,4 +194,8 @@ export const shutdownTechniqueGenerationJobRunner = async (): Promise<void> => {
 
 export const enqueueTechniqueGenerationJob = async (params: EnqueueParams): Promise<void> => {
   await runner.enqueue(params);
+};
+
+export const abortTechniqueGenerationJob = async (generationId: string): Promise<void> => {
+  await runner.abort(generationId);
 };

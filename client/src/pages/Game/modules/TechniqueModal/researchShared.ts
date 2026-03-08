@@ -3,12 +3,12 @@
  *
  * 作用（做什么 / 不做什么）：
  * 1. 做什么：集中定义研修红点、结果态与面板主视图的映射，避免主界面与功法弹窗各写一套判断。
- * 2. 做什么：把服务端 `currentJob/hasUnreadResult/resultStatus` 收敛成稳定的前端展示语义。
+ * 2. 做什么：把服务端 `currentJob/hasUnreadResult/resultStatus` 收敛成稳定的前端展示语义与按钮可用态。
  * 3. 不做什么：不处理 React 状态、不发起请求、不直接渲染 DOM。
  *
  * 输入/输出：
  * - 输入：研修状态接口返回的 `TechniqueResearchStatusData`。
- * - 输出：红点指示器、研修面板主视图、结果提示文案。
+ * - 输出：红点指示器、研修面板主视图、结果提示文案、操作按钮状态。
  *
  * 数据流/状态流：
  * API / WebSocket -> researchShared -> Game 主界面红点 + ResearchPanel 结果卡。
@@ -36,6 +36,11 @@ export type TechniqueResearchPanelView =
   | { kind: 'pending'; job: TechniqueResearchJobDto }
   | { kind: 'draft'; job: TechniqueResearchJobDto; preview: NonNullable<TechniqueResearchJobDto['preview']> }
   | { kind: 'failed'; job: TechniqueResearchJobDto; errorMessage: string };
+
+export type TechniqueResearchActionState = {
+  canGenerate: boolean;
+  pendingGenerationId: string | null;
+};
 
 export const buildTechniqueResearchIndicator = (
   status: TechniqueResearchStatusData | null,
@@ -81,4 +86,23 @@ export const resolveTechniqueResearchPanelView = (
     };
   }
   return { kind: 'empty' };
+};
+
+export const resolveTechniqueResearchActionState = (
+  status: TechniqueResearchStatusData | null,
+): TechniqueResearchActionState => {
+  const panelView = resolveTechniqueResearchPanelView(status);
+  const minCost = status
+    ? Math.min(...Object.values(status.generationCostByQuality || { 黄: 500, 玄: 500, 地: 500, 天: 500 }))
+    : 500;
+  const canGenerate =
+    status !== null &&
+    panelView.kind !== 'pending' &&
+    status.weeklyRemaining > 0 &&
+    status.pointsBalance >= minCost;
+
+  return {
+    canGenerate,
+    pendingGenerationId: panelView.kind === 'pending' ? panelView.job.generationId : null,
+  };
 };

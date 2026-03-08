@@ -2,7 +2,7 @@
  * 洞府研修面板
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：承载洞府研修统计、生成中提示、草稿详情、失败结果与抄写入口。
+ * 1. 做什么：承载洞府研修统计、生成中提示、放弃入口、草稿详情、失败结果与抄写入口。
  * 2. 做什么：复用 `researchShared` 的单一状态映射，避免组件内散落 `pending/generated_draft/failed` 判断。
  * 3. 不做什么：不直接发请求、不持有 socket 订阅，也不管理主界面红点状态。
  *
@@ -19,7 +19,10 @@
  */
 import { Button, Tag, Tooltip } from 'antd';
 import type { TechniqueResearchStatusData } from './researchShared';
-import { resolveTechniqueResearchPanelView } from './researchShared';
+import {
+  resolveTechniqueResearchActionState,
+  resolveTechniqueResearchPanelView,
+} from './researchShared';
 import {
   mapResearchPreviewSkillToDetail,
   renderSkillCardDetails,
@@ -32,9 +35,11 @@ type ResearchPanelProps = {
   refreshing: boolean;
   exchangeSubmitting: boolean;
   generateSubmitting: boolean;
+  abandonSubmitting: boolean;
   publishSubmitting: boolean;
   onExchangeBooks: () => void;
   onGenerateDraft: () => void;
+  onAbandonPendingJob: (generationId: string) => void;
   onRefresh: () => void;
   onCopyResearchBook: (generationId: string, suggestedName: string) => void;
 };
@@ -59,23 +64,16 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
   refreshing,
   exchangeSubmitting,
   generateSubmitting,
+  abandonSubmitting,
   publishSubmitting,
   onExchangeBooks,
   onGenerateDraft,
+  onAbandonPendingJob,
   onRefresh,
   onCopyResearchBook,
 }) => {
-  const minCost = status
-    ? Math.min(...Object.values(status.generationCostByQuality || { 黄: 500, 玄: 500, 地: 500, 天: 500 }))
-    : 500;
   const panelView = resolveTechniqueResearchPanelView(status);
-  const weeklyRemaining = status?.weeklyRemaining ?? 0;
-  const pointsBalance = status?.pointsBalance ?? 0;
-  const canTryGenerate =
-    status !== null &&
-    panelView.kind !== 'pending' &&
-    weeklyRemaining > 0 &&
-    pointsBalance >= minCost;
+  const actionState = resolveTechniqueResearchActionState(status);
 
   return (
     <div className="tech-pane">
@@ -104,7 +102,7 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
           <Button
             type="primary"
             loading={generateSubmitting}
-            disabled={!canTryGenerate}
+            disabled={!actionState.canGenerate}
             onClick={onGenerateDraft}
           >
             开始领悟
@@ -127,9 +125,20 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
         ) : null}
         {!loading && panelView.kind === 'pending' ? (
           <div className="tech-research-status-card is-pending">
-            <div className="tech-research-status-title">AI 正在洞府中推演功法</div>
+            <div className="tech-research-status-header">
+              <div className="tech-research-status-title">正在推演功法</div>
+              <div className="tech-research-status-actions">
+                <Button
+                  danger
+                  loading={abandonSubmitting}
+                  onClick={() => onAbandonPendingJob(panelView.job.generationId)}
+                >
+                  放弃本次推演
+                </Button>
+              </div>
+            </div>
             <div className="tech-research-status-desc">
-              当前任务已进入独立推演流程，生成完成后会通过主界面“功法”入口红点提醒你回来查看。
+              推演可能需要较长时间，请耐心等待结果。放弃后本次推演将立即结束，已消耗的研修点会自动退还。
             </div>
             <div className="tech-research-status-meta">
               <Tag color="processing">推演中</Tag>
@@ -141,7 +150,7 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
           <div className="tech-research-status-card is-failed">
             <div className="tech-research-status-title">本次洞府研修未能成法</div>
             <div className="tech-research-status-desc">{panelView.errorMessage}</div>
-            <div className="tech-research-status-foot">本次研修点已自动退还，可在条件满足时重新开始领悟。</div>
+            <div className="tech-research-status-foot">若本次已消耗研修点，系统已自动退还，可在条件满足时重新开始领悟。</div>
           </div>
         ) : null}
         {!loading && panelView.kind === 'draft' ? (

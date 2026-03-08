@@ -17,7 +17,10 @@ import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
 import { getSingleParam, parsePositiveInt } from '../services/shared/httpParam.js';
 import { sendResult } from '../middleware/response.js';
 import { BusinessError } from '../middleware/BusinessError.js';
-import { enqueueTechniqueGenerationJob } from '../services/techniqueGenerationJobRunner.js';
+import {
+  abortTechniqueGenerationJob,
+  enqueueTechniqueGenerationJob,
+} from '../services/techniqueGenerationJobRunner.js';
 
 const router = Router();
 const isTechniqueResearchEnabled = process.env.NODE_ENV !== 'production';
@@ -175,6 +178,33 @@ router.post('/:characterId/technique/research/mark-result-viewed', asyncHandler(
   }
 
   const result = await techniqueGenerationService.markLatestResultViewed(characterId);
+  sendResult(res, result);
+}));
+
+// ============================================
+// 放弃当前研修任务
+// POST /api/character/:characterId/technique/research/generate/:generationId/abandon
+// ============================================
+router.post('/:characterId/technique/research/generate/:generationId/abandon', asyncHandler(async (req, res) => {
+  const characterId = parseCharacterIdParam(req);
+  if (characterId === null) {
+    throw new BusinessError('无效的角色ID');
+  }
+  const userId = req.userId!;
+  if (!userId) {
+    throw new BusinessError('登录状态无效，请重新登录', 401);
+  }
+
+  const generationId = getSingleParam((req.params as Record<string, string | string[] | undefined>).generationId);
+  if (!generationId) {
+    throw new BusinessError('缺少生成任务ID');
+  }
+
+  const result = await techniqueGenerationService.abandonPendingGenerationJob(characterId, generationId);
+  if (result.success) {
+    await abortTechniqueGenerationJob(generationId);
+    await safePushCharacterUpdate(userId);
+  }
   sendResult(res, result);
 }));
 

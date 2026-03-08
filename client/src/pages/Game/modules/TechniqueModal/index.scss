@@ -528,6 +528,18 @@
   color: var(--text-color);
 }
 
+.tech-research-status-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tech-research-status-header .tech-research-status-title {
+  flex: 1;
+  min-width: 0;
+}
+
 .tech-research-status-desc {
   font-size: 12px;
   color: var(--text-secondary);
@@ -548,6 +560,12 @@
 
 .tech-research-status-meta .ant-tag {
   margin: 0;
+}
+
+.tech-research-status-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-shrink: 0;
 }
 
 .tech-research-skill-card {
@@ -700,6 +718,18 @@
 
   .tech-research-skill-list {
     grid-template-columns: 1fr;
+  }
+
+  .tech-research-status-header {
+    flex-direction: column;
+  }
+
+  .tech-research-status-actions {
+    width: 100%;
+  }
+
+  .tech-research-status-actions .ant-btn {
+    width: 100%;
   }
 
   .skill-card-header {

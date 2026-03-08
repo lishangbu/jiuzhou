@@ -136,8 +136,8 @@ export const getSkillDetailItems = (skill: TechniqueSkillDetailLike): SkillDetai
 export const getSkillCardSections = (skill: TechniqueSkillDetailLike): SkillCardSection => {
   const metaItems: SkillCardSection['metaItems'] = [];
   if (skill.cost_lingqi && skill.cost_lingqi > 0) metaItems.push({ label: '灵气', value: String(skill.cost_lingqi) });
-  if (skill.cooldown && skill.cooldown > 0) metaItems.push({ label: '冷却', value: `${skill.cooldown}回合` });
   if (skill.cost_qixue && skill.cost_qixue > 0) metaItems.push({ label: '气血', value: String(skill.cost_qixue) });
+  if (skill.cooldown && skill.cooldown > 0) metaItems.push({ label: '冷却', value: `${skill.cooldown}回合` });
 
   const gridItems: SkillCardSection['gridItems'] = [];
   if (skill.target_type) gridItems.push({ label: '目标', value: getTargetTypeLabel(skill.target_type) });
