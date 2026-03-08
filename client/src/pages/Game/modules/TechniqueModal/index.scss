@@ -9,6 +9,10 @@
   }
 }
 
+.tech-modal-wrap.ant-modal-wrap {
+  overflow: hidden;
+}
+
 .tech-modal-shell {
   height: 680px;
   display: flex;
@@ -415,6 +419,15 @@
     linear-gradient(180deg, color-mix(in srgb, var(--accent-color) 6%, var(--panel-bg-soft)), var(--panel-bg-soft));
 }
 
+.tech-research-actions--single {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  margin-bottom: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
 .tech-research-primary-action {
   min-width: 0;
   display: flex;
@@ -810,6 +823,12 @@
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
     padding: 10px;
+  }
+
+  .tech-research-actions--single {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    padding: 0;
   }
 
   .tech-research-refresh-button.ant-btn {
@@ -1604,8 +1623,45 @@
     }
   }
 
+  .tech-modal.is-mobile {
+    --tech-modal-mobile-top-gap: 8px;
+    --tech-modal-mobile-bottom-gap: calc(8px + env(safe-area-inset-bottom, 0px));
+    --tech-modal-mobile-max-height: calc(100vh - var(--tech-modal-mobile-top-gap) - var(--tech-modal-mobile-bottom-gap));
+    --tech-modal-mobile-max-height: calc(100dvh - var(--tech-modal-mobile-top-gap) - var(--tech-modal-mobile-bottom-gap));
+
+    .ant-modal {
+      width: calc(100vw - 16px) !important;
+      max-width: calc(100vw - 16px);
+      max-height: var(--tech-modal-mobile-max-height);
+      margin: 0 auto;
+    }
+
+    .ant-modal-content {
+      max-height: var(--tech-modal-mobile-max-height);
+    }
+
+    .ant-modal-body {
+      max-height: var(--tech-modal-mobile-max-height);
+      overflow: hidden;
+    }
+  }
+
+  .tech-modal-wrap.ant-modal-wrap.ant-modal-centered {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-top: 8px;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    box-sizing: border-box;
+  }
+
+  .tech-modal-wrap.ant-modal-wrap.ant-modal-centered::before {
+    display: none;
+  }
+
   .tech-modal-shell {
-    height: 88vh;
+    height: auto;
+    max-height: var(--tech-modal-mobile-max-height, calc(100dvh - 16px));
     flex-direction: column;
     overflow: hidden;
   }
@@ -2019,7 +2075,8 @@
 
 @media screen and (max-width: 520px) {
   .tech-modal-shell {
-    height: 90vh;
+    height: auto;
+    max-height: var(--tech-modal-mobile-max-height, calc(100dvh - 16px));
   }
 
   .tech-left-item {

@@ -1348,7 +1348,8 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
       title={null}
       centered
       width="min(1080px, calc(100vw - 16px))"
-      className="tech-modal"
+      className={`tech-modal${isMobile ? ' is-mobile' : ''}`}
+      wrapClassName="tech-modal-wrap"
       destroyOnHidden
       maskClosable
       afterOpenChange={(visible) => {

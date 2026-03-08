@@ -178,7 +178,7 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
                 );
               })}
             </div>
-            <div className="tech-research-actions">
+            <div className="tech-research-actions tech-research-actions--single">
               <Button
                 className="tech-research-copy-button"
                 type="primary"
