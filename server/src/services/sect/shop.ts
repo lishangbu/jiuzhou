@@ -15,16 +15,10 @@
 import { query } from '../../config/database.js';
 import { Transactional } from '../../decorators/transactional.js';
 import { itemService } from '../itemService.js';
-import { getItemDefinitionById } from '../staticConfigLoader.js';
 import { assertMember, getCharacterUserId, toNumber } from './db.js';
 import { recordSectShopBuyEventTx } from './quests.js';
+import { BAG_EXPAND_SHOP_ITEM_ID, SECT_SHOP_ITEMS } from './shopCatalog.js';
 import type { BuyResult, ShopItem } from './types.js';
-
-const BAG_EXPAND_SHOP_ITEM_ID = 'sect-shop-007';
-const BAG_EXPAND_DAILY_LIMIT = 1;
-const REROLL_SCROLL_SHOP_ITEM_ID = 'sect-shop-008';
-const REROLL_SCROLL_DAILY_LIMIT = 50;
-type BaseShopItem = Omit<ShopItem, 'itemIcon'>;
 
 /**
  * 统一商店日志展示名：
@@ -55,42 +49,7 @@ const extractShopBuyItemQtyFromLogContent = (content: string, itemName: string):
   if (!Number.isFinite(qty) || qty <= 0) return 0;
   return qty;
 };
-
-const resolveShopItemIcon = (itemDefId: string): string | null => {
-  const rawIcon = getItemDefinitionById(itemDefId)?.icon;
-  if (typeof rawIcon !== 'string') return null;
-  const icon = rawIcon.trim();
-  return icon.length > 0 ? icon : null;
-};
-
-const SHOP_BASE: BaseShopItem[] = [
-  { id: 'sect-shop-001', name: '淬灵石×10', costContribution: 100, itemDefId: 'enhance-001', qty: 10 },
-  { id: 'sect-shop-004', name: '《纯阳功》×1', costContribution: 2200, itemDefId: 'book-chunyang-gong', qty: 1 },
-  { id: 'sect-shop-005', name: '功法残页×12', costContribution: 480, itemDefId: 'mat-gongfa-canye', qty: 12 },
-  { id: 'sect-shop-006', name: '灵墨×5', costContribution: 1800, itemDefId: 'mat-lingmo', qty: 5 },
-  {
-    id: REROLL_SCROLL_SHOP_ITEM_ID,
-    name: '洗炼符×1',
-    costContribution: 1000,
-    itemDefId: 'scroll-003',
-    qty: 1,
-    limitDaily: REROLL_SCROLL_DAILY_LIMIT,
-  },
-  {
-    id: BAG_EXPAND_SHOP_ITEM_ID,
-    name: '背包扩容符×1',
-    costContribution: 10000,
-    itemDefId: 'func-001',
-    qty: 1,
-    limitDaily: BAG_EXPAND_DAILY_LIMIT,
-  },
-];
-
-const SHOP: ShopItem[] = SHOP_BASE.map((item) => ({
-  ...item,
-  // 统一按 itemDefId 补齐图标，前端无需再额外查表。
-  itemIcon: resolveShopItemIcon(item.itemDefId),
-}));
+const SHOP: ShopItem[] = SECT_SHOP_ITEMS;
 
 /**
  * 宗门商店服务类
