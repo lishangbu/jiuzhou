@@ -20,6 +20,11 @@
 import dotenv from 'dotenv';
 import { generateTechniqueSkillIconMap } from '../src/services/shared/techniqueSkillImageGenerator.js';
 import {
+  extractTechniqueTextModelContent,
+  parseTechniqueTextModelJsonObject,
+  resolveTechniqueTextModelEndpoint,
+} from '../src/services/shared/techniqueTextModelShared.js';
+import {
   buildTechniqueGeneratorPromptInput,
   TECHNIQUE_EFFECT_TYPE_LIST,
   TECHNIQUE_EFFECT_UNSUPPORTED_FIELDS,
@@ -148,21 +153,6 @@ const parseArgMap = (argv: string[]): ArgMap => {
 
 const asString = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
 
-const trimTrailingSlash = (value: string): string => value.replace(/\/+$/, '');
-
-const resolveChatCompletionsEndpoint = (rawEndpoint: string): string => {
-  const endpoint = trimTrailingSlash(rawEndpoint);
-  if (!endpoint) return endpoint;
-
-  if (/\/chat\/completions$/i.test(endpoint)) {
-    return endpoint;
-  }
-  if (/\/v1$/i.test(endpoint)) {
-    return `${endpoint}/chat/completions`;
-  }
-  return `${endpoint}/v1/chat/completions`;
-};
-
 const resolveQualityByWeight = (): TechniqueQuality => {
   const totalWeight = QUALITY_RANDOM_WEIGHT.reduce((sum, row) => sum + row.weight, 0);
   if (totalWeight <= 0) return '黄';
@@ -181,36 +171,15 @@ const resolveQualityArg = (raw: string | undefined): TechniqueQuality => {
   return resolveQualityByWeight();
 };
 
-const extractContentText = (raw: unknown): string => {
-  if (typeof raw === 'string') return raw;
-  if (Array.isArray(raw)) {
-    const collected = raw
-      .map((item) => {
-        if (!item || typeof item !== 'object') return '';
-        const text = (item as Record<string, unknown>).text;
-        return typeof text === 'string' ? text : '';
-      })
-      .filter((part) => part.length > 0);
-    return collected.join('\n');
-  }
-  return '';
-};
-
 const parseModelJson = (content: string): Record<string, unknown> => {
-  const trimmed = content.trim();
-  if (!trimmed) {
-    throw new Error('模型返回内容为空');
-  }
-
-  try {
-    return JSON.parse(trimmed) as Record<string, unknown>;
-  } catch {
-    const matched = trimmed.match(/\{[\s\S]*\}/);
-    if (!matched) {
-      throw new Error('模型返回不是合法 JSON');
+  const parsedResult = parseTechniqueTextModelJsonObject(content);
+  if (!parsedResult.success) {
+    if (parsedResult.reason === 'empty_content') {
+      throw new Error('模型返回内容为空');
     }
-    return JSON.parse(matched[0]) as Record<string, unknown>;
+    throw new Error('模型返回不是合法 JSON');
   }
+  return parsedResult.data as Record<string, unknown>;
 };
 
 const isSkillImageGenEnabled = (): boolean => {
@@ -279,7 +248,7 @@ const main = async (): Promise<void> => {
   const args = parseArgMap(process.argv.slice(2));
   const quality = resolveQualityArg(args.quality);
   const endpointRaw = asString(process.env.AI_TECHNIQUE_MODEL_URL);
-  const endpoint = resolveChatCompletionsEndpoint(endpointRaw);
+  const endpoint = resolveTechniqueTextModelEndpoint(endpointRaw);
   const apiKey = asString(process.env.AI_TECHNIQUE_MODEL_KEY);
   const modelName = asString(process.env.AI_TECHNIQUE_MODEL_NAME) || 'gpt-4o-mini';
   const promptInput = buildTechniqueGeneratorPromptInput({
@@ -333,7 +302,9 @@ const main = async (): Promise<void> => {
 
   const choice = ((responseBody.choices as Array<Record<string, unknown>> | undefined) ?? [])[0];
   const message = choice?.message as Record<string, unknown> | undefined;
-  const content = extractContentText(message?.content);
+  const content = extractTechniqueTextModelContent(
+    message?.content as string | Array<{ text?: string | null }> | null | undefined,
+  );
   const parsed = parseModelJson(content);
   const normalized = normalizeParsedLayers(parsed);
   const imageEnabled = isSkillImageGenEnabled();

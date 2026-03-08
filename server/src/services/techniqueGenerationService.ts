@@ -30,6 +30,11 @@ import { buildTechniqueResearchJobState } from './shared/techniqueResearchJobSha
 import { normalizeTechniqueName, validateTechniqueCustomName, getTechniqueNameRulesView } from './shared/techniqueNameRules.js';
 import { generateTechniqueCandidateWithIcons } from './shared/techniqueGenerationExecution.js';
 import {
+  extractTechniqueTextModelContent,
+  parseTechniqueTextModelJsonObject,
+  resolveTechniqueTextModelEndpoint,
+} from './shared/techniqueTextModelShared.js';
+import {
   buildTechniqueGeneratorPromptInput,
   TECHNIQUE_EFFECT_TYPE_LIST,
   TECHNIQUE_EFFECT_UNSUPPORTED_FIELDS,
@@ -675,7 +680,7 @@ const logTechniqueGenerationTaskFailure = (params: {
 };
 
 const tryCallExternalGenerator = async (quality: TechniqueQuality): Promise<TechniqueGenerationAttemptResult> => {
-  const endpoint = asString(process.env.AI_TECHNIQUE_MODEL_URL);
+  const endpoint = resolveTechniqueTextModelEndpoint(asString(process.env.AI_TECHNIQUE_MODEL_URL));
   const apiKey = asString(process.env.AI_TECHNIQUE_MODEL_KEY);
   const modelName = asString(process.env.AI_TECHNIQUE_MODEL_NAME) || 'gpt-4o-mini';
   if (!endpoint || !apiKey) {
@@ -723,15 +728,17 @@ const tryCallExternalGenerator = async (quality: TechniqueQuality): Promise<Tech
     if (!resp.ok) {
       return buildTechniqueGenerationAttemptFailure({
         stage: 'http_error',
-        reason: `模型接口返回非成功状态：${resp.status}`,
+        reason: `模型接口返回非成功状态：${resp.status}（endpoint=${endpoint}）`,
         modelName,
         promptSnapshot,
       });
     }
     const body = (await resp.json()) as Record<string, unknown>;
-    const content =
-      (((body.choices as Array<Record<string, unknown>> | undefined)?.[0]?.message as Record<string, unknown> | undefined)?.content as string | undefined) ??
-      '';
+    const content = extractTechniqueTextModelContent(
+      ((body.choices as Array<Record<string, unknown>> | undefined)?.[0]?.message as {
+        content?: string | Array<{ text?: string | null }> | null;
+      } | undefined)?.content,
+    );
     if (!content) {
       return buildTechniqueGenerationAttemptFailure({
         stage: 'empty_response',
@@ -741,32 +748,19 @@ const tryCallExternalGenerator = async (quality: TechniqueQuality): Promise<Tech
       });
     }
 
-    let parsedRaw: unknown = null;
-    try {
-      parsedRaw = JSON.parse(content);
-    } catch {
-      const match = content.match(/\{[\s\S]*\}/);
-      if (!match) {
-        return buildTechniqueGenerationAttemptFailure({
-          stage: 'json_parse_failed',
-          reason: '模型返回内容不是合法 JSON 对象',
-          modelName,
-          promptSnapshot,
-        });
-      }
-      try {
-        parsedRaw = JSON.parse(match[0]);
-      } catch {
-        return buildTechniqueGenerationAttemptFailure({
-          stage: 'json_parse_failed',
-          reason: '模型返回内容提取 JSON 后仍无法解析',
-          modelName,
-          promptSnapshot,
-        });
-      }
+    const parsedResult = parseTechniqueTextModelJsonObject(content);
+    if (!parsedResult.success) {
+      return buildTechniqueGenerationAttemptFailure({
+        stage: 'json_parse_failed',
+        reason: parsedResult.reason === 'empty_content'
+          ? '模型返回内容为空'
+          : '模型返回内容不是合法 JSON 对象',
+        modelName,
+        promptSnapshot,
+      });
     }
 
-    const candidate = sanitizeCandidateFromModel(parsedRaw, quality);
+    const candidate = sanitizeCandidateFromModel(parsedResult.data, quality);
     if (!candidate) {
       return buildTechniqueGenerationAttemptFailure({
         stage: 'candidate_sanitize_failed',
