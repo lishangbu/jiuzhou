@@ -1,0 +1,102 @@
+/**
+ * AI 功法技能机制共享规格测试
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1) 做什么：验证 AI 生成功法的 effect/upgrade 共享校验已覆盖 control、resource、mark 等新增技能机制。
+ * 2) 不做什么：不调用外部模型、不走数据库落库，也不测试完整生成功法任务状态流。
+ *
+ * 输入/输出：
+ * - 输入：单个 SkillEffect，与单个 upgrades 项对象。
+ * - 输出：共享校验函数的成功/失败结果。
+ *
+ * 数据流/状态流：
+ * 新技能机制样例 -> techniqueSkillGenerationSpec 校验入口 -> service/constraints 共同复用。
+ *
+ * 关键边界条件与坑点：
+ * 1) 必须同时覆盖基础 effects 与 upgrades.addEffect/effects，避免只同步一半链路。
+ * 2) 失败断言要尽量锁定具体原因，防止未来把严格校验又放松成“只看 type 名称”。
+ */
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import type { SkillEffect } from '../../battle/types.js';
+import {
+  validateTechniqueSkillEffect,
+  validateTechniqueSkillUpgrade,
+} from '../shared/techniqueSkillGenerationSpec.js';
+
+test('resource 效果应支持 ally 灵气回复机制', () => {
+  const validation = validateTechniqueSkillEffect({
+    type: 'resource',
+    resourceType: 'lingqi',
+    target: 'ally',
+    value: 35,
+  });
+
+  assert.deepEqual(validation, { success: true });
+});
+
+test('mark:consume 效果应支持引爆印记机制', () => {
+  const effect: SkillEffect = {
+    type: 'mark',
+    markId: 'void_erosion',
+    operation: 'consume',
+    consumeMode: 'all',
+    resultType: 'damage',
+    valueType: 'scale',
+    scaleAttr: 'fagong',
+    scaleRate: 0.9,
+    perStackRate: 0.3,
+  };
+
+  assert.deepEqual(validateTechniqueSkillEffect(effect), { success: true });
+});
+
+test('非法 controlType 应被共享校验拦截', () => {
+  const validation = validateTechniqueSkillEffect({
+    type: 'control',
+    controlType: 'banish',
+    chance: 0.25,
+    duration: 1,
+  });
+
+  assert.deepEqual(validation, { success: false, reason: 'controlType 不在允许枚举中' });
+});
+
+test('升级项应支持 addEffect 追加控制效果', () => {
+  const validation = validateTechniqueSkillUpgrade(
+    {
+      layer: 5,
+      changes: {
+        addEffect: {
+          type: 'control',
+          controlType: 'stun',
+          chance: 0.2,
+          duration: 1,
+        },
+      },
+    },
+    9,
+  );
+
+  assert.deepEqual(validation, { success: true });
+});
+
+test('升级项中的旧式 effectChanges 字段应被拒绝', () => {
+  const validation = validateTechniqueSkillUpgrade(
+    {
+      layer: 3,
+      effectChanges: [
+        {
+          effectIndex: 0,
+          scaleRate: 1.8,
+        },
+      ],
+      changes: {
+        cooldown: -1,
+      },
+    },
+    9,
+  );
+
+  assert.deepEqual(validation, { success: false, reason: 'upgrades 不支持字段 effectChanges' });
+});

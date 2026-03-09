@@ -7,6 +7,8 @@ import { BATTLE_CONSTANTS } from '../types.js';
 import { rollChance } from '../utils/random.js';
 import { addBuff } from './buff.js';
 
+export const CONTROL_TYPE_LIST = ['stun', 'freeze', 'silence', 'disarm', 'root', 'taunt', 'fear'] as const;
+
 // 硬控类型（会触发递减）
 const HARD_CONTROL_TYPES = ['stun', 'freeze', 'fear'];
 

@@ -43,8 +43,10 @@ import {
   TECHNIQUE_PROMPT_SYSTEM_MESSAGE,
   TECHNIQUE_SKILL_COUNT_RANGE_BY_QUALITY,
   isSupportedTechniquePassiveKey,
-  validateTechniqueStructuredBuffEffect,
+  validateTechniqueSkillEffect,
+  validateTechniqueSkillUpgrade,
 } from './shared/techniqueGenerationConstraints.js';
+import type { TechniqueSkillUpgradeEntry } from './shared/techniqueSkillGenerationSpec.js';
 import {
   buildTechniqueResearchCooldownState,
   formatTechniqueResearchCooldownRemaining,
@@ -97,7 +99,7 @@ export type TechniqueGenerationCandidate = {
     effects: unknown[];
     triggerType: 'active';
     aiPriority: number;
-    upgrades: unknown[];
+    upgrades: TechniqueSkillUpgradeEntry[];
   }>;
   layers: Array<{
     layer: number;
@@ -534,22 +536,24 @@ const validateCandidate = (
       if (!effect || typeof effect !== 'object' || Array.isArray(effect)) {
         return { success: false, message: 'AI结果技能效果结构非法', code: 'GENERATOR_INVALID' };
       }
-      if ('valueFormula' in (effect as Record<string, unknown>)) {
-        return { success: false, message: 'AI结果技能效果包含未支持字段valueFormula', code: 'GENERATOR_INVALID' };
+      const effectValidation = validateTechniqueSkillEffect(effect as SkillEffect);
+      if (!effectValidation.success) {
+        return {
+          success: false,
+          message: `AI结果技能效果非法：${effectValidation.reason}`,
+          code: 'GENERATOR_INVALID',
+        };
       }
-      const effectType = asString((effect as Record<string, unknown>).type);
-      if (!DAMAGE_EFFECT_TYPE_SET.has(effectType)) {
-        return { success: false, message: 'AI结果技能效果类型非法', code: 'GENERATOR_INVALID' };
-      }
-      if (effectType === 'buff' || effectType === 'debuff') {
-        const buffValidation = validateTechniqueStructuredBuffEffect(effect as SkillEffect);
-        if (!buffValidation.success) {
-          return {
-            success: false,
-            message: `AI结果技能效果包含未支持的结构化Buff配置：${buffValidation.reason}`,
-            code: 'GENERATOR_INVALID',
-          };
-        }
+    }
+
+    for (const upgrade of skill.upgrades) {
+      const upgradeValidation = validateTechniqueSkillUpgrade(upgrade, expectedMaxLayer);
+      if (!upgradeValidation.success) {
+        return {
+          success: false,
+          message: `AI结果技能升级配置非法：${upgradeValidation.reason}`,
+          code: 'GENERATOR_INVALID',
+        };
       }
     }
   }
@@ -610,7 +614,12 @@ const sanitizeCandidateFromModel = (raw: unknown, quality: TechniqueQuality): Te
       effects: normalizedEffects,
       triggerType: 'active' as const,
       aiPriority: Math.floor(clamp(asNumber(row.aiPriority, 50), 0, 100)),
-      upgrades: Array.isArray(row.upgrades) ? row.upgrades : [],
+      upgrades: Array.isArray(row.upgrades)
+        ? row.upgrades.flatMap((entry) => {
+            if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
+            return [entry as TechniqueSkillUpgradeEntry];
+          })
+        : [],
     };
     return [skill];
   });

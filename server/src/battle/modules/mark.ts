@@ -22,6 +22,10 @@
 import type { ActiveMark, BattleUnit } from "../types.js";
 
 export const VOID_EROSION_MARK_ID = "void_erosion";
+export const MARK_ID_LIST = [VOID_EROSION_MARK_ID] as const;
+export const MARK_OPERATION_LIST = ["apply", "consume"] as const;
+export const MARK_CONSUME_MODE_LIST = ["all", "fixed"] as const;
+export const MARK_RESULT_TYPE_LIST = ["damage", "shield_self", "heal_self"] as const;
 
 const VOID_EROSION_DAMAGE_PER_STACK = 0.02;
 const VOID_EROSION_DAMAGE_BONUS_CAP = 0.1;
@@ -33,9 +37,9 @@ const MARK_NAME_MAP: Record<string, string> = {
   [VOID_EROSION_MARK_ID]: "虚蚀印记",
 };
 
-export type MarkOperation = "apply" | "consume";
-export type MarkConsumeMode = "all" | "fixed";
-export type MarkResultType = "damage" | "shield_self" | "heal_self";
+export type MarkOperation = typeof MARK_OPERATION_LIST[number];
+export type MarkConsumeMode = typeof MARK_CONSUME_MODE_LIST[number];
+export type MarkResultType = typeof MARK_RESULT_TYPE_LIST[number];
 
 export interface ResolvedMarkEffect {
   markId: string;

@@ -19,6 +19,24 @@
  */
 import { REALM_ORDER } from './realmRules.js';
 import {
+  TECHNIQUE_SKILL_CONTROL_TYPE_LIST,
+  TECHNIQUE_SKILL_DISPEL_TYPE_LIST,
+  TECHNIQUE_SKILL_EFFECT_TYPE_LIST,
+  TECHNIQUE_SKILL_MARK_CONSUME_MODE_LIST,
+  TECHNIQUE_SKILL_MARK_ID_LIST,
+  TECHNIQUE_SKILL_MARK_OPERATION_LIST,
+  TECHNIQUE_SKILL_MARK_RESULT_TYPE_LIST,
+  TECHNIQUE_SKILL_RESOURCE_TARGET_LIST,
+  TECHNIQUE_SKILL_RESOURCE_TYPE_LIST,
+  TECHNIQUE_SKILL_SCALE_ATTR_LIST,
+  TECHNIQUE_SKILL_TARGET_TYPE_LIST,
+  TECHNIQUE_SKILL_UPGRADE_ALLOWED_CHANGE_KEYS,
+  TECHNIQUE_SKILL_UPGRADE_UNSUPPORTED_FIELDS,
+  TECHNIQUE_SKILL_VALUE_TYPE_LIST,
+  validateTechniqueSkillEffect,
+  validateTechniqueSkillUpgrade,
+} from './techniqueSkillGenerationSpec.js';
+import {
   getTechniqueStructuredBuffCatalog,
   validateTechniqueStructuredBuffEffect,
 } from './techniqueStructuredBuffCatalog.js';
@@ -29,21 +47,7 @@ export type GeneratedTechniqueQuality = '黄' | '玄' | '地' | '天';
 export const TECHNIQUE_PROMPT_SYSTEM_MESSAGE =
   '你是修仙RPG功法设计器。请严格输出JSON，不要输出额外文本。';
 
-export const TECHNIQUE_EFFECT_TYPE_LIST = [
-  'damage',
-  'heal',
-  'shield',
-  'buff',
-  'debuff',
-  'dispel',
-  'resource',
-  'restore_lingqi',
-  'cleanse',
-  'cleanse_control',
-  'lifesteal',
-  'control',
-  'mark',
-] as const;
+export const TECHNIQUE_EFFECT_TYPE_LIST = TECHNIQUE_SKILL_EFFECT_TYPE_LIST;
 
 export const TECHNIQUE_EFFECT_UNSUPPORTED_FIELDS = ['valueFormula'] as const;
 
@@ -120,34 +124,7 @@ export const TECHNIQUE_SKILL_COUNT_RANGE_BY_QUALITY: Record<GeneratedTechniqueQu
   天: { min: 2, max: 4 },
 };
 
-export const TECHNIQUE_EFFECT_SCALE_ATTR_OPTIONS = [
-  'max_qixue',
-  'max_lingqi',
-  'wugong',
-  'fagong',
-  'wufang',
-  'fafang',
-  'sudu',
-  'mingzhong',
-  'shanbi',
-  'zhaojia',
-  'baoji',
-  'baoshang',
-  'kangbao',
-  'zengshang',
-  'zhiliao',
-  'jianliao',
-  'xixue',
-  'lengque',
-  'kongzhi_kangxing',
-  'jin_kangxing',
-  'mu_kangxing',
-  'shui_kangxing',
-  'huo_kangxing',
-  'tu_kangxing',
-  'qixue_huifu',
-  'lingqi_huifu',
-] as const;
+export const TECHNIQUE_EFFECT_SCALE_ATTR_OPTIONS = TECHNIQUE_SKILL_SCALE_ATTR_LIST;
 
 export const TECHNIQUE_PROMPT_GENERAL_RULES = [
   '仅输出单个 JSON 对象，不要输出代码块与解释文本',
@@ -175,42 +152,26 @@ export const TECHNIQUE_PROMPT_TYPE_ENUM = ['武技', '心法', '法诀', '身法
 
 export const TECHNIQUE_PROMPT_REALM_ENUM = REALM_ORDER;
 
-export const TECHNIQUE_PROMPT_TARGET_TYPE_ENUM = [
-  'self',
-  'single_enemy',
-  'single_ally',
-  'all_enemy',
-  'all_ally',
-  'random_enemy',
-  'random_ally',
-] as const;
+export const TECHNIQUE_PROMPT_TARGET_TYPE_ENUM = TECHNIQUE_SKILL_TARGET_TYPE_LIST;
 
 export const TECHNIQUE_PROMPT_ELEMENT_ENUM = ['none', 'jin', 'mu', 'shui', 'huo', 'tu'] as const;
 
 export const TECHNIQUE_PROMPT_DAMAGE_TYPE_ENUM = ['physical', 'magic', 'true'] as const;
 
-export const TECHNIQUE_PROMPT_VALUE_TYPE_ENUM = ['flat', 'percent', 'scale', 'combined'] as const;
+export const TECHNIQUE_PROMPT_VALUE_TYPE_ENUM = TECHNIQUE_SKILL_VALUE_TYPE_LIST;
 
-export const TECHNIQUE_PROMPT_RESOURCE_TYPE_ENUM = ['lingqi', 'qixue'] as const;
+export const TECHNIQUE_PROMPT_RESOURCE_TYPE_ENUM = TECHNIQUE_SKILL_RESOURCE_TYPE_LIST;
 
-export const TECHNIQUE_PROMPT_DISPEL_TYPE_ENUM = ['buff', 'debuff', 'all'] as const;
+export const TECHNIQUE_PROMPT_DISPEL_TYPE_ENUM = TECHNIQUE_SKILL_DISPEL_TYPE_LIST;
 
-export const TECHNIQUE_PROMPT_RESOURCE_TARGET_ENUM = ['self', 'enemy', 'ally'] as const;
+export const TECHNIQUE_PROMPT_RESOURCE_TARGET_ENUM = TECHNIQUE_SKILL_RESOURCE_TARGET_LIST;
 
-export const TECHNIQUE_PROMPT_CONTROL_TYPE_ENUM = [
-  'stun',
-  'freeze',
-  'silence',
-  'disarm',
-  'root',
-  'taunt',
-  'fear',
-] as const;
+export const TECHNIQUE_PROMPT_CONTROL_TYPE_ENUM = TECHNIQUE_SKILL_CONTROL_TYPE_LIST;
 
-export const TECHNIQUE_PROMPT_MARK_ID_ENUM = ['void_erosion'] as const;
-export const TECHNIQUE_PROMPT_MARK_OPERATION_ENUM = ['apply', 'consume'] as const;
-export const TECHNIQUE_PROMPT_MARK_CONSUME_MODE_ENUM = ['all', 'fixed'] as const;
-export const TECHNIQUE_PROMPT_MARK_RESULT_TYPE_ENUM = ['damage', 'shield_self', 'heal_self'] as const;
+export const TECHNIQUE_PROMPT_MARK_ID_ENUM = TECHNIQUE_SKILL_MARK_ID_LIST;
+export const TECHNIQUE_PROMPT_MARK_OPERATION_ENUM = TECHNIQUE_SKILL_MARK_OPERATION_LIST;
+export const TECHNIQUE_PROMPT_MARK_CONSUME_MODE_ENUM = TECHNIQUE_SKILL_MARK_CONSUME_MODE_LIST;
+export const TECHNIQUE_PROMPT_MARK_RESULT_TYPE_ENUM = TECHNIQUE_SKILL_MARK_RESULT_TYPE_LIST;
 
 const buildTechniquePromptBuffConfigRules = () => {
   const catalog = getTechniqueStructuredBuffCatalog();
@@ -296,24 +257,9 @@ export const TECHNIQUE_PROMPT_NUMERIC_RANGES = {
   },
 } as const;
 
-export const TECHNIQUE_PROMPT_UPGRADE_ALLOWED_CHANGE_KEYS = [
-  'target_count',
-  'cooldown',
-  'cost_lingqi',
-  'cost_lingqi_rate',
-  'cost_qixue',
-  'cost_qixue_rate',
-  'ai_priority',
-  'effects',
-  'addEffect',
-] as const;
+export const TECHNIQUE_PROMPT_UPGRADE_ALLOWED_CHANGE_KEYS = TECHNIQUE_SKILL_UPGRADE_ALLOWED_CHANGE_KEYS;
 
-export const TECHNIQUE_PROMPT_UPGRADE_UNSUPPORTED_FIELDS = [
-  'description',
-  'effectChanges',
-  'effectIndex',
-  'valueFormula',
-] as const;
+export const TECHNIQUE_PROMPT_UPGRADE_UNSUPPORTED_FIELDS = TECHNIQUE_SKILL_UPGRADE_UNSUPPORTED_FIELDS;
 
 export const TECHNIQUE_PROMPT_UPGRADE_SCHEMA = {
   item: {
@@ -766,7 +712,7 @@ export const buildTechniqueGeneratorPromptInput = (params: {
   };
 };
 
-export { validateTechniqueStructuredBuffEffect };
+export { validateTechniqueSkillEffect, validateTechniqueSkillUpgrade, validateTechniqueStructuredBuffEffect };
 
 export const isSupportedTechniquePassiveKey = (raw: unknown): boolean => {
   if (typeof raw !== 'string') return false;
