@@ -9,11 +9,12 @@
  * - 购买商品：检查贡献 → 检查每日限购 → 扣除贡献 → 发放物品 → 记录任务进度 → 记录日志
  *
  * 边界条件：
- * 1) 购买操作使用 @Transactional 保证原子性
+ * 1) 购买操作使用 @Transactional 保证原子性；扣除贡献后若发物品失败，必须抛业务异常触发整笔回滚
  * 2) 查询商店为纯读操作，不需要事务
  */
 import { query } from '../../config/database.js';
 import { Transactional } from '../../decorators/transactional.js';
+import { BusinessError } from '../../middleware/BusinessError.js';
 import { itemService } from '../itemService.js';
 import { assertMember, getCharacterUserId, toNumber } from './db.js';
 import { recordSectShopBuyEventTx } from './quests.js';
@@ -157,9 +158,7 @@ class SectShopService {
       location: 'bag',
       obtainedFrom: 'sect_shop',
     });
-    if (!createRes.success) {
-      return { success: false, message: createRes.message };
-    }
+    if (!createRes.success) throw new BusinessError(createRes.message);
 
     await recordSectShopBuyEventTx(characterId, q);
 
