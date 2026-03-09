@@ -110,6 +110,9 @@ type EquippedTechniqueRow = {
 };
 
 const attrLabelMap: Record<string, string> = {
+  jing: '精',
+  qi: '气',
+  shen: '神',
   qixue: '气血',
   max_qixue: '最大气血',
   lingqi: '灵气',

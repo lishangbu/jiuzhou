@@ -1514,6 +1514,62 @@
           ]
         },
         {
+          "key": "qi_percent",
+          "name": "气%",
+          "apply_type": "percent",
+          "group": "resource",
+          "weight": 35,
+          "tiers": [
+            {
+              "tier": 3,
+              "min": 0.018,
+              "max": 0.03,
+              "realm_rank_min": 3
+            },
+            {
+              "tier": 4,
+              "min": 0.03,
+              "max": 0.048,
+              "realm_rank_min": 4
+            },
+            {
+              "tier": 5,
+              "min": 0.042,
+              "max": 0.066,
+              "realm_rank_min": 5
+            },
+            {
+              "tier": 6,
+              "min": 0.054,
+              "max": 0.084,
+              "realm_rank_min": 6
+            },
+            {
+              "tier": 7,
+              "min": 0.0621,
+              "max": 0.0966,
+              "realm_rank_min": 7
+            },
+            {
+              "tier": 8,
+              "min": 0.0702,
+              "max": 0.1092,
+              "realm_rank_min": 8
+            },
+            {
+              "tier": 9,
+              "min": 0.080028,
+              "max": 0.124488,
+              "realm_rank_min": 9
+            }
+          ],
+          "modifiers": [
+            {
+              "attr_key": "qi"
+            }
+          ]
+        },
+        {
           "key": "baoji_flat",
           "name": "暴击+",
           "apply_type": "flat",
@@ -4878,6 +4934,62 @@
           "modifiers": [
             {
               "attr_key": "fafang"
+            }
+          ]
+        },
+        {
+          "key": "jing_percent",
+          "name": "精%",
+          "apply_type": "percent",
+          "group": "survival",
+          "weight": 30,
+          "tiers": [
+            {
+              "tier": 3,
+              "min": 0.018,
+              "max": 0.03,
+              "realm_rank_min": 3
+            },
+            {
+              "tier": 4,
+              "min": 0.03,
+              "max": 0.048,
+              "realm_rank_min": 4
+            },
+            {
+              "tier": 5,
+              "min": 0.042,
+              "max": 0.066,
+              "realm_rank_min": 5
+            },
+            {
+              "tier": 6,
+              "min": 0.054,
+              "max": 0.084,
+              "realm_rank_min": 6
+            },
+            {
+              "tier": 7,
+              "min": 0.0621,
+              "max": 0.0966,
+              "realm_rank_min": 7
+            },
+            {
+              "tier": 8,
+              "min": 0.0702,
+              "max": 0.1092,
+              "realm_rank_min": 8
+            },
+            {
+              "tier": 9,
+              "min": 0.080028,
+              "max": 0.124488,
+              "realm_rank_min": 9
+            }
+          ],
+          "modifiers": [
+            {
+              "attr_key": "jing"
             }
           ]
         },
@@ -8422,6 +8534,62 @@
           "modifiers": [
             {
               "attr_key": "max_qixue"
+            }
+          ]
+        },
+        {
+          "key": "shen_percent",
+          "name": "神%",
+          "apply_type": "percent",
+          "group": "utility",
+          "weight": 35,
+          "tiers": [
+            {
+              "tier": 3,
+              "min": 0.018,
+              "max": 0.03,
+              "realm_rank_min": 3
+            },
+            {
+              "tier": 4,
+              "min": 0.03,
+              "max": 0.048,
+              "realm_rank_min": 4
+            },
+            {
+              "tier": 5,
+              "min": 0.042,
+              "max": 0.066,
+              "realm_rank_min": 5
+            },
+            {
+              "tier": 6,
+              "min": 0.054,
+              "max": 0.084,
+              "realm_rank_min": 6
+            },
+            {
+              "tier": 7,
+              "min": 0.0621,
+              "max": 0.0966,
+              "realm_rank_min": 7
+            },
+            {
+              "tier": 8,
+              "min": 0.0702,
+              "max": 0.1092,
+              "realm_rank_min": 8
+            },
+            {
+              "tier": 9,
+              "min": 0.080028,
+              "max": 0.124488,
+              "realm_rank_min": 9
+            }
+          ],
+          "modifiers": [
+            {
+              "attr_key": "shen"
             }
           ]
         },

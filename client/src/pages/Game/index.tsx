@@ -148,6 +148,9 @@ const RATING_BASE_ATTR_KEYS = [
 const RATING_BASE_ATTR_KEY_SET = new Set<string>(RATING_BASE_ATTR_KEYS);
 
 const attrLabelBase: Record<string, string> = {
+  jing: '精',
+  qi: '气',
+  shen: '神',
   max_qixue: '气血上限',
   max_lingqi: '灵气上限',
   wugong: '物攻',

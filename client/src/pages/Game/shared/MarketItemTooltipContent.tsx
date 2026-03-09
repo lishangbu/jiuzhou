@@ -55,6 +55,9 @@ const translateKey = (key: string): string | null => {
     description: '描述',
     name: '名称',
 
+    jing: '精',
+    qi: '气',
+    shen: '神',
     max_qixue: '气血上限',
     max_lingqi: '灵气上限',
     qixue: '气血',

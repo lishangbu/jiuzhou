@@ -25,6 +25,14 @@ import {
   getTitleDefinitions,
 } from './staticConfigLoader.js';
 import { extractFlatAffixDeltas, extractPercentAffixDeltas } from './shared/affixModifier.js';
+import {
+  createCharacterPrimaryAttrs,
+  applyCharacterPrimaryAttrsToStats,
+  isCharacterPrimaryAttrKey,
+  resolveCharacterPrimaryAttrs,
+  type CharacterPrimaryAttrKey,
+  type CharacterPrimaryAttrs,
+} from './shared/characterPrimaryAttrs.js';
 import { convertRatingToPercent, getEffectiveLevelByRealm, resolveRatingBaseAttrKey } from './shared/affixRating.js';
 import { buildInsightPctBonusByLevel } from './shared/insightRules.js';
 import { resolveQualityRankFromName } from './shared/itemQuality.js';
@@ -107,6 +115,7 @@ interface CharacterResourceState {
 interface StaticAttrsCachePayload {
   signature: string;
   attrs: CharacterComputedStats;
+  primaryAttrs: CharacterPrimaryAttrs;
 }
 
 type BreakthroughPctRewards = Partial<{
@@ -169,7 +178,7 @@ type CharacterAttrKey =
   | 'qixue_huifu'
   | 'lingqi_huifu';
 
-const STATIC_ATTR_CACHE_KEY_PREFIX = 'character:computed:static:v3:';
+const STATIC_ATTR_CACHE_KEY_PREFIX = 'character:computed:static:v4:';
 const RESOURCE_CACHE_KEY_PREFIX = 'character:runtime:resource:v1:';
 const STATIC_ATTR_CACHE_TTL_SECONDS = 60;
 const STATIC_ATTR_MEMORY_TTL_MS = 20_000;
@@ -617,6 +626,7 @@ const applyInsightRewardsToStats = (
 interface EquippedAttrBonuses {
   flatStats: CharacterComputedStats;
   pctModifiers: Record<string, number>;
+  primaryAttrPctModifiers: Partial<Record<CharacterPrimaryAttrKey, number>>;
 }
 
 const loadEquippedAttrBonuses = async (characterId: number, effectiveLevel: number): Promise<EquippedAttrBonuses> => {
@@ -625,6 +635,7 @@ const loadEquippedAttrBonuses = async (characterId: number, effectiveLevel: numb
     flatStats[key] = 0;
   }
   const pctModifiers: Record<string, number> = {};
+  const primaryAttrPctModifiers: Partial<Record<CharacterPrimaryAttrKey, number>> = {};
   const ratingTotals: Partial<Record<CharacterAttrKey, number>> = {};
 
   const equippedResult = await query(
@@ -694,6 +705,10 @@ const loadEquippedAttrBonuses = async (characterId: number, effectiveLevel: numb
 
       const percentRows = extractPercentAffixDeltas(affixRaw);
       for (const rowValue of percentRows) {
+        if (isCharacterPrimaryAttrKey(rowValue.attrKey)) {
+          primaryAttrPctModifiers[rowValue.attrKey] = (primaryAttrPctModifiers[rowValue.attrKey] || 0) + rowValue.value;
+          continue;
+        }
         if (!TECHNIQUE_PASSIVE_PERCENT_MULTIPLY_KEYS.has(rowValue.attrKey)) continue;
         if (!Object.prototype.hasOwnProperty.call(flatStats, rowValue.attrKey)) continue;
         pctModifiers[rowValue.attrKey] = (pctModifiers[rowValue.attrKey] || 0) + rowValue.value;
@@ -706,7 +721,7 @@ const loadEquippedAttrBonuses = async (characterId: number, effectiveLevel: numb
 
   const setIds = [...setCountMap.keys()];
   if (setIds.length === 0) {
-    return { flatStats, pctModifiers };
+    return { flatStats, pctModifiers, primaryAttrPctModifiers };
   }
 
   const staticSetBonusBySetId = new Map<
@@ -756,7 +771,7 @@ const loadEquippedAttrBonuses = async (characterId: number, effectiveLevel: numb
     applyAttrDelta(flatStats, attrKey, projectedValue);
   }
 
-  return { flatStats, pctModifiers };
+  return { flatStats, pctModifiers, primaryAttrPctModifiers };
 };
 
 const loadEquippedTitleEffects = async (characterId: number): Promise<Record<string, number>> => {
@@ -780,25 +795,14 @@ const loadEquippedTitleEffects = async (characterId: number): Promise<Record<str
   return parseTitleEffects(titleDef.effects);
 };
 
-const computeStaticAttrs = async (base: CharacterBaseRow): Promise<CharacterComputedStats> => {
+interface ResolvedStaticAttrs {
+  attrs: CharacterComputedStats;
+  primaryAttrs: CharacterPrimaryAttrs;
+}
+
+const computeStaticAttrs = async (base: CharacterBaseRow): Promise<ResolvedStaticAttrs> => {
   const stats = emptyStats();
   const pctModifiers: Record<string, number> = {};
-
-  // 精气神基础成长
-  stats.max_qixue += base.jing * 5;
-  stats.wufang += base.jing * 2;
-  stats.fafang += base.jing * 2;
-
-  stats.max_lingqi += base.qi * 5;
-  stats.wugong += base.qi * 2;
-  stats.fagong += base.qi * 2;
-
-  // 显式使用 DEFAULT_ATTRS 基础值，不依赖 emptyStats() 展开结果
-  stats.mingzhong = roundRatio(DEFAULT_ATTRS.mingzhong + base.shen * 0.002);
-  stats.baoji = roundRatio(DEFAULT_ATTRS.baoji + base.shen * 0.001);
-
-  await applyRealmRewardsToStats(base, stats, pctModifiers);
-  applyInsightRewardsToStats(base, pctModifiers);
   const effectiveLevel = getEffectiveLevelByRealm(base.realm, base.sub_realm);
 
   const [equipBonuses, titleEffects, techniquePassives] = await Promise.all([
@@ -806,6 +810,19 @@ const computeStaticAttrs = async (base: CharacterBaseRow): Promise<CharacterComp
     loadEquippedTitleEffects(base.id),
     loadTechniquePassives(base.id),
   ]);
+
+  const primaryAttrs = resolveCharacterPrimaryAttrs(
+    createCharacterPrimaryAttrs({
+      jing: base.jing,
+      qi: base.qi,
+      shen: base.shen,
+    }),
+    equipBonuses.primaryAttrPctModifiers,
+  );
+
+  applyCharacterPrimaryAttrsToStats(stats, primaryAttrs);
+  await applyRealmRewardsToStats(base, stats, pctModifiers);
+  applyInsightRewardsToStats(base, pctModifiers);
 
   for (const [key, value] of Object.entries(equipBonuses.flatStats)) {
     applyAttrDelta(stats, key, value);
@@ -827,7 +844,10 @@ const computeStaticAttrs = async (base: CharacterBaseRow): Promise<CharacterComp
     }
   }
 
-  return normalizeStats(stats);
+  return {
+    attrs: normalizeStats(stats),
+    primaryAttrs,
+  };
 };
 
 const getStaticCacheKey = (characterId: number): string => {
@@ -848,7 +868,14 @@ const readStaticAttrsFromCache = async (characterId: number): Promise<StaticAttr
     if (!raw) return null;
     const parsed = JSON.parse(raw) as StaticAttrsCachePayload;
     if (!parsed || typeof parsed !== 'object') return null;
-    if (typeof parsed.signature !== 'string' || !parsed.attrs) return null;
+    if (typeof parsed.signature !== 'string' || !parsed.attrs || !parsed.primaryAttrs) return null;
+    if (
+      !Number.isFinite(parsed.primaryAttrs.jing) ||
+      !Number.isFinite(parsed.primaryAttrs.qi) ||
+      !Number.isFinite(parsed.primaryAttrs.shen)
+    ) {
+      return null;
+    }
     staticAttrsMemoryCache.set(characterId, {
       payload: parsed,
       expiresAt: now + STATIC_ATTR_MEMORY_TTL_MS,
@@ -971,17 +998,24 @@ const ensureResourceState = async (
 const resolveStaticAttrs = async (
   base: CharacterBaseRow,
   bypassStaticCache: boolean,
-): Promise<CharacterComputedStats> => {
+): Promise<ResolvedStaticAttrs> => {
   const signature = buildSignature(base);
   if (!bypassStaticCache) {
     const cached = await readStaticAttrsFromCache(base.id);
     if (cached && cached.signature === signature) {
-      return cached.attrs;
+      return {
+        attrs: cached.attrs,
+        primaryAttrs: cached.primaryAttrs,
+      };
     }
   }
-  const attrs = await computeStaticAttrs(base);
-  await writeStaticAttrsCache(base.id, { signature, attrs });
-  return attrs;
+  const resolved = await computeStaticAttrs(base);
+  await writeStaticAttrsCache(base.id, {
+    signature,
+    attrs: resolved.attrs,
+    primaryAttrs: resolved.primaryAttrs,
+  });
+  return resolved;
 };
 
 const buildComputedRow = async (
@@ -989,17 +1023,22 @@ const buildComputedRow = async (
   options?: { bypassStaticCache?: boolean },
 ): Promise<CharacterComputedRow> => {
   const bypassStaticCache = options?.bypassStaticCache === true;
-  const staticAttrs = await resolveStaticAttrs(base, bypassStaticCache);
-  const resources = await ensureResourceState(base.id, staticAttrs.max_qixue, staticAttrs.max_lingqi);
+  const staticSnapshot = await resolveStaticAttrs(base, bypassStaticCache);
+  const resources = await ensureResourceState(
+    base.id,
+    staticSnapshot.attrs.max_qixue,
+    staticSnapshot.attrs.max_lingqi,
+  );
   const staminaMax = calcCharacterStaminaMaxByInsightLevel(base.insight_level);
   const stamina = clampNumber(Math.floor(Number(base.stamina) || 0), 0, staminaMax);
   const { insight_level: _ignoredInsightLevel, ...baseWithoutInsight } = base;
 
   return {
     ...baseWithoutInsight,
+    ...staticSnapshot.primaryAttrs,
     stamina,
     stamina_max: staminaMax,
-    ...staticAttrs,
+    ...staticSnapshot.attrs,
     qixue: resources.qixue,
     lingqi: resources.lingqi,
   };

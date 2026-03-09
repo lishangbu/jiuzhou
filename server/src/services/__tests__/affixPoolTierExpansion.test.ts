@@ -33,7 +33,7 @@ const COMMON_POOL_IDS = [
   'ap-artifact-common',
 ] as const;
 
-const EXPECTED_TOTAL_TIER_ROWS = 1073;
+const EXPECTED_TOTAL_TIER_ROWS = 1094;
 
 const trimNumber = (value: number, maxDp = 6): string => {
   return Number(value)
