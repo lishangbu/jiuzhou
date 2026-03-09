@@ -951,68 +951,6 @@
           ]
         },
         {
-          "key": "shuxing_shuzhi_flat",
-          "name": "属性数值+",
-          "apply_type": "flat",
-          "group": "output",
-          "weight": 40,
-          "tiers": [
-            {
-              "tier": 2,
-              "min": 104,
-              "max": 210,
-              "realm_rank_min": 2
-            },
-            {
-              "tier": 3,
-              "min": 226,
-              "max": 398,
-              "realm_rank_min": 3
-            },
-            {
-              "tier": 4,
-              "min": 365,
-              "max": 613,
-              "realm_rank_min": 4
-            },
-            {
-              "tier": 5,
-              "min": 521,
-              "max": 856,
-              "realm_rank_min": 5
-            },
-            {
-              "tier": 6,
-              "min": 696,
-              "max": 1127,
-              "realm_rank_min": 6
-            },
-            {
-              "tier": 7,
-              "min": 850,
-              "max": 1380,
-              "realm_rank_min": 7
-            },
-            {
-              "tier": 8,
-              "min": 1004,
-              "max": 1633,
-              "realm_rank_min": 8
-            },
-            {
-              "tier": 9,
-              "min": 1144.56,
-              "max": 1861.62,
-              "realm_rank_min": 9
-            }
-          ],
-          "modifiers": [
-            {
-              "attr_key": "shuxing_shuzhi_rating"
-            }
-          ]
-        },
-        {
           "key": "sudu_flat",
           "name": "速度+",
           "apply_type": "flat",
@@ -1846,62 +1784,6 @@
           "modifiers": [
             {
               "attr_key": "xixue_rating"
-            }
-          ]
-        },
-        {
-          "key": "shuxing_shuzhi_flat",
-          "name": "属性数值+",
-          "apply_type": "flat",
-          "group": "output",
-          "weight": 45,
-          "tiers": [
-            {
-              "tier": 3,
-              "min": 283,
-              "max": 456,
-              "realm_rank_min": 3
-            },
-            {
-              "tier": 4,
-              "min": 489,
-              "max": 739,
-              "realm_rank_min": 4
-            },
-            {
-              "tier": 5,
-              "min": 721,
-              "max": 1060,
-              "realm_rank_min": 5
-            },
-            {
-              "tier": 6,
-              "min": 982,
-              "max": 1421,
-              "realm_rank_min": 6
-            },
-            {
-              "tier": 7,
-              "min": 1201,
-              "max": 1742,
-              "realm_rank_min": 7
-            },
-            {
-              "tier": 8,
-              "min": 1420,
-              "max": 2063,
-              "realm_rank_min": 8
-            },
-            {
-              "tier": 9,
-              "min": 1618.8,
-              "max": 2351.82,
-              "realm_rank_min": 9
-            }
-          ],
-          "modifiers": [
-            {
-              "attr_key": "shuxing_shuzhi_rating"
             }
           ]
         },
@@ -8002,68 +7884,6 @@
           ]
         },
         {
-          "key": "shuxing_shuzhi_flat",
-          "name": "属性数值+",
-          "apply_type": "flat",
-          "group": "output",
-          "weight": 20,
-          "tiers": [
-            {
-              "tier": 2,
-              "min": 104,
-              "max": 210,
-              "realm_rank_min": 2
-            },
-            {
-              "tier": 3,
-              "min": 226,
-              "max": 398,
-              "realm_rank_min": 3
-            },
-            {
-              "tier": 4,
-              "min": 365,
-              "max": 613,
-              "realm_rank_min": 4
-            },
-            {
-              "tier": 5,
-              "min": 521,
-              "max": 856,
-              "realm_rank_min": 5
-            },
-            {
-              "tier": 6,
-              "min": 696,
-              "max": 1127,
-              "realm_rank_min": 6
-            },
-            {
-              "tier": 7,
-              "min": 850,
-              "max": 1380,
-              "realm_rank_min": 7
-            },
-            {
-              "tier": 8,
-              "min": 1004,
-              "max": 1633,
-              "realm_rank_min": 8
-            },
-            {
-              "tier": 9,
-              "min": 1144.56,
-              "max": 1861.62,
-              "realm_rank_min": 9
-            }
-          ],
-          "modifiers": [
-            {
-              "attr_key": "shuxing_shuzhi_rating"
-            }
-          ]
-        },
-        {
           "key": "proc_baonu",
           "name": "暴怒意",
           "apply_type": "special",
@@ -9068,74 +8888,6 @@
               "attr_key": "zengshang_rating"
             }
           ]
-        },
-        {
-          "key": "shuxing_shuzhi_flat",
-          "name": "属性数值+",
-          "apply_type": "flat",
-          "group": "output",
-          "weight": 45,
-          "tiers": [
-            {
-              "tier": 1,
-              "min": 48,
-              "max": 96,
-              "realm_rank_min": 1
-            },
-            {
-              "tier": 2,
-              "min": 104,
-              "max": 210,
-              "realm_rank_min": 2
-            },
-            {
-              "tier": 3,
-              "min": 211,
-              "max": 407,
-              "realm_rank_min": 3
-            },
-            {
-              "tier": 4,
-              "min": 332,
-              "max": 634,
-              "realm_rank_min": 4
-            },
-            {
-              "tier": 5,
-              "min": 469,
-              "max": 892,
-              "realm_rank_min": 5
-            },
-            {
-              "tier": 6,
-              "min": 622,
-              "max": 1182,
-              "realm_rank_min": 6
-            },
-            {
-              "tier": 7,
-              "min": 760,
-              "max": 1450,
-              "realm_rank_min": 7
-            },
-            {
-              "tier": 8,
-              "min": 899,
-              "max": 1718,
-              "realm_rank_min": 8
-            },
-            {
-              "tier": 9,
-              "min": 1024.86,
-              "max": 1958.52,
-              "realm_rank_min": 9
-            }
-          ],
-          "modifiers": [
-            {
-              "attr_key": "shuxing_shuzhi_rating"
-            }
-          ]
         }
       ]
     },
@@ -9945,68 +9697,6 @@
           "modifiers": [
             {
               "attr_key": "zengshang_rating"
-            }
-          ]
-        },
-        {
-          "key": "shuxing_shuzhi_flat",
-          "name": "属性数值+",
-          "apply_type": "flat",
-          "group": "output",
-          "weight": 50,
-          "tiers": [
-            {
-              "tier": 2,
-              "min": 157,
-              "max": 295,
-              "realm_rank_min": 2
-            },
-            {
-              "tier": 3,
-              "min": 318,
-              "max": 572,
-              "realm_rank_min": 3
-            },
-            {
-              "tier": 4,
-              "min": 501,
-              "max": 891,
-              "realm_rank_min": 4
-            },
-            {
-              "tier": 5,
-              "min": 708,
-              "max": 1253,
-              "realm_rank_min": 5
-            },
-            {
-              "tier": 6,
-              "min": 939,
-              "max": 1660,
-              "realm_rank_min": 6
-            },
-            {
-              "tier": 7,
-              "min": 1148,
-              "max": 2037,
-              "realm_rank_min": 7
-            },
-            {
-              "tier": 8,
-              "min": 1357,
-              "max": 2414,
-              "realm_rank_min": 8
-            },
-            {
-              "tier": 9,
-              "min": 1546.98,
-              "max": 2751.96,
-              "realm_rank_min": 9
-            }
-          ],
-          "modifiers": [
-            {
-              "attr_key": "shuxing_shuzhi_rating"
             }
           ]
         },
