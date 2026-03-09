@@ -103,6 +103,7 @@ export interface BattleAttrs {
   zhaojia: number;
   baoji: number;
   baoshang: number;
+  jianbaoshang: number;
   kangbao: number;
   zengshang: number;
   zhiliao: number;

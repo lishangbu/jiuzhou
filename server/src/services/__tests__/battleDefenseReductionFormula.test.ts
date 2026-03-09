@@ -35,6 +35,7 @@ const BASE_ATTRS: BattleAttrs = {
   zhaojia: 0,
   baoji: 0,
   baoshang: 1.5,
+  jianbaoshang: 0,
   kangbao: 0,
   zengshang: 0,
   zhiliao: 0,
@@ -221,4 +222,56 @@ test('法术伤害应读取 fagong/fafang，不应混用物理攻防', () => {
   assert.ok(physicalReduction > magicReduction, '物理减伤应更高，证明法术未误读 wufang');
   assertClose(magicReduction, expectedMagicReduction, '法术减伤公式偏差');
   assert.equal(damageResult.damage, expectedDamage);
+});
+
+test('暴伤减免应降低暴击后的最终倍率，且最低不会低于1倍', () => {
+  const attacker = createUnit('attacker-8', {
+    mingzhong: 1,
+    baoji: 1,
+    baoshang: 2.1,
+    wugong: 200,
+  });
+  const defender = createUnit('defender-8', {
+    shanbi: 0,
+    zhaojia: 0,
+    kangbao: 0,
+    jianbaoshang: 0.4,
+    wufang: 0,
+  });
+  const state = createState(attacker, defender);
+
+  const result = calculateDamage(state, attacker, defender, {
+    damageType: 'physical',
+    element: 'none',
+    baseDamage: 200,
+  });
+
+  assert.equal(result.isCrit, true);
+  assert.equal(result.damage, 340);
+});
+
+test('暴伤减免高于暴伤收益时，暴击伤害应被钳制为1倍', () => {
+  const attacker = createUnit('attacker-9', {
+    mingzhong: 1,
+    baoji: 1,
+    baoshang: 1.3,
+    wugong: 200,
+  });
+  const defender = createUnit('defender-9', {
+    shanbi: 0,
+    zhaojia: 0,
+    kangbao: 0,
+    jianbaoshang: 0.8,
+    wufang: 0,
+  });
+  const state = createState(attacker, defender);
+
+  const result = calculateDamage(state, attacker, defender, {
+    damageType: 'physical',
+    element: 'none',
+    baseDamage: 200,
+  });
+
+  assert.equal(result.isCrit, true);
+  assert.equal(result.damage, 200);
 });

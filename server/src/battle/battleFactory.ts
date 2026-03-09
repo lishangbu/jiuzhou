@@ -39,6 +39,7 @@ export interface CharacterData {
   zhaojia: number;
   baoji: number;
   baoshang: number;
+  jianbaoshang: number;
   kangbao: number;
   zengshang: number;
   zhiliao: number;
@@ -81,6 +82,7 @@ export interface MonsterData {
     zhaojia?: number;
     baoji?: number;
     baoshang?: number;
+    jianbaoshang?: number;
     kangbao?: number;
     zengshang?: number;
     zhiliao?: number;
@@ -126,6 +128,7 @@ const MONSTER_RATIO_ATTR_KEYS: ReadonlySet<keyof BattleAttrs> = new Set([
   'zhaojia',
   'baoji',
   'baoshang',
+  'jianbaoshang',
   'kangbao',
   'zengshang',
   'zhiliao',
@@ -161,6 +164,7 @@ function applyMonsterEncounterScaling(state: BattleState, base: BattleAttrs, mon
     'zhaojia',
     'baoji',
     'baoshang',
+    'jianbaoshang',
     'kangbao',
     'zengshang',
     'zhiliao',
@@ -431,6 +435,7 @@ function extractAttrs(data: CharacterData): BattleAttrs {
     zhaojia: data.zhaojia,
     baoji: data.baoji,
     baoshang: data.baoshang,
+    jianbaoshang: data.jianbaoshang,
     kangbao: data.kangbao,
     zengshang: data.zengshang,
     zhiliao: data.zhiliao,
@@ -469,6 +474,7 @@ function extractMonsterAttrs(data: MonsterData): BattleAttrs {
     zhaojia: toNumber(attrs.zhaojia, 0),
     baoji: toNumber(attrs.baoji, 0),
     baoshang: toNumber(attrs.baoshang, 0),
+    jianbaoshang: toNumber(attrs.jianbaoshang, 0),
     kangbao: toNumber(attrs.kangbao, 0),
     zengshang: toNumber(attrs.zengshang, 0),
     zhiliao: toNumber(attrs.zhiliao, 0),

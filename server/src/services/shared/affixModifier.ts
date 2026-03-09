@@ -36,6 +36,7 @@ const RATIO_ATTR_KEYS = new Set([
   'zhaojia',
   'baoji',
   'baoshang',
+  'jianbaoshang',
   'kangbao',
   'zengshang',
   'zhiliao',

@@ -14,6 +14,19 @@ interface DamageProfile {
   baseDamage: number;
 }
 
+const clamp = (value: number, min: number, max: number): number => {
+  return Math.max(min, Math.min(max, value));
+};
+
+const calculateCritDamageMultiplier = (
+  attacker: BattleUnit,
+  defender: BattleUnit,
+): number => {
+  const reducedCritDamage =
+    attacker.currentAttrs.baoshang - defender.currentAttrs.jianbaoshang;
+  return clamp(reducedCritDamage, 1, BATTLE_CONSTANTS.MAX_CRIT_DAMAGE);
+};
+
 /**
  * 计算伤害
  */
@@ -71,7 +84,7 @@ export function calculateDamage(
   
   if (rollChance(state, critRate)) {
     result.isCrit = true;
-    const critDamageMultiplier = clamp(attacker.currentAttrs.baoshang, 1, BATTLE_CONSTANTS.MAX_CRIT_DAMAGE);
+    const critDamageMultiplier = calculateCritDamageMultiplier(attacker, defender);
     damage *= critDamageMultiplier;
   }
 
@@ -180,9 +193,3 @@ function getElementResistance(unit: BattleUnit, element?: string): number {
   return key ? (unit.currentAttrs[key] as number) || 0 : 0;
 }
 
-/**
- * 数值限制
- */
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}

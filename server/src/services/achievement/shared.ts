@@ -37,6 +37,7 @@ export const TITLE_EFFECT_KEYS = [
   'zhaojia',
   'baoji',
   'baoshang',
+  'jianbaoshang',
   'kangbao',
   'zengshang',
   'zhiliao',

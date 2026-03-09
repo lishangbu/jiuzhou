@@ -57,6 +57,7 @@ export async function buildCharacterBattleSnapshot(
     zhaojia: characterData.zhaojia,
     baoji: characterData.baoji,
     baoshang: characterData.baoshang,
+    jianbaoshang: characterData.jianbaoshang,
     kangbao: characterData.kangbao,
     zengshang: characterData.zengshang,
     zhiliao: characterData.zhiliao,

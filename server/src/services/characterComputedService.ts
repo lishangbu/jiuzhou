@@ -80,6 +80,7 @@ interface CharacterComputedStats {
   zhaojia: number;
   baoji: number;
   baoshang: number;
+  jianbaoshang: number;
   kangbao: number;
   zengshang: number;
   zhiliao: number;
@@ -162,6 +163,7 @@ type CharacterAttrKey =
   | 'zhaojia'
   | 'baoji'
   | 'baoshang'
+  | 'jianbaoshang'
   | 'kangbao'
   | 'zengshang'
   | 'zhiliao'
@@ -193,6 +195,7 @@ const RATIO_ATTR_KEYS = new Set<CharacterAttrKey>([
   'zhaojia',
   'baoji',
   'baoshang',
+  'jianbaoshang',
   'kangbao',
   'zengshang',
   'zhiliao',
@@ -214,6 +217,7 @@ const TECHNIQUE_PASSIVE_PERCENT_ADDITIVE_KEYS = new Set<string>([
   'zhaojia',
   'baoji',
   'baoshang',
+  'jianbaoshang',
   'kangbao',
   'zengshang',
   'zhiliao',
@@ -253,6 +257,7 @@ const VALID_TITLE_EFFECT_KEYS = new Set<CharacterAttrKey>([
   'zhaojia',
   'baoji',
   'baoshang',
+  'jianbaoshang',
   'kangbao',
   'zengshang',
   'zhiliao',
@@ -282,6 +287,7 @@ const DEFAULT_ATTRS: CharacterComputedStats = Object.freeze({
   zhaojia: 0.05,
   baoji: 0.1,
   baoshang: 1.5,
+  jianbaoshang: 0,
   kangbao: 0,
   zengshang: 0,
   zhiliao: 0,
@@ -443,6 +449,7 @@ const normalizeStats = (stats: CharacterComputedStats): CharacterComputedStats =
     'zhaojia',
     'baoji',
     'baoshang',
+    'jianbaoshang',
     'kangbao',
     'zengshang',
     'zhiliao',
