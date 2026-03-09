@@ -1453,7 +1453,7 @@
         },
         {
           "key": "qi_percent",
-          "name": "气%",
+          "name": "气",
           "apply_type": "percent",
           "group": "resource",
           "weight": 35,
@@ -4821,7 +4821,7 @@
         },
         {
           "key": "jing_percent",
-          "name": "精%",
+          "name": "精",
           "apply_type": "percent",
           "group": "survival",
           "weight": 30,
@@ -8359,7 +8359,7 @@
         },
         {
           "key": "shen_percent",
-          "name": "神%",
+          "name": "神",
           "apply_type": "percent",
           "group": "utility",
           "weight": 35,
