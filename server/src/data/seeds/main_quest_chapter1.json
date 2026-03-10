@@ -275,7 +275,7 @@
           "params": { "monster_id": "monster-elite-wolf-king" }
         }
       ],
-      "rewards": { "exp": 500, "silver": 500, "spirit_stones": 50, "items": [{ "item_def_id": "box-003", "quantity": 1 }, { "item_def_id": "mat-006", "quantity": 3 }] },
+      "rewards": { "exp": 500, "silver": 500, "spirit_stones": 50, "items": [{ "item_def_id": "box-003", "quantity": 1 }, { "item_def_id": "mat-006", "quantity": 3 }, { "item_def_id": "book-qingfeng-jian", "quantity": 1 }] },
       "auto_accept": true,
       "auto_complete": false,
       "is_chapter_final": false,
