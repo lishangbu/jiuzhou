@@ -3,6 +3,7 @@
  */
 import { io, Socket } from "socket.io-client";
 import { SERVER_BASE } from "./api";
+import type { CharacterFeatureCode } from "./feature";
 
 const isLoopbackHostname = (hostname: string): boolean => {
   const h = String(hostname || "")
@@ -109,6 +110,7 @@ export interface CharacterData {
   fuyuan: number;
   currentMapId: string;
   currentRoomId: string;
+  featureUnlocks: CharacterFeatureCode[];
 }
 
 type CharacterListener = (character: CharacterData | null) => void;

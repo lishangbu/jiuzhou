@@ -58,6 +58,7 @@ export interface CharacterAttributes {
   fuyuan: number;
   currentMapId: string;
   currentRoomId: string;
+  featureUnlocks: string[];
 }
 
 // 数据库字段到驼峰命名的转换
@@ -116,4 +117,9 @@ export const dbToCharacterAttributes = (dbRow: Record<string, unknown>): Charact
   fuyuan: dbRow.fuyuan as number,
   currentMapId: (dbRow.current_map_id as string) || 'map-qingyun-village',
   currentRoomId: (dbRow.current_room_id as string) || 'room-village-center',
+  featureUnlocks: Array.isArray(dbRow.feature_unlocks)
+    ? dbRow.feature_unlocks
+        .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+        .filter((entry): entry is string => entry.length > 0)
+    : [],
 });

@@ -228,7 +228,10 @@ export function createPVEBattle(
   playerSkills: SkillData[],
   monsters: MonsterData[],
   monsterSkillsMap: Record<string, SkillData[]>,
-  teamMembers?: Array<{ data: CharacterData; skills: SkillData[] }>
+  options?: {
+    teamMembers?: Array<{ data: CharacterData; skills: SkillData[] }>;
+    partnerMember?: { data: CharacterData; skills: SkillData[] };
+  },
 ): BattleState {
   const randomSeed = generateBattleSeed();
   // 创建玩家单位列表
@@ -237,10 +240,18 @@ export function createPVEBattle(
   // 主玩家（队长或单人）
   const mainPlayerUnit = createPlayerUnit(playerData, playerSkills);
   playerUnits.push(mainPlayerUnit);
+
+  if (options?.partnerMember) {
+    const partnerUnit = createPartnerUnit(
+      options.partnerMember.data,
+      options.partnerMember.skills,
+    );
+    playerUnits.push(partnerUnit);
+  }
   
   // 队友单位
-  if (teamMembers && teamMembers.length > 0) {
-    for (const member of teamMembers) {
+  if (options?.teamMembers && options.teamMembers.length > 0) {
+    for (const member of options.teamMembers) {
       const memberUnit = createPlayerUnit(member.data, member.skills);
       playerUnits.push(memberUnit);
     }
@@ -333,11 +344,15 @@ function createPlayerUnit(data: CharacterData, skills: SkillData[]): BattleUnit 
   return createCharacterUnit(data, skills, 'player');
 }
 
+function createPartnerUnit(data: CharacterData, skills: SkillData[]): BattleUnit {
+  return createCharacterUnit(data, skills, 'partner');
+}
+
 function createNpcUnit(data: CharacterData, skills: SkillData[]): BattleUnit {
   return createCharacterUnit(data, skills, 'npc');
 }
 
-function createCharacterUnit(data: CharacterData, skills: SkillData[], type: 'player' | 'npc'): BattleUnit {
+function createCharacterUnit(data: CharacterData, skills: SkillData[], type: 'player' | 'partner' | 'npc'): BattleUnit {
   const attrs = extractAttrs(data);
   const battleSkills = skills.map(convertSkillData);
   

@@ -18,6 +18,7 @@ import {
   ExperimentOutlined,
   ToolOutlined,
   ClockCircleOutlined,
+  UsergroupAddOutlined,
 } from '@ant-design/icons';
 import { useMemo, useState } from 'react';
 import { useIsMobile } from '../../shared/responsive';
@@ -40,20 +41,29 @@ interface FunctionMenuProps {
       tooltip?: string;
     }
   >;
+  itemStates?: Record<
+    string,
+    {
+      hidden?: boolean;
+      locked?: boolean;
+      tooltip?: string;
+    }
+  >;
 }
 
-const FunctionMenu: React.FC<FunctionMenuProps> = ({ onAction, indicators }) => {
+const FunctionMenu: React.FC<FunctionMenuProps> = ({ onAction, indicators, itemStates }) => {
   const isMobile = useIsMobile();
   const [moreOpen, setMoreOpen] = useState(false);
   const getIndicatorTooltip = (key: string): string | undefined => {
     if (isMobile) return undefined;
-    return indicators?.[key]?.tooltip || undefined;
+    return itemStates?.[key]?.tooltip || indicators?.[key]?.tooltip || undefined;
   };
   const menuItems: MenuItem[] = useMemo(() => {
     const items: MenuItem[] = [
       { key: 'map', icon: <EnvironmentOutlined />, label: '地图' },
       { key: 'dungeon', icon: <CompassOutlined />, label: '秘境' },
       { key: 'bag', icon: <InboxOutlined />, label: '背包' },
+      { key: 'partner', icon: <UsergroupAddOutlined />, label: '伙伴' },
       { key: 'technique', icon: <BookOutlined />, label: '功法' },
       { key: 'realm', icon: <ExperimentOutlined />, label: '境界' },
       { key: 'life', icon: <ToolOutlined />, label: '百业' },
@@ -72,8 +82,8 @@ const FunctionMenu: React.FC<FunctionMenuProps> = ({ onAction, indicators }) => 
       items.unshift({ key: 'battle-report', icon: <MessageOutlined />, label: '战况' });
       items.push({ key: 'character', icon: <UserOutlined />, label: '角色' });
     }
-    return items;
-  }, [isMobile]);
+    return items.filter((item) => !itemStates?.[item.key]?.hidden);
+  }, [isMobile, itemStates]);
 
   const handleClick = (key: string) => {
     onAction?.(key);
@@ -110,7 +120,7 @@ const FunctionMenu: React.FC<FunctionMenuProps> = ({ onAction, indicators }) => 
                     {item.icon}
                   </Badge>
                 </span>
-                <span className="menu-item-label">{item.label}</span>
+                <span className={`menu-item-label${itemStates?.[item.key]?.locked ? ' is-locked' : ''}`}>{item.label}</span>
               </Button>
             </Tooltip>
           ))}
@@ -152,11 +162,11 @@ const FunctionMenu: React.FC<FunctionMenuProps> = ({ onAction, indicators }) => 
                       size="small"
                       overflowCount={99}
                       offset={[-2, 2]}
-                    >
-                      {item.icon}
-                    </Badge>
-                  </span>
-                  <span className="menu-more-label">{item.label}</span>
+                  >
+                    {item.icon}
+                  </Badge>
+                </span>
+                  <span className={`menu-more-label${itemStates?.[item.key]?.locked ? ' is-locked' : ''}`}>{item.label}</span>
                 </Button>
               </Tooltip>
             ))}

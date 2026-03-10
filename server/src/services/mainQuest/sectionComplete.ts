@@ -74,7 +74,10 @@ export const completeCurrentSectionLegacy = async (
     return { success: false, message: '任务节不存在' };
   }
 
-  const rewardResults = await grantSectionRewards(uid, cid, asObject(section.rewards));
+  const rewardResults = await grantSectionRewards(uid, cid, asObject(section.rewards), {
+    obtainedFrom: 'main_quest_section',
+    obtainedRefId: sectionId,
+  });
 
   const completedSections = asArray<string>(progress.completed_sections);
   if (!completedSections.includes(sectionId)) completedSections.push(sectionId);
@@ -88,7 +91,10 @@ export const completeCurrentSectionLegacy = async (
     if (!completedChapters.includes(chapterId)) completedChapters.push(chapterId);
 
     const chapterRewards = asObject(getMainQuestChapterById(chapterId)?.chapter_rewards);
-    const chapterRewardResults = await grantSectionRewards(uid, cid, chapterRewards);
+    const chapterRewardResults = await grantSectionRewards(uid, cid, chapterRewards, {
+      obtainedFrom: 'main_quest_chapter',
+      obtainedRefId: chapterId,
+    });
     rewardResults.push(
       ...chapterRewardResults.map((r) => {
         if (r.type === 'exp') return { type: 'chapter_exp', amount: r.amount } as RewardResult;

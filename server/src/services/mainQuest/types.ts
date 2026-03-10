@@ -73,6 +73,8 @@ export type RewardResult =
   | { type: 'spirit_stones'; amount: number }
   | { type: 'item'; itemDefId: string; quantity: number; itemName?: string; itemIcon?: string }
   | { type: 'technique'; techniqueId: string; techniqueName?: string; techniqueIcon?: string }
+  | { type: 'feature_unlock'; featureCode: string }
+  | { type: 'partner'; partnerId: number; partnerDefId: string; partnerName: string; partnerAvatar?: string }
   | { type: 'title'; title: string }
   | { type: 'chapter_exp'; amount: number }
   | { type: 'chapter_silver'; amount: number }

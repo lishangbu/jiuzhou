@@ -70,7 +70,16 @@
           "params": { "monster_id": "monster-wild-rabbit" }
         }
       ],
-      "rewards": { "exp": 50, "silver": 80, "items": [{ "item_def_id": "cons-001", "quantity": 5 }], "techniques": ["tech-jichu-daofa"] },
+      "rewards": {
+        "exp": 50,
+        "silver": 80,
+        "items": [
+          { "item_def_id": "cons-001", "quantity": 5 },
+          { "item_def_id": "book-jichu-daofa", "quantity": 1 }
+        ],
+        "techniques": ["tech-jichu-daofa"],
+        "unlock_features": ["partner_system"]
+      },
       "auto_accept": true,
       "auto_complete": false,
       "is_chapter_final": false,

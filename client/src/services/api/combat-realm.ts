@@ -21,7 +21,7 @@ export type BattleStateDto = {
 export type BattleUnitDto = {
   id: string;
   name: string;
-  type: 'player' | 'monster' | 'npc' | 'summon';
+  type: 'player' | 'monster' | 'npc' | 'summon' | 'partner';
   qixue: number;
   lingqi: number;
   currentAttrs: { max_qixue: number; max_lingqi: number; realm?: string };
@@ -99,8 +99,11 @@ export interface BattleStartResponse {
   };
 }
 
-export const startPVEBattle = (monsterIds: string[]): Promise<BattleStartResponse> => {
-  return api.post('/battle/start', { monsterIds });
+export const startPVEBattle = (
+  monsterIds: string[],
+  config?: AxiosRequestConfig,
+): Promise<BattleStartResponse> => {
+  return api.post('/battle/start', { monsterIds }, config);
 };
 
 export interface BattleDropItemDto {

@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "description": "伙伴模板定义",
+  "partners": [
+    {
+      "id": "partner-qingmu-xiaoou",
+      "name": "青木小偶",
+      "description": "青云村木匠启灵而成的小木偶，胆子不大，却总会抢在主人前面挡下第一击。",
+      "avatar": "/assets/partner/partner-qingmu-xiaoou.webp",
+      "quality": "黄",
+      "attribute_element": "mu",
+      "role": "护卫",
+      "max_technique_slots": 3,
+      "innate_technique_ids": [
+        "tech-yangqi-jue"
+      ],
+      "base_attrs": {
+        "max_qixue": 220,
+        "max_lingqi": 60,
+        "wugong": 60,
+        "fagong": 60,
+        "wufang": 25,
+        "fafang": 25,
+        "sudu": 18,
+        "mingzhong": 0.9,
+        "shanbi": 0.0,
+        "zhaojia": 0.1,
+        "baoji": 0.05,
+        "baoshang": 1.5,
+        "jianbaoshang": 0.00,
+        "kangbao": 0.02,
+        "qixue_huifu": 2,
+        "lingqi_huifu": 1
+      },
+      "level_attr_gains": {
+        "max_qixue": 77,
+        "max_lingqi": 5,
+        "wugong": 10,
+        "fagong": 10,
+        "wufang": 10,
+        "fafang": 10,
+        "sudu": 0.01,
+        "mingzhong": 0,
+        "shanbi": 0,
+        "zhaojia": 0.0,
+        "baoji": 0.001,
+        "baoshang": 0.004,
+        "jianbaoshang":0,
+        "kangbao": 0.001,
+        "qixue_huifu": 0.2,
+        "lingqi_huifu": 0.15
+      },
+      "sort_weight": 100,
+      "enabled": true
+    }
+  ]
+}

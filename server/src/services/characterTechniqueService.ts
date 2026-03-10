@@ -8,10 +8,18 @@ import { updateSectionProgress } from './mainQuest/index.js';
 import { updateAchievementProgress } from './achievementService.js';
 import { isCharacterInBattle } from './battle/index.js';
 import { getRealmRankZeroBased } from './shared/realmRules.js';
-import { resolveQualityRankFromName } from './shared/itemQuality.js';
 import { shouldValidateTechniqueLearnRealm } from './shared/techniqueLearnRule.js';
 import { invalidateCharacterComputedCache } from './characterComputedService.js';
-import { getItemDefinitionById, getItemDefinitionsByIds, getSkillDefinitions, getTechniqueDefinitions, getTechniqueLayerDefinitions } from './staticConfigLoader.js';
+import { getItemDefinitionById, getSkillDefinitions, getTechniqueDefinitions } from './staticConfigLoader.js';
+import {
+  getItemMetaMap,
+  getTechniqueLayerByTechniqueAndLayerStatic,
+  getTechniqueLayersByTechniqueIdStatic,
+  getTechniqueLayersByTechniqueIdsStatic,
+  resolveTechniqueCostMultiplierByQuality,
+  scaleTechniqueBaseCostByQuality,
+  type TechniqueLayerStaticRow,
+} from './shared/techniqueUpgradeRules.js';
 
 // ============================================
 // 类型定义
@@ -61,36 +69,6 @@ export interface ServiceResult<T = unknown> {
 // ============================================
 // 辅助函数
 // ============================================
-const coerceCostMaterials = (raw: unknown): Array<{ itemId: string; qty: number }> => {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .map((x) => {
-      if (!x || typeof x !== 'object') return null;
-      const itemId = (x as { itemId?: unknown }).itemId;
-      const qty = (x as { qty?: unknown }).qty;
-      if (typeof itemId !== 'string') return null;
-      if (typeof qty !== 'number') return null;
-      return { itemId, qty };
-    })
-    .filter((v): v is { itemId: string; qty: number } => !!v);
-};
-
-const getItemMetaMap = async (itemIds: string[]): Promise<Map<string, { name: string; icon: string | null }>> => {
-  const uniq = Array.from(new Set(itemIds.filter((x) => typeof x === 'string' && x.trim().length > 0)));
-  if (uniq.length === 0) return new Map();
-  const defs = getItemDefinitionsByIds(uniq);
-  const out = new Map<string, { name: string; icon: string | null }>();
-  for (const id of uniq) {
-    const def = defs.get(id);
-    if (!def || def.enabled === false) continue;
-    out.set(id, {
-      name: String(def.name || id),
-      icon: typeof def.icon === 'string' ? def.icon : null,
-    });
-  }
-  return out;
-};
-
 const getRealmRank = (realmRaw: unknown, subRealmRaw?: unknown): number => {
   return getRealmRankZeroBased(realmRaw, subRealmRaw);
 };
@@ -108,16 +86,6 @@ const asStringArray = (raw: unknown): string[] => {
     .filter((entry): entry is string => entry.length > 0);
 };
 
-const resolveTechniqueCostMultiplierByQuality = (qualityRaw: unknown): number => {
-  return Math.max(1, Math.floor(resolveQualityRankFromName(qualityRaw, 1)));
-};
-
-const scaleTechniqueBaseCostByQuality = (baseCost: number, qualityMultiplier: number): number => {
-  const normalizedBaseCost = Math.max(0, Math.floor(Number(baseCost) || 0));
-  const normalizedMultiplier = Math.max(1, Math.floor(Number(qualityMultiplier) || 1));
-  return normalizedBaseCost * normalizedMultiplier;
-};
-
 const getTechniqueDefMap = () => {
   return new Map(
     getTechniqueDefinitions()
@@ -131,91 +99,6 @@ const getSkillDefMap = () => {
     getSkillDefinitions()
       .filter((entry) => entry.enabled !== false)
       .map((entry) => [entry.id, entry] as const),
-  );
-};
-
-type TechniqueLayerStaticRow = {
-  techniqueId: string;
-  layer: number;
-  costSpiritStones: number;
-  costExp: number;
-  costMaterials: Array<{ itemId: string; qty: number }>;
-  passives: TechniquePassive[];
-  unlockSkillIds: string[];
-  upgradeSkillIds: string[];
-  requiredRealm: string | null;
-};
-
-const getTechniqueLayerStaticRows = (): TechniqueLayerStaticRow[] => {
-  const rows: TechniqueLayerStaticRow[] = [];
-  for (const entry of getTechniqueLayerDefinitions()) {
-    if (entry.enabled === false) continue;
-    const techniqueId = typeof entry.technique_id === 'string' ? entry.technique_id.trim() : '';
-    if (!techniqueId) continue;
-    const layer = Number(entry.layer);
-    if (!Number.isFinite(layer) || layer <= 0) continue;
-
-    const costMaterials = coerceCostMaterials(entry.cost_materials);
-    const passives = Array.isArray(entry.passives)
-      ? entry.passives
-          .map((raw) => {
-            if (!raw || typeof raw !== 'object') return null;
-            const key = typeof raw.key === 'string' ? raw.key.trim() : '';
-            const value = typeof raw.value === 'number' ? raw.value : Number(raw.value);
-            if (!key || !Number.isFinite(value)) return null;
-            return { key, value } satisfies TechniquePassive;
-          })
-          .filter((v): v is TechniquePassive => Boolean(v))
-      : [];
-
-    const unlockSkillIds = Array.isArray(entry.unlock_skill_ids)
-      ? entry.unlock_skill_ids
-          .map((skillId) => (typeof skillId === 'string' ? skillId.trim() : ''))
-          .filter((skillId): skillId is string => skillId.length > 0)
-      : [];
-
-    const upgradeSkillIds = Array.isArray(entry.upgrade_skill_ids)
-      ? entry.upgrade_skill_ids
-          .map((skillId) => (typeof skillId === 'string' ? skillId.trim() : ''))
-          .filter((skillId): skillId is string => skillId.length > 0)
-      : [];
-
-    rows.push({
-      techniqueId,
-      layer: Math.floor(layer),
-      costSpiritStones: Math.max(0, Math.floor(Number(entry.cost_spirit_stones ?? 0))),
-      costExp: Math.max(0, Math.floor(Number(entry.cost_exp ?? 0))),
-      costMaterials,
-      passives,
-      unlockSkillIds,
-      upgradeSkillIds,
-      requiredRealm: typeof entry.required_realm === 'string' && entry.required_realm.trim() ? entry.required_realm.trim() : null,
-    });
-  }
-  return rows;
-};
-
-const getTechniqueLayersByTechniqueIds = (techniqueIds: string[]): TechniqueLayerStaticRow[] => {
-  if (techniqueIds.length === 0) return [];
-  const idSet = new Set(techniqueIds);
-  return getTechniqueLayerStaticRows()
-    .filter((entry) => idSet.has(entry.techniqueId))
-    .sort((left, right) => left.techniqueId.localeCompare(right.techniqueId) || left.layer - right.layer);
-};
-
-const getTechniqueLayersByTechniqueIdStatic = (techniqueId: string): TechniqueLayerStaticRow[] => {
-  return getTechniqueLayersByTechniqueIds([techniqueId]).filter((entry) => entry.techniqueId === techniqueId);
-};
-
-const getTechniqueLayerByTechniqueAndLayerStatic = (
-  techniqueId: string,
-  layer: number
-): TechniqueLayerStaticRow | null => {
-  if (!techniqueId || !Number.isFinite(layer) || layer <= 0) return null;
-  return (
-    getTechniqueLayerStaticRows().find(
-      (entry) => entry.techniqueId === techniqueId && entry.layer === Math.floor(layer)
-    ) ?? null
   );
 };
 
@@ -286,7 +169,7 @@ const loadAvailableSkillEntries = async (characterId: number): Promise<Available
   if (equipped.length === 0) return [];
 
   const techniqueIds = Array.from(new Set(equipped.map((entry) => entry.techniqueId)));
-  const layerRows = getTechniqueLayersByTechniqueIds(techniqueIds);
+  const layerRows = getTechniqueLayersByTechniqueIdsStatic(techniqueIds);
 
   const techniqueMap = getTechniqueDefMap();
   const skillMap = getSkillDefMap();
@@ -455,7 +338,7 @@ class CharacterTechniqueService {
         max_layer: Number(def.max_layer ?? 1),
         attribute_type: def.attribute_type ?? 'physical',
         attribute_element: def.attribute_element ?? 'none',
-        __quality_rank: resolveQualityRankFromName(def.quality, 1),
+        __quality_rank: resolveTechniqueCostMultiplierByQuality(def.quality),
       });
     }
     const rows = rowsWithRank

@@ -13,6 +13,8 @@
  */
 import { query } from '../../config/database.js';
 import { itemService } from '../itemService.js';
+import { grantFeatureUnlocks, PARTNER_SYSTEM_FEATURE_CODE } from '../featureUnlockService.js';
+import { partnerService } from '../partnerService.js';
 import {
   getItemDefinitionById,
   getTechniqueDefinitions,
@@ -25,8 +27,14 @@ export const grantSectionRewards = async (
   userId: number,
   characterId: number,
   rewards: Record<string, unknown>,
+  options?: {
+    obtainedFrom?: string;
+    obtainedRefId?: string;
+  },
 ): Promise<RewardResult[]> => {
   const results: RewardResult[] = [];
+  const obtainedFrom = asString(options?.obtainedFrom) || 'main_quest';
+  const obtainedRefId = asString(options?.obtainedRefId) || undefined;
 
   const exp = asNumber((rewards as { exp?: unknown }).exp, 0);
   if (exp > 0) {
@@ -99,6 +107,38 @@ export const grantSectionRewards = async (
     await query(`UPDATE characters SET title = $1, updated_at = NOW() WHERE id = $2`, [finalTitle, characterId]);
     for (const t of normalizedTitles) {
       results.push({ type: 'title', title: t });
+    }
+  }
+
+  const unlockFeatures = asArray<string>((rewards as { unlock_features?: unknown }).unlock_features)
+    .map((entry) => asString(entry).trim())
+    .filter((entry) => entry.length > 0);
+  if (unlockFeatures.length > 0) {
+    const unlockResults = await grantFeatureUnlocks(
+      characterId,
+      unlockFeatures,
+      obtainedFrom,
+      obtainedRefId,
+    );
+    for (const unlockResult of unlockResults) {
+      if (!unlockResult.newlyUnlocked) continue;
+      results.push({
+        type: 'feature_unlock',
+        featureCode: unlockResult.featureCode,
+      });
+      if (unlockResult.featureCode !== PARTNER_SYSTEM_FEATURE_CODE) continue;
+      const starterPartner = await partnerService.grantStarterPartner({
+        characterId,
+        obtainedFrom,
+        obtainedRefId,
+      });
+      results.push({
+        type: 'partner',
+        partnerId: starterPartner.partnerId,
+        partnerDefId: starterPartner.partnerDefId,
+        partnerName: starterPartner.partnerName,
+        partnerAvatar: starterPartner.partnerAvatar ?? undefined,
+      });
     }
   }
 

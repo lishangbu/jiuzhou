@@ -8,6 +8,7 @@ import {
   type AutoDisassembleRuleSet,
 } from './autoDisassembleRules.js';
 import { getCharacterComputedByUserId } from './characterComputedService.js';
+import { withUnlockedFeatures } from './featureUnlockService.js';
 
 export interface Character {
   id: number;
@@ -65,6 +66,7 @@ export interface Character {
   fuyuan: number;
   current_map_id: string;
   current_room_id: string;
+  feature_unlocks: string[];
   created_at: Date;
   updated_at: Date;
 }
@@ -83,11 +85,14 @@ export const checkCharacter = async (userId: number): Promise<CharacterResult> =
   await applyStaminaRecoveryByUserId(userId);
   const character = await getCharacterComputedByUserId(userId);
   if (character) {
+    const characterWithUnlockedFeatures = await withUnlockedFeatures(
+      character as unknown as Record<string, unknown> & { id: number },
+    );
     return {
       success: true,
       message: '已有角色',
       data: {
-        character: character as unknown as Character,
+        character: characterWithUnlockedFeatures as unknown as Character,
         hasCharacter: true,
       },
     };
@@ -150,12 +155,15 @@ export const createCharacter = async (
   if (!computedCharacter) {
     return { success: false, message: '角色创建成功，但读取角色数据失败' };
   }
+  const characterWithUnlockedFeatures = await withUnlockedFeatures(
+    computedCharacter as unknown as Record<string, unknown> & { id: number },
+  );
 
   return {
     success: true,
     message: '角色创建成功',
     data: {
-      character: computedCharacter as unknown as Character,
+      character: characterWithUnlockedFeatures as unknown as Character,
       hasCharacter: true,
     },
   };
@@ -168,12 +176,15 @@ export const getCharacter = async (userId: number): Promise<CharacterResult> => 
   if (!character) {
     return { success: false, message: '角色不存在' };
   }
+  const characterWithUnlockedFeatures = await withUnlockedFeatures(
+    character as unknown as Record<string, unknown> & { id: number },
+  );
     
   return {
     success: true,
     message: '获取成功',
     data: {
-      character: character as unknown as Character,
+      character: characterWithUnlockedFeatures as unknown as Character,
       hasCharacter: true,
     },
   };

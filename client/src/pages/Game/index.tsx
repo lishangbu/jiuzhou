@@ -35,6 +35,7 @@ import SettingModal from './modules/SettingModal';
 import RealmModal from './modules/RealmModal';
 import WarehouseModal from './modules/WarehouseModal';
 import SignInModal from './modules/SignInModal';
+import PartnerModal from './modules/PartnerModal';
 import { useIdleBattle, IdleBattlePanel, IdleBattleStatusBar } from './modules/IdleBattle';
 import { gameSocket, type CharacterData } from '../../services/gameSocket';
 import {
@@ -64,6 +65,7 @@ import {
 import { getUnifiedApiErrorMessage } from '../../services/api';
 import type { InventoryItemDto, NpcTalkResponse, NpcTalkTaskOption, TechniqueResearchResultStatusDto } from '../../services/api';
 import { getMainQuestProgress, startDialogue, advanceDialogue, selectDialogueChoice, completeSection, type DialogueState } from '../../services/mainQuestApi';
+import { PARTNER_FEATURE_CODE } from '../../services/feature';
 import { getMyTeam, getTeamApplications, leaveTeam, type TeamInfo } from '../../services/teamApi';
 import { IMG_LOGO as logo, IMG_LINGSHI as lingshi, IMG_TONGQIAN as tongqian, IMG_EQUIP_MALE as equipMale, IMG_EQUIP_FEMALE as equipFemale } from './shared/imageAssets';
 import { resolveIconUrl } from './shared/resolveIcon';
@@ -80,6 +82,8 @@ import {
   type NpcDialogueEntry,
   type NpcTalkMainQuestStatus,
 } from './modules/NpcTalkModal/shared';
+import { PARTNER_FEATURE_UNLOCK_HINT, hasCharacterFeature } from './shared/featureUnlocks';
+import { formatMainQuestRewardTexts } from './shared/mainQuestRewardText';
 
 interface GameProps {
   onLogout?: () => void;
@@ -648,6 +652,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const [bagModalOpen, setBagModalOpen] = useState(false);
   const [warehouseModalOpen, setWarehouseModalOpen] = useState(false);
   const [techniqueModalOpen, setTechniqueModalOpen] = useState(false);
+  const [partnerModalOpen, setPartnerModalOpen] = useState(false);
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [sectModalOpen, setSectModalOpen] = useState(false);
   const [marketModalOpen, setMarketModalOpen] = useState(false);
@@ -741,6 +746,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     }));
   }, [teamInfo]);
   const characterId = character?.id ?? null;
+  const partnerUnlocked = hasCharacterFeature(character, PARTNER_FEATURE_CODE);
   const myBattleUnitId = useMemo(() => (characterId ? `player-${characterId}` : null), [characterId]);
   const isMobileBattleMode = isMobile && viewMode === 'battle';
 
@@ -1716,6 +1722,16 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     return Object.keys(out).length > 0 ? out : undefined;
   }, [achievementClaimableCount, isTeamLeader, sectMyApplicationCount, sectPendingApplicationCount, teamApplicationUnread, techniqueIndicatorStatus]);
 
+  const functionItemStates = useMemo(
+    () => ({
+      partner: {
+        locked: !partnerUnlocked,
+        tooltip: partnerUnlocked ? '查看伙伴总览、升级与功法' : PARTNER_FEATURE_UNLOCK_HINT,
+      },
+    }),
+    [partnerUnlocked],
+  );
+
   const handleInfoAction = (action: string, target: InfoTarget) => {
     if (action === 'attack') {
       // 当前“攻击”流程只接入了 PVE（怪物）开战接口，玩家目标没有对应开战后端。
@@ -2001,6 +2017,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
           <div className="game-right-top">
             <FunctionMenu
               indicators={functionIndicators}
+              itemStates={functionItemStates}
               onAction={(key) => {
                 if (key === 'map') {
                   setMapModalCategory('world');
@@ -2011,6 +2028,13 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                   setMapModalOpen(true);
                 }
                 if (key === 'bag') setBagModalOpen(true);
+                if (key === 'partner') {
+                  if (!partnerUnlocked) {
+                    messageRef.current.info(PARTNER_FEATURE_UNLOCK_HINT);
+                    return;
+                  }
+                  setPartnerModalOpen(true);
+                }
                 if (key === 'technique') setTechniqueModalOpen(true);
                 if (key === 'realm') setRealmModalOpen(true);
                 if (key === 'life') {
@@ -2158,21 +2182,14 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                       try {
                         const res = await completeSection();
                         if (res?.success && res.data) {
-                          const rewards = res.data.rewards || [];
-                          const rewardTexts: string[] = [];
-                          for (const r of rewards) {
-                            const rr = r as { type?: string; amount?: number; itemDefId?: string; quantity?: number };
-                            if (rr.type === 'exp') rewardTexts.push(`经验 +${rr.amount}`);
-                            if (rr.type === 'silver') rewardTexts.push(`银两 +${rr.amount}`);
-                            if (rr.type === 'spirit_stones') rewardTexts.push(`灵石 +${rr.amount}`);
-                            if (rr.type === 'item') rewardTexts.push(`物品 ${rr.itemDefId} ×${rr.quantity || 1}`);
-                          }
+                          const rewardTexts = formatMainQuestRewardTexts(res.data.rewards || []);
                           messageRef.current.success('主线任务完成！');
                           if (rewardTexts.length > 0) {
                             appendSystemChat(`【主线】获得奖励：${rewardTexts.join('，')}`);
                           }
                           appendNpcDialogue('npc', '做得好，继续前进吧。');
                           gameSocket.refreshCharacter();
+                          window.dispatchEvent(new Event('inventory:changed'));
                           await refreshNpcTalk(npcTalkNpcId);
                           await refreshTrackedRoomIds();
                           window.dispatchEvent(new Event('room:objects:changed'));
@@ -2465,6 +2482,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
         }}
       />
       <BagModal open={bagModalOpen} onClose={() => setBagModalOpen(false)} />
+      <PartnerModal open={partnerModalOpen} onClose={() => setPartnerModalOpen(false)} />
       {warehouseModalOpen && (
         <WarehouseModal open={warehouseModalOpen} onClose={() => setWarehouseModalOpen(false)} />
       )}

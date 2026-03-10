@@ -41,7 +41,7 @@ export interface MonsterAIProfile {
 export interface BattleUnit {
   id: string;
   name: string;
-  type: 'player' | 'monster' | 'npc' | 'summon';
+  type: 'player' | 'partner' | 'monster' | 'npc' | 'summon';
   sourceId: number | string;  // 原始数据ID（角色ID/怪物定义ID）
   
   // 基础属性快照（战斗开始时从数据库读取）

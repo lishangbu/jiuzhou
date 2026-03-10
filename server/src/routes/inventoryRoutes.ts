@@ -325,12 +325,13 @@ router.post('/use', asyncHandler(async (req, res) => {
     const userId = req.userId!;
     const characterId = req.characterId!;
 
-    const { itemId, itemInstanceId, instanceId, qty, targetItemInstanceId } = req.body as {
+    const { itemId, itemInstanceId, instanceId, qty, targetItemInstanceId, partnerId } = req.body as {
       itemId?: unknown;
       itemInstanceId?: unknown;
       instanceId?: unknown;
       qty?: unknown;
       targetItemInstanceId?: unknown;
+      partnerId?: unknown;
     };
     const rawInstanceId = itemInstanceId ?? instanceId ?? itemId;
     if (rawInstanceId === undefined || rawInstanceId === null) {
@@ -351,9 +352,14 @@ router.post('/use', asyncHandler(async (req, res) => {
     if (Number.isNaN(parsedTargetItemInstanceId)) {
       throw new BusinessError('targetItemInstanceId参数错误');
     }
+    const parsedPartnerId = parseOptionalPositiveInt(partnerId);
+    if (Number.isNaN(parsedPartnerId)) {
+      throw new BusinessError('partnerId参数错误');
+    }
 
     const result = await itemService.useItem(userId, characterId, parsedItemId, parsedQty, {
       ...(parsedTargetItemInstanceId !== undefined ? { targetItemInstanceId: parsedTargetItemInstanceId } : {}),
+      ...(parsedPartnerId !== undefined ? { partnerId: parsedPartnerId } : {}),
     });
     if (!result.success) {
       return sendResult(res, result);
@@ -361,7 +367,11 @@ router.post('/use', asyncHandler(async (req, res) => {
 
     await safePushCharacterUpdate(userId);
 
-    return sendSuccess(res, { character: result.character, lootResults: result.lootResults });
+    return sendSuccess(res, {
+      character: result.character,
+      lootResults: result.lootResults,
+      partnerTechniqueResult: result.partnerTechniqueResult,
+    });
 }));
 
 // ============================================

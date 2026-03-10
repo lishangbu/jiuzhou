@@ -22,6 +22,8 @@ import { ensureMigrationHistoryTable } from './migrationHistoryTable.js';
 import { initIdleTables } from './idleTable.js';
 import { initInsightTables } from './insightTable.js';
 import { initTechniqueGenerationTables } from './techniqueGenerationTable.js';
+import { initFeatureUnlockTables } from './featureUnlockTable.js';
+import { initPartnerTables } from './partnerTable.js';
 import { loadAllSeeds } from '../services/seedService.js';
 
 // 用户表结构定义
@@ -157,6 +159,12 @@ export const initTables = async (): Promise<void> => {
 
   // 初始化悟道系统表
   await initInsightTables();
+
+  // 初始化功能解锁表
+  await initFeatureUnlockTables();
+
+  // 初始化伙伴系统表
+  await initPartnerTables();
     
   // 加载种子数据
   await loadAllSeeds();

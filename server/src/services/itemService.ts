@@ -25,6 +25,7 @@ import { buildEquipmentDisplayBaseAttrs } from './equipmentGrowthRules.js';
 import { getRealmRankZeroBased } from './shared/realmRules.js';
 import { resolveQualityRankFromName } from './shared/itemQuality.js';
 import { shouldValidateTechniqueLearnRealm } from './shared/techniqueLearnRule.js';
+import { resolveTechniqueBookLearning } from './shared/techniqueBookRules.js';
 import {
   applyCharacterResourceDeltaByCharacterId,
   getCharacterComputedByCharacterId,
@@ -32,6 +33,8 @@ import {
 import { getItemDefinitionById, getItemDefinitions, getTechniqueDefinitions } from './staticConfigLoader.js';
 import { getGemLevel, isGemItemDefinition } from './shared/gemItemSemantics.js';
 import { unbindEquipmentBindingByInstanceId } from './inventory/equipmentUnbind.js';
+import type { PartnerLearnTechniqueResultDto } from './partnerService.js';
+import { partnerService } from './partnerService.js';
 
 // 物品定义接口
 export interface ItemDef {
@@ -280,8 +283,8 @@ class ItemService {
     characterId: number,
     instanceId: number,
     qty: number = 1,
-    options: { targetItemInstanceId?: number } = {},
-  ): Promise<{ success: boolean; message: string; effects?: any[]; character?: any; lootResults?: { type: string; name?: string; amount: number }[] }> {
+    options: { targetItemInstanceId?: number; partnerId?: number } = {},
+  ): Promise<{ success: boolean; message: string; effects?: any[]; character?: any; lootResults?: { type: string; name?: string; amount: number }[]; partnerTechniqueResult?: PartnerLearnTechniqueResultDto }> {
     await lockCharacterInventoryMutex(characterId);
 
     const charResult = await query(
@@ -322,6 +325,13 @@ class ItemService {
     if (!itemDef) {
       return { success: false, message: '物品不存在' };
     }
+    const resolvedTechniqueBook = resolveTechniqueBookLearning({
+      itemDef,
+      metadata:
+        item.metadata && typeof item.metadata === 'object' && !Array.isArray(item.metadata)
+          ? (item.metadata as object)
+          : null,
+    });
     const category = String(itemDef.category || '');
     const useType = String(itemDef.use_type || '');
     const effectDefs = Array.isArray(itemDef.effect_defs) ? itemDef.effect_defs : [];
@@ -405,8 +415,10 @@ class ItemService {
     let deltaExp = 0;
     let hasLoot = false;
     let hasLearnTechnique = false;
+    let hasLearnPartnerTechnique = false;
     let hasExpandEffect = false;
     let hasEquipmentUnbindEffect = false;
+    let partnerTechniqueResult: PartnerLearnTechniqueResultDto | undefined;
     const lootResults: { type: string; name?: string; amount: number }[] = [];
     const lootItemsToAdd: { itemDefId: string; qty: number }[] = [];
     let totalExpandSize = 0;
@@ -565,13 +577,34 @@ class ItemService {
       }
   
       if (effectType === 'learn_technique') {
-        const params =
-          effect.params && typeof effect.params === 'object'
-            ? (effect.params as Record<string, unknown>)
-            : null;
-        const techniqueId = params ? String(params.technique_id || '').trim() : '';
+        const techniqueId =
+          resolvedTechniqueBook?.effectType === 'learn_technique'
+            ? resolvedTechniqueBook.techniqueId
+            : '';
         if (!techniqueId) {
           return { success: false, message: '功法书配置异常，缺少功法ID' };
+        }
+
+        const partnerId = Number(options.partnerId);
+        if (Number.isInteger(partnerId) && partnerId > 0) {
+          const learnResult = await partnerService.learnTechniqueByItem({
+            characterId,
+            partnerId,
+            itemDefId,
+            techniqueId,
+          });
+          if (!learnResult.success || !learnResult.data) {
+            return { success: false, message: learnResult.message };
+          }
+
+          partnerTechniqueResult = learnResult.data;
+          hasLearnPartnerTechnique = true;
+          lootResults.push({
+            type: 'partner_technique',
+            name: learnResult.data.learnedTechnique.name,
+            amount: 1,
+          });
+          continue;
         }
   
         const techniqueDef = getTechniqueDefinitions().find((entry) => entry.id === techniqueId && entry.enabled !== false) ?? null;
@@ -611,13 +644,34 @@ class ItemService {
       }
 
       if (effectType === 'learn_generated_technique') {
-        const metadata =
-          item.metadata && typeof item.metadata === 'object' && !Array.isArray(item.metadata)
-            ? (item.metadata as Record<string, unknown>)
-            : null;
-        const generatedTechniqueId = metadata ? String(metadata.generatedTechniqueId || '').trim() : '';
+        const generatedTechniqueId =
+          resolvedTechniqueBook?.effectType === 'learn_generated_technique'
+            ? resolvedTechniqueBook.techniqueId
+            : '';
         if (!generatedTechniqueId) {
           return { success: false, message: '生成功法书数据异常，缺少功法标识' };
+        }
+
+        const partnerId = Number(options.partnerId);
+        if (Number.isInteger(partnerId) && partnerId > 0) {
+          const learnResult = await partnerService.learnTechniqueByItem({
+            characterId,
+            partnerId,
+            itemDefId,
+            techniqueId: generatedTechniqueId,
+          });
+          if (!learnResult.success || !learnResult.data) {
+            return { success: false, message: learnResult.message };
+          }
+
+          partnerTechniqueResult = learnResult.data;
+          hasLearnPartnerTechnique = true;
+          lootResults.push({
+            type: 'partner_technique',
+            name: learnResult.data.learnedTechnique.name,
+            amount: 1,
+          });
+          continue;
         }
 
         const techniqueDef =
@@ -686,6 +740,7 @@ class ItemService {
       deltaExp === 0 &&
       !hasLoot &&
       !hasLearnTechnique &&
+      !hasLearnPartnerTechnique &&
       !hasExpandEffect &&
       !hasEquipmentUnbindEffect
     ) {
@@ -776,6 +831,12 @@ class ItemService {
         [qty, instanceId]
       );
     }
+    if (partnerTechniqueResult) {
+      partnerTechniqueResult = {
+        ...partnerTechniqueResult,
+        remainingBooks: await partnerService.listLearnTechniqueBooks(characterId),
+      };
+    }
     if (deltaQixue !== 0 || deltaLingqi !== 0) {
       await applyCharacterResourceDeltaByCharacterId(characterId, {
         qixue: deltaQixue,
@@ -791,7 +852,8 @@ class ItemService {
       message: '使用成功',
       effects: effectDefs,
       character: updatedChar,
-      lootResults: lootResults.length > 0 ? lootResults : undefined
+      lootResults: lootResults.length > 0 ? lootResults : undefined,
+      partnerTechniqueResult,
     };
   }
 
@@ -855,6 +917,7 @@ class ItemService {
       location: row.location,
       locationSlot: row.location_slot,
       equippedSlot: row.equipped_slot,
+      metadata: row.metadata,
       createdAt: row.created_at
     };
   }

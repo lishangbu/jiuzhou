@@ -24,6 +24,9 @@ export const sendOk = (res: Response): void => {
 };
 
 /** 透传 service 结果：根据 success 字段决定状态码 */
-export const sendResult = (res: Response, result: { success: boolean }): void => {
+export const sendResult = (
+  res: Response,
+  result: { success: boolean; message?: string; data?: unknown },
+): void => {
   res.status(result.success ? 200 : 400).json(result);
 };

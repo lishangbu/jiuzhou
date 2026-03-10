@@ -1,4 +1,5 @@
 import api from './api/core';
+import type { CharacterFeatureCode } from './feature';
 
 // 对话节点类型
 export type DialogueNodeType = 'narration' | 'npc' | 'player' | 'choice' | 'system' | 'action';
@@ -66,6 +67,15 @@ export interface SectionRewardTechniqueDetail {
   name?: string;
   icon?: string | null;
 }
+
+export type MainQuestRewardResultDto =
+  | { type: 'exp'; amount: number }
+  | { type: 'silver'; amount: number }
+  | { type: 'spirit_stones'; amount: number }
+  | { type: 'item'; itemDefId: string; quantity: number; itemName?: string; itemIcon?: string | null }
+  | { type: 'technique'; techniqueId: string; techniqueName?: string; techniqueIcon?: string | null }
+  | { type: 'feature_unlock'; featureCode: CharacterFeatureCode }
+  | { type: 'partner'; partnerId: number; partnerDefId: string; partnerName: string; partnerAvatar?: string | null };
 
 export interface SectionReward {
   exp?: number;
@@ -152,7 +162,7 @@ export const selectDialogueChoice = (choiceId: string) => {
 
 // 完成任务节并领取奖励
 export const completeSection = () => {
-  return api.post<unknown, { success: boolean; message: string; data: { rewards: unknown[]; nextSection?: SectionDto; chapterCompleted?: boolean } }>('/main-quest/section/complete');
+  return api.post<unknown, { success: boolean; message: string; data: { rewards: MainQuestRewardResultDto[]; nextSection?: SectionDto; chapterCompleted?: boolean } }>('/main-quest/section/complete');
 };
 
 // 设置主线任务追踪状态

@@ -51,7 +51,7 @@ type SkillDetailItem = {
   isEffect?: boolean;
 };
 
-type SkillCardSection = {
+export type SkillCardSection = {
   metaItems: Array<{ label: string; value: string }>;
   gridItems: Array<{ label: string; value: string }>;
   summaryItems: SkillDetailItem[];

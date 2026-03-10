@@ -23,6 +23,7 @@ import { getRoomInMap } from "../mapService.js";
 import {
   getCharacterComputedByUserId,
 } from "../characterComputedService.js";
+import { partnerService } from "../partnerService.js";
 import type { BattleResult, StartDungeonPVEBattleOptions } from "./battleTypes.js";
 import {
   BATTLE_START_COOLDOWN_MS,
@@ -157,13 +158,26 @@ export async function startPVEBattle(
 
     const battleId = `battle-${userId}-${Date.now()}`;
 
+    const partnerMember =
+      validTeamMembers.length <= 0
+        ? await partnerService.buildActivePartnerBattleMember({
+            characterId,
+            userId,
+            ownerRealm: character.realm,
+            ownerSubRealm: character.sub_realm ?? null,
+          })
+        : null;
+
     const battleState = createPVEBattle(
       battleId,
       character,
       playerSkills,
       monsters,
       monsterSkillsMap,
-      validTeamMembers.length > 0 ? validTeamMembers : undefined,
+      {
+        teamMembers: validTeamMembers.length > 0 ? validTeamMembers : undefined,
+        partnerMember: partnerMember ?? undefined,
+      },
     );
 
     const engine = new BattleEngine(battleState);
@@ -264,13 +278,26 @@ export async function startDungeonPVEBattle(
     const monsterSkillsMap = monsterResolveResult.monsterSkillsMap;
 
     const battleId = `dungeon-battle-${userId}-${Date.now()}`;
+    const partnerMember =
+      validTeamMembers.length <= 0
+        ? await partnerService.buildActivePartnerBattleMember({
+            characterId,
+            userId,
+            ownerRealm: character.realm,
+            ownerSubRealm: character.sub_realm ?? null,
+          })
+        : null;
+
     const battleState = createPVEBattle(
       battleId,
       character,
       playerSkills,
       monsters,
       monsterSkillsMap,
-      validTeamMembers.length > 0 ? validTeamMembers : undefined,
+      {
+        teamMembers: validTeamMembers.length > 0 ? validTeamMembers : undefined,
+        partnerMember: partnerMember ?? undefined,
+      },
     );
 
     const engine = new BattleEngine(battleState);

@@ -19,6 +19,8 @@
  * 3. 聚合后必须重新格式化 `value`，不能复用原字符串，否则 `+6%` 与 `+10%` 合并后仍会显示旧值。
  * 4. 本模块不做兜底兼容；调用方应保证传入的 `amount` 已经是合法数字。
  */
+import { formatTechniquePassiveAmount } from '../../shared/techniquePassiveDisplay';
+
 export type TechniqueBonus = {
   key: string;
   label: string;
@@ -30,44 +32,11 @@ type TechniqueLayerBonuses = {
   bonuses: TechniqueBonus[];
 };
 
-const PERCENT_PASSIVE_KEYS = new Set<string>([
-  'max_qixue',
-  'wugong',
-  'fagong',
-  'wufang',
-  'fafang',
-  'shuxing_shuzhi',
-  'mingzhong',
-  'shanbi',
-  'zhaojia',
-  'baoji',
-  'baoshang',
-  'kangbao',
-  'zengshang',
-  'zhiliao',
-  'jianliao',
-  'xixue',
-  'lengque',
-  'kongzhi_kangxing',
-  'jin_kangxing',
-  'mu_kangxing',
-  'shui_kangxing',
-  'huo_kangxing',
-  'tu_kangxing',
-]);
-
 const clampUnlockedLayerCount = (currentLayer: number, totalLayers: number): number =>
   Math.max(0, Math.min(currentLayer, totalLayers));
 
 export const formatTechniqueBonusAmount = (key: string, amount: number): string => {
-  const sign = amount > 0 ? '+' : amount < 0 ? '-' : '';
-  const abs = Math.abs(amount);
-  const displayNumber = PERCENT_PASSIVE_KEYS.has(key) ? abs * 100 : abs;
-  const fixed = Number.isInteger(displayNumber)
-    ? String(displayNumber)
-    : String(Number(displayNumber.toFixed(2)));
-
-  return `${sign}${fixed}${PERCENT_PASSIVE_KEYS.has(key) ? '%' : ''}`;
+  return formatTechniquePassiveAmount(key, amount);
 };
 
 export const getUnlockedTechniqueBonuses = <T extends TechniqueLayerBonuses>(

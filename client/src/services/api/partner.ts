@@ -1,0 +1,220 @@
+import api from './core';
+import type { CharacterFeatureCode } from '../feature';
+
+export type PartnerGrowthDto = {
+  max_qixue: number;
+  wugong: number;
+  fagong: number;
+  wufang: number;
+  fafang: number;
+  sudu: number;
+};
+
+export type PartnerComputedAttrsDto = {
+  qixue: number;
+  max_qixue: number;
+  lingqi: number;
+  max_lingqi: number;
+  wugong: number;
+  fagong: number;
+  wufang: number;
+  fafang: number;
+  mingzhong: number;
+  shanbi: number;
+  zhaojia: number;
+  baoji: number;
+  baoshang: number;
+  jianbaoshang: number;
+  kangbao: number;
+  zengshang: number;
+  zhiliao: number;
+  jianliao: number;
+  xixue: number;
+  lengque: number;
+  sudu: number;
+  kongzhi_kangxing: number;
+  jin_kangxing: number;
+  mu_kangxing: number;
+  shui_kangxing: number;
+  huo_kangxing: number;
+  tu_kangxing: number;
+  qixue_huifu: number;
+  lingqi_huifu: number;
+};
+
+export type PartnerPassiveAttrsDto = Record<string, number>;
+
+export type PartnerTechniqueSkillDto = {
+  id: string;
+  name: string;
+  icon: string;
+  description?: string;
+  cost_lingqi?: number;
+  cost_lingqi_rate?: number;
+  cost_qixue?: number;
+  cost_qixue_rate?: number;
+  cooldown?: number;
+  target_type?: string;
+  target_count?: number;
+  damage_type?: string | null;
+  element?: string;
+  effects?: unknown[];
+};
+
+export type PartnerTechniqueDto = {
+  techniqueId: string;
+  name: string;
+  description: string | null;
+  icon: string | null;
+  quality: string;
+  currentLayer: number;
+  maxLayer: number;
+  skillIds: string[];
+  skills: PartnerTechniqueSkillDto[];
+  passiveAttrs: PartnerPassiveAttrsDto;
+  isInnate: boolean;
+};
+
+export type PartnerTechniqueUpgradeCostDto = {
+  currentLayer: number;
+  maxLayer: number;
+  nextLayer: number;
+  spiritStones: number;
+  exp: number;
+  materials: Array<{
+    itemId: string;
+    qty: number;
+    itemName?: string;
+    itemIcon?: string | null;
+  }>;
+};
+
+export type PartnerBookDto = {
+  itemInstanceId: number;
+  itemDefId: string;
+  techniqueId: string;
+  techniqueName: string;
+  name: string;
+  icon: string | null;
+  quality: string;
+  qty: number;
+};
+
+export type PartnerDetailDto = {
+  id: number;
+  partnerDefId: string;
+  name: string;
+  nickname: string;
+  avatar: string | null;
+  element: string;
+  role: string;
+  quality: string;
+  level: number;
+  progressExp: number;
+  nextLevelCostExp: number;
+  slotCount: number;
+  isActive: boolean;
+  obtainedFrom: string | null;
+  growth: PartnerGrowthDto;
+  computedAttrs: PartnerComputedAttrsDto;
+  techniques: PartnerTechniqueDto[];
+};
+
+export type PartnerOverviewDto = {
+  featureCode: CharacterFeatureCode;
+  activePartnerId: number | null;
+  characterExp: number;
+  partners: PartnerDetailDto[];
+  books: PartnerBookDto[];
+};
+
+export interface PartnerOverviewResponse {
+  success: boolean;
+  message: string;
+  data?: PartnerOverviewDto;
+}
+
+export interface PartnerActivateResponse {
+  success: boolean;
+  message: string;
+  data?: {
+    activePartnerId: number;
+    partner: PartnerDetailDto;
+  };
+}
+
+export interface PartnerInjectExpResponse {
+  success: boolean;
+  message: string;
+  data?: {
+    partner: PartnerDetailDto;
+    spentExp: number;
+    levelsGained: number;
+    characterExp: number;
+  };
+}
+
+export interface PartnerLearnTechniqueResponse {
+  success: boolean;
+  message: string;
+  data?: {
+    partner: PartnerDetailDto;
+    learnedTechnique: PartnerTechniqueDto;
+    replacedTechnique: PartnerTechniqueDto | null;
+    remainingBooks: PartnerBookDto[];
+  };
+}
+
+export interface PartnerTechniqueUpgradeCostResponse {
+  success: boolean;
+  message: string;
+  data?: PartnerTechniqueUpgradeCostDto;
+}
+
+export interface PartnerUpgradeTechniqueResponse {
+  success: boolean;
+  message: string;
+  data?: {
+    partner: PartnerDetailDto;
+    updatedTechnique: PartnerTechniqueDto;
+    newLayer: number;
+  };
+}
+
+export const getPartnerOverview = (): Promise<PartnerOverviewResponse> => {
+  return api.get('/partner/overview');
+};
+
+export const activatePartner = (partnerId: number): Promise<PartnerActivateResponse> => {
+  return api.post('/partner/activate', { partnerId });
+};
+
+export const injectPartnerExp = (
+  partnerId: number,
+  exp: number,
+): Promise<PartnerInjectExpResponse> => {
+  return api.post('/partner/inject-exp', { partnerId, exp });
+};
+
+export const learnPartnerTechnique = (
+  partnerId: number,
+  itemInstanceId: number,
+): Promise<PartnerLearnTechniqueResponse> => {
+  return api.post('/partner/learn-technique', { partnerId, itemInstanceId });
+};
+
+export const getPartnerTechniqueUpgradeCost = (
+  partnerId: number,
+  techniqueId: string,
+): Promise<PartnerTechniqueUpgradeCostResponse> => {
+  return api.get('/partner/technique-upgrade-cost', {
+    params: { partnerId, techniqueId },
+  });
+};
+
+export const upgradePartnerTechnique = (
+  partnerId: number,
+  techniqueId: string,
+): Promise<PartnerUpgradeTechniqueResponse> => {
+  return api.post('/partner/upgrade-technique', { partnerId, techniqueId });
+};

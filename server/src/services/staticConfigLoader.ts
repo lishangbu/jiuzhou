@@ -28,6 +28,14 @@ const readJsonFile = <T>(filename: string): T | null => {
   }
 };
 
+const readStrictJsonFile = <T>(filename: string): T => {
+  const filePath = path.join(SEEDS_DIR, filename);
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`${filename} 不存在`);
+  }
+  return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as T;
+};
+
 export type BattlePassRewardEntry =
   | { type: 'item'; item_def_id: string; qty: number }
   | { type: 'currency'; currency: 'spirit_stones' | 'silver'; amount: number };
@@ -705,6 +713,92 @@ type InsightGrowthFile = {
   bonus_pct_per_level?: unknown;
 };
 
+export type PartnerTechniquePassiveConfig = {
+  key: string;
+  value: number;
+};
+
+export type PartnerTechniqueDefConfig = {
+  id: string;
+  name: string;
+  description?: string;
+  icon?: string | null;
+  quality?: string;
+  skill_ids?: string[];
+  passive_attrs?: PartnerTechniquePassiveConfig[];
+  enabled?: boolean;
+  sort_weight?: number;
+};
+
+type PartnerTechniqueFile = {
+  techniques?: PartnerTechniqueDefConfig[];
+};
+
+export type PartnerBaseAttrConfig = {
+  max_qixue: number;
+  max_lingqi?: number;
+  wugong: number;
+  fagong: number;
+  wufang: number;
+  fafang: number;
+  sudu: number;
+  mingzhong?: number;
+  shanbi?: number;
+  zhaojia?: number;
+  baoji?: number;
+  baoshang?: number;
+  jianbaoshang?: number;
+  kangbao?: number;
+  zengshang?: number;
+  zhiliao?: number;
+  jianliao?: number;
+  xixue?: number;
+  lengque?: number;
+  kongzhi_kangxing?: number;
+  jin_kangxing?: number;
+  mu_kangxing?: number;
+  shui_kangxing?: number;
+  huo_kangxing?: number;
+  tu_kangxing?: number;
+  qixue_huifu?: number;
+  lingqi_huifu?: number;
+};
+
+export type PartnerGrowthRangeConfig = {
+  min: number;
+  max: number;
+};
+
+export type PartnerDefConfig = {
+  id: string;
+  name: string;
+  description?: string;
+  avatar?: string | null;
+  quality?: string;
+  attribute_element?: string;
+  role?: string;
+  max_technique_slots: number;
+  innate_technique_ids: string[];
+  base_attrs: PartnerBaseAttrConfig;
+  level_attr_gains?: Partial<PartnerBaseAttrConfig>;
+  enabled?: boolean;
+  sort_weight?: number;
+};
+
+type PartnerDefFile = {
+  partners?: PartnerDefConfig[];
+};
+
+export type PartnerGrowthConfig = {
+  exp_base_exp: number;
+  exp_growth_rate: number;
+};
+
+type PartnerGrowthFile = {
+  exp_base_exp?: unknown;
+  exp_growth_rate?: unknown;
+};
+
 let battlePassCache: BattlePassStaticConfig | null | undefined;
 let monthCardCache: MonthCardDef[] | null | undefined;
 let itemDefCache: ItemDefConfig[] | null | undefined;
@@ -730,6 +824,8 @@ let dungeonWavesByStageIdCache: Map<string, DungeonWaveConfig[]> | null | undefi
 let dialogueDefCache: DialogueDefConfig[] | null | undefined;
 let techniqueDefCache: TechniqueDefConfig[] | null | undefined;
 let skillDefCache: SkillDefConfig[] | null | undefined;
+let partnerDefCache: PartnerDefConfig[] | null | undefined;
+let partnerTechniqueDefCache: PartnerTechniqueDefConfig[] | null | undefined;
 let taskDefCache: TaskDefConfig[] | null | undefined;
 let dropPoolDefCache: DropPoolDefConfig[] | null | undefined;
 let commonDropPoolDefCache: DropPoolDefConfig[] | null | undefined;
@@ -737,6 +833,7 @@ let affixPoolDefCache: AffixPoolDefConfig[] | null | undefined;
 let itemSetDefCache: ItemSetDefConfig[] | null | undefined;
 let techniqueLayerCache: TechniqueLayerConfig[] | null | undefined;
 let insightGrowthCache: InsightGrowthConfig | undefined;
+let partnerGrowthCache: PartnerGrowthConfig | undefined;
 let mainQuestChapterCache: MainQuestChapterConfig[] | null | undefined;
 let mainQuestSectionCache: MainQuestSectionConfig[] | null | undefined;
 let mainQuestChapterByIdCache: Map<string, MainQuestChapterConfig> | null | undefined;
@@ -1409,6 +1506,38 @@ export const getTechniqueLayerDefinitions = (): TechniqueLayerConfig[] => {
   return techniqueLayerCache;
 };
 
+export const getPartnerDefinitions = (): PartnerDefConfig[] => {
+  if (partnerDefCache !== undefined) return partnerDefCache ?? [];
+  const file = readStrictJsonFile<PartnerDefFile>('partner_def.json');
+  if (!Array.isArray(file.partners)) {
+    throw new Error('partner_def.json 缺少 partners 数组');
+  }
+  partnerDefCache = file.partners;
+  return partnerDefCache;
+};
+
+export const getPartnerDefinitionById = (partnerDefId: string): PartnerDefConfig | null => {
+  const id = String(partnerDefId || '').trim();
+  if (!id) return null;
+  return getPartnerDefinitions().find((entry) => entry.id === id && entry.enabled !== false) ?? null;
+};
+
+export const getPartnerTechniqueDefinitions = (): PartnerTechniqueDefConfig[] => {
+  if (partnerTechniqueDefCache !== undefined) return partnerTechniqueDefCache ?? [];
+  const file = readStrictJsonFile<PartnerTechniqueFile>('partner_technique_def.json');
+  if (!Array.isArray(file.techniques)) {
+    throw new Error('partner_technique_def.json 缺少 techniques 数组');
+  }
+  partnerTechniqueDefCache = file.techniques;
+  return partnerTechniqueDefCache;
+};
+
+export const getPartnerTechniqueDefinitionById = (techniqueId: string): PartnerTechniqueDefConfig | null => {
+  const id = String(techniqueId || '').trim();
+  if (!id) return null;
+  return getPartnerTechniqueDefinitions().find((entry) => entry.id === id && entry.enabled !== false) ?? null;
+};
+
 /**
  * 刷新生成功法缓存并清空功法相关静态快照。
  *
@@ -1484,4 +1613,25 @@ export const getInsightGrowthConfig = (): InsightGrowthConfig => {
     bonus_pct_per_level: bonusPctPerLevel,
   };
   return insightGrowthCache;
+};
+
+export const getPartnerGrowthConfig = (): PartnerGrowthConfig => {
+  if (partnerGrowthCache) return partnerGrowthCache;
+
+  const parsed = readStrictJsonFile<PartnerGrowthFile>('partner_growth.json');
+  const expBaseExp = Number(parsed.exp_base_exp);
+  const expGrowthRate = Number(parsed.exp_growth_rate);
+
+  if (!Number.isInteger(expBaseExp) || expBaseExp < 1) {
+    throw new Error('partner_growth.exp_base_exp 非法');
+  }
+  if (!Number.isFinite(expGrowthRate) || expGrowthRate < 1) {
+    throw new Error('partner_growth.exp_growth_rate 非法');
+  }
+
+  partnerGrowthCache = {
+    exp_base_exp: expBaseExp,
+    exp_growth_rate: expGrowthRate,
+  };
+  return partnerGrowthCache;
 };

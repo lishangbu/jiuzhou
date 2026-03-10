@@ -54,7 +54,7 @@ function validateBattleUnit(unit: BattleUnit): ValidationResult {
     return { valid: false, error: '单位ID或名称不能为空' };
   }
   
-  if (!['player', 'monster', 'npc', 'summon'].includes(unit.type)) {
+  if (!['player', 'partner', 'monster', 'npc', 'summon'].includes(unit.type)) {
     return { valid: false, error: `无效的单位类型: ${unit.type}` };
   }
   

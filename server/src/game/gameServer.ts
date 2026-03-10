@@ -13,6 +13,7 @@ import {
   getCharacterComputedByUserId,
   invalidateCharacterComputedCacheByUserId,
 } from "../services/characterComputedService.js";
+import { withUnlockedFeatures } from "../services/featureUnlockService.js";
 import { getRemainingCooldown } from "../services/battle/cooldownManager.js";
 import { syncBattleStateOnReconnect } from "../services/battle/index.js";
 import { AsyncShutdownGate } from "../utils/asyncShutdownGate.js";
@@ -582,8 +583,11 @@ class GameServer {
       await applyStaminaRecoveryByUserId(userId);
       const computed = await getCharacterComputedByUserId(userId);
       if (!computed) return null;
+      const characterWithUnlockedFeatures = await withUnlockedFeatures(
+        computed as unknown as Record<string, unknown> & { id: number },
+      );
       return dbToCharacterAttributes(
-        computed as unknown as Record<string, unknown>,
+        characterWithUnlockedFeatures,
       );
     } catch (error) {
       console.error("加载角色失败:", error);
@@ -706,7 +710,17 @@ class GameServer {
     const delta: Record<string, unknown> = {};
     let changed = false;
     for (const k of keys) {
-      if (prev[k] !== next[k]) {
+      const prevValue = prev[k];
+      const nextValue = next[k];
+      const sameArray =
+        Array.isArray(prevValue) &&
+        Array.isArray(nextValue) &&
+        prevValue.length === nextValue.length &&
+        prevValue.every((item, index) => item === nextValue[index]);
+      if (sameArray) {
+        continue;
+      }
+      if (prevValue !== nextValue) {
         delta[k] = next[k];
         changed = true;
       }

@@ -11,8 +11,10 @@ import {
   type ChapterDto,
   type SectionDto,
 } from '../../../../services/mainQuestApi';
+import { gameSocket } from '../../../../services/gameSocket';
 import { resolveIconUrl } from '../../shared/resolveIcon';
 import { IMG_LINGSHI as lingshiIcon, IMG_TONGQIAN as tongqianIcon } from '../../shared/imageAssets';
+import { formatMainQuestRewardTexts } from '../../shared/mainQuestRewardText';
 import './MainQuestPanel.scss';
 
 interface MainQuestPanelProps {
@@ -121,31 +123,7 @@ const MainQuestPanel: React.FC<MainQuestPanelProps> = ({ onTrackChange }) => {
     try {
       const res = await completeSection();
       if (res?.success && res.data) {
-        const rewards = res.data.rewards || [];
-        const rewardTexts: string[] = [];
-        for (const r of rewards) {
-          const rr = r as {
-            type?: string;
-            amount?: number;
-            itemDefId?: string;
-            quantity?: number;
-            itemName?: string;
-            techniqueId?: string;
-            techniqueName?: string;
-          };
-          if (rr.type === 'exp') rewardTexts.push(`经验 +${rr.amount}`);
-          if (rr.type === 'silver') rewardTexts.push(`银两 +${rr.amount}`);
-          if (rr.type === 'spirit_stones') rewardTexts.push(`灵石 +${rr.amount}`);
-          if (rr.type === 'item') {
-            const name = (rr.itemName || rr.itemDefId || '').trim();
-            const qty = rr.quantity || 1;
-            rewardTexts.push(name ? `物品「${name}」×${qty}` : `物品 ×${qty}`);
-          }
-          if (rr.type === 'technique') {
-            const name = (rr.techniqueName || rr.techniqueId || '').trim();
-            rewardTexts.push(name ? `功法「${name}」` : '功法');
-          }
-        }
+        const rewardTexts = formatMainQuestRewardTexts(res.data.rewards || []);
         message.success('任务完成！');
         if (rewardTexts.length > 0) {
           appendSystemChat(`【主线】获得奖励：${rewardTexts.join('，')}`);
@@ -153,6 +131,8 @@ const MainQuestPanel: React.FC<MainQuestPanelProps> = ({ onTrackChange }) => {
         if (res.data.chapterCompleted) {
           appendSystemChat('【主线】恭喜完成本章！');
         }
+        gameSocket.refreshCharacter();
+        window.dispatchEvent(new Event('inventory:changed'));
         await loadProgress();
       } else {
         void 0;
