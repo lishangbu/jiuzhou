@@ -354,6 +354,9 @@ function createNpcUnit(data: CharacterData, skills: SkillData[]): BattleUnit {
 
 function createCharacterUnit(data: CharacterData, skills: SkillData[], type: 'player' | 'partner' | 'npc'): BattleUnit {
   const attrs = extractAttrs(data);
+  if (type === 'partner') {
+    attrs.realm = undefined;
+  }
   const battleSkills = skills.map(convertSkillData);
   
   // 确保有普通攻击

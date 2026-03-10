@@ -611,9 +611,8 @@ const buildPartnerDetail = (params: {
   row: PartnerRow;
   definition: PartnerDefConfig;
   techniqueRows: PartnerTechniqueRow[];
-  ownerRealm: string;
 }): PartnerDetailDto => {
-  const { row, definition, techniqueRows, ownerRealm } = params;
+  const { row, definition, techniqueRows } = params;
   const config = getPartnerGrowthConfig();
   const growth = toPartnerGrowth(row);
   const techniqueEntries = techniqueRows.map((techniqueRow) => {
@@ -641,7 +640,6 @@ const buildPartnerDetail = (params: {
     level: row.level,
     levelAttrGains: definition.level_attr_gains,
     passiveAttrs,
-    realm: ownerRealm,
     element,
   });
 
@@ -674,7 +672,6 @@ const buildPartnerDetailWithNextLevel = (params: {
   row: PartnerRow;
   definition: PartnerDefConfig;
   techniqueRows: PartnerTechniqueRow[];
-  ownerRealm: string;
 }): PartnerDetailDto => {
   return buildPartnerDetail(params);
 };
@@ -682,7 +679,6 @@ const buildPartnerDetailWithNextLevel = (params: {
 const buildPartnerDetails = (params: {
   rows: PartnerRow[];
   techniqueMap: Map<number, PartnerTechniqueRow[]>;
-  ownerRealm: string;
 }): PartnerDetailDto[] => {
   return params.rows.map((row) => {
     const definition = getPartnerDefinitionById(row.partner_def_id);
@@ -694,7 +690,6 @@ const buildPartnerDetails = (params: {
       row,
       definition,
       techniqueRows,
-      ownerRealm: params.ownerRealm,
     });
   });
 };
@@ -819,7 +814,6 @@ class PartnerService {
       const partners = buildPartnerDetails({
         rows,
         techniqueMap,
-        ownerRealm: character.realm,
       });
       const books = await loadPartnerBooks(characterId);
 
@@ -883,7 +877,6 @@ class PartnerService {
         row: refreshedPartner,
         definition: partnerDef,
         techniqueRows: techniqueMap.get(partnerId) ?? [],
-        ownerRealm: character.realm,
       });
 
       return {
@@ -967,7 +960,6 @@ class PartnerService {
         row: refreshedPartner,
         definition: partnerDef,
         techniqueRows: techniqueMap.get(partnerId) ?? [],
-        ownerRealm: character.realm,
       });
 
       await invalidateCharacterComputedCache(characterId);
@@ -1165,7 +1157,6 @@ class PartnerService {
         row: partnerRow,
         definition: partnerDef,
         techniqueRows: refreshedTechniqueMap.get(partnerId) ?? [],
-        ownerRealm: character.realm,
       });
       const updatedTechnique =
         partner.techniques.find((entry) => entry.techniqueId === techniqueId) ?? null;
@@ -1288,7 +1279,6 @@ class PartnerService {
           row: partnerRow,
           definition: partnerDef,
           techniqueRows: refreshedTechniqueMap.get(params.partnerId) ?? [],
-          ownerRealm: character.realm,
         });
         const learnedTechnique = partner.techniques.find(
           (entry) => entry.techniqueId === params.techniqueId,
@@ -1314,7 +1304,6 @@ class PartnerService {
         row: partnerRow,
         definition: partnerDef,
         techniqueRows: refreshedTechniqueMap.get(params.partnerId) ?? [],
-        ownerRealm: character.realm,
       });
       const learnedTechnique = partner.techniques.find(
         (entry) => entry.techniqueId === params.techniqueId,
@@ -1342,8 +1331,6 @@ class PartnerService {
   async buildActivePartnerBattleMember(params: {
     characterId: number;
     userId: number;
-    ownerRealm: string;
-    ownerSubRealm: string | null;
   }): Promise<PartnerBattleMember | null> {
     const rows = await query(
       `
@@ -1387,7 +1374,6 @@ class PartnerService {
         level: partnerRow.level,
         levelAttrGains: partnerDef.level_attr_gains,
         passiveAttrs,
-        realm: params.ownerRealm,
         element: normalizeText(partnerDef.attribute_element) || 'none',
     });
 
@@ -1411,8 +1397,8 @@ class PartnerService {
       user_id: params.userId,
       id: partnerRow.id,
       nickname: normalizeText(partnerRow.nickname) || normalizeText(partnerDef.name),
-      realm: params.ownerRealm,
-      sub_realm: params.ownerSubRealm,
+      realm: '',
+      sub_realm: null,
       attribute_element: attributeElement,
       qixue: normalizeInteger(finalAttrs.max_qixue, 1),
       max_qixue: normalizeInteger(finalAttrs.max_qixue, 1),

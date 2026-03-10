@@ -217,7 +217,6 @@ export const buildPartnerBattleAttrs = (params: {
   level: number;
   levelAttrGains?: Partial<PartnerBaseAttrConfig>;
   passiveAttrs?: Record<string, number>;
-  realm?: string;
   element?: string;
 }): Record<string, number | string | undefined> => {
   const base = cloneBaseAttrs(params.baseAttrs);
@@ -242,7 +241,6 @@ export const buildPartnerBattleAttrs = (params: {
 
   return {
     ...Object.fromEntries(normalizedEntries),
-    realm: params.realm,
     element: params.element,
   };
 };

@@ -163,8 +163,6 @@ export async function startPVEBattle(
         ? await partnerService.buildActivePartnerBattleMember({
             characterId,
             userId,
-            ownerRealm: character.realm,
-            ownerSubRealm: character.sub_realm ?? null,
           })
         : null;
 
@@ -283,8 +281,6 @@ export async function startDungeonPVEBattle(
         ? await partnerService.buildActivePartnerBattleMember({
             characterId,
             userId,
-            ownerRealm: character.realm,
-            ownerSubRealm: character.sub_realm ?? null,
           })
         : null;
 
