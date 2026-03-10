@@ -21,6 +21,10 @@ import {
   buildRewardSummaryLinesFast,
   formatBattleLogLineFast,
 } from './logFormatterFast';
+import {
+  resolveLocalBattleMonsterIds,
+  shouldAutoStartLocalBattle,
+} from './localStartResolver';
 import './index.scss';
 
 export type BattleUnit = {
@@ -317,6 +321,10 @@ const BattleArea: React.FC<BattleAreaProps> = ({
   const battleStartCooldownMsRef = useRef(DEFAULT_BATTLE_START_COOLDOWN_MS);
   const nextBattleAvailableAtRef = useRef<number | null>(null);
   const startBattleRef = useRef<(monsterIds: string[], options?: StartBattleOptions) => Promise<void>>(async () => {});
+  const localBattleMonsterIds = useMemo(
+    () => resolveLocalBattleMonsterIds(enemies),
+    [enemies],
+  );
 
   useEffect(() => {
     onAppendBattleLinesRef.current = onAppendBattleLines ?? null;
@@ -646,8 +654,6 @@ const BattleArea: React.FC<BattleAreaProps> = ({
         setBattleState(null);
         setResult('idle');
         setStartupStatus('none');
-        pushBattleLines([FAST_BATTLE_LOG_SYSTEM_LINES.cancelled]);
-        onEscape?.();
         startingBattleRef.current = false;
         return;
       }
@@ -725,15 +731,21 @@ const BattleArea: React.FC<BattleAreaProps> = ({
   useEffect(() => {
     // 外部战斗上下文（秘境/竞技场/重连）必须依赖 externalBattleId 驱动，
     // 禁止回退到本地 startPVEBattle，避免误命中“目标不在当前房间”并触发错误退出。
-    if (!allowLocalStart) return;
-    if (resolvedExternalBattleId) return;
-    const firstMonster = (enemies ?? []).find((u) => u.id.startsWith('monster-'))?.id ?? '';
-    const rawMonsterId = firstMonster.startsWith('monster-') ? firstMonster.slice('monster-'.length) : '';
-    const baseMonsterId = rawMonsterId.split('-敌')[0]?.trim() ?? '';
-    const monsterIds = baseMonsterId ? [baseMonsterId] : [];
-    lastMonsterIdsRef.current = monsterIds;
-    void startBattle(monsterIds, { retryOnCooldown: true, silentCooldown: true });
-  }, [allowLocalStart, enemies, resolvedExternalBattleId, startBattle]);
+    if (localBattleMonsterIds.length > 0) {
+      lastMonsterIdsRef.current = localBattleMonsterIds;
+    }
+    if (!shouldAutoStartLocalBattle({
+      allowLocalStart,
+      externalBattleId: resolvedExternalBattleId,
+      monsterIds: localBattleMonsterIds,
+      currentBattleId: battleIdRef.current,
+      currentBattlePhase: battleStateRef.current?.phase ?? null,
+      isStartingBattle: startingBattleRef.current,
+    })) {
+      return;
+    }
+    void startBattle(localBattleMonsterIds, { retryOnCooldown: true, silentCooldown: true });
+  }, [allowLocalStart, localBattleMonsterIds, resolvedExternalBattleId, startBattle]);
 
   // 监听服务端冷却结束推送
   useEffect(() => {
@@ -1048,7 +1060,6 @@ const BattleArea: React.FC<BattleAreaProps> = ({
     }
     return [];
   }, [battleState]);
-
   const enemyAliveCount = useMemo(() => pickAlive(enemyUnits).length, [enemyUnits]);
   const allyAliveCount = useMemo(() => pickAlive(allyUnits).length, [allyUnits]);
 
