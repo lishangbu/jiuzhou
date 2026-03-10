@@ -19,6 +19,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import sharp from 'sharp';
 
 export type TechniqueSkillImageInput = {
   skillId: string;
@@ -53,6 +54,8 @@ const DEFAULT_MAX_SKILLS = 4;
 const DEFAULT_IMAGE_RESPONSE_FORMAT = 'b64_json';
 const LOCAL_IMAGE_PREFIX = '/uploads/techniques';
 const DASHSCOPE_SYNC_IMAGE_PATH = '/api/v1/services/aigc/multimodal-generation/generation';
+export const TECHNIQUE_SKILL_IMAGE_OUTPUT_MAX_EDGE = 384;
+export const TECHNIQUE_SKILL_IMAGE_OUTPUT_WEBP_QUALITY = 82;
 
 const asString = (raw: unknown): string => (typeof raw === 'string' ? raw.trim() : '');
 const asBool = (raw: unknown, fallback: boolean): boolean => {
@@ -166,25 +169,12 @@ const summarizeEffects = (effects: unknown[]): string => {
   return parts.length > 0 ? parts.join('、') : '无明显特效';
 };
 
-const buildPrompt = (input: TechniqueSkillImageInput): string => {
+export const buildTechniqueSkillImagePrompt = (input: TechniqueSkillImageInput): string => {
   return [
     ` - 生成2D中国仙侠游戏《九州修仙录》技能图标《${input.skillName}》`,
     ` - 技能描述：${input.skillDescription}`,
-    ` - 铺满整个画布，单主体，背景简化，强对比，避免细碎噪点，满画幅无边框无留白`,
-    ` - 不要任何文字、英文`
-  ].join('\n');
-  const effectSummary = summarizeEffects(input.skillEffects);
-  const element = asString(input.techniqueElement) || 'none';
-  return [
-    '请生成一张“修仙RPG技能图标”，用于游戏内招式展示。',
-    '只输出图像，不要文字、英文、水印、Logo、边框、UI界面元素。',
-    '画面风格：高辨识度、半写实幻想、色彩集中、中心主体明确、适合小图标缩略展示。',
-    `功法：${input.techniqueName}（${input.techniqueQuality}品${input.techniqueType}，主元素${element}）`,
-    `技能：${input.skillName}`,
-    `技能描述：${input.skillDescription}`,
-    `特效重点：${effectSummary}`,
-    '构图要求：单主体，背景简化，强对比，避免细碎噪点，满画幅无边框无留白。',
-    '比例要求：正方形图标（1:1）。',
+    ' - 铺满整个画布，单主体，背景简化，强对比，避免细碎噪点，满画幅无边框无留白',
+    ' - 不要任何文字、英文',
   ].join('\n');
 };
 
@@ -221,14 +211,57 @@ const getSafeSkillId = (skillId: string): string => {
     .slice(0, 48) || 'skill';
 };
 
+/**
+ * 压缩模型输出后的技能图片
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1) 做什么：统一把模型原始图片压缩为更适合前端加载的 WebP，并限制最大边长，避免落盘原图过大。
+ * 2) 做什么：作为 b64 与远端 URL 两条图片来源链路的共同压缩入口，减少重复处理逻辑。
+ * 3) 不做什么：不负责网络下载、不负责文件命名、不区分具体模型来源。
+ *
+ * 输入/输出：
+ * - 输入：模型输出的原始图片 Buffer。
+ * - 输出：压缩后的 WebP Buffer；压缩失败返回 null。
+ *
+ * 数据流/状态流：
+ * 模型原始字节 -> compressTechniqueSkillImageBuffer -> saveImageBufferToLocal -> uploads/techniques。
+ *
+ * 关键边界条件与坑点：
+ * 1) 只允许缩小不允许放大，避免小图被错误重采样导致发糊。
+ * 2) 图像可能带有 EXIF 方向信息，压缩前需自动旋正，否则前端显示方向可能异常。
+ */
+export const compressTechniqueSkillImageBuffer = async (buffer: Buffer): Promise<Buffer | null> => {
+  if (buffer.length <= 0) return null;
+  try {
+    const compressed = await sharp(buffer)
+      .rotate()
+      .resize({
+        width: TECHNIQUE_SKILL_IMAGE_OUTPUT_MAX_EDGE,
+        height: TECHNIQUE_SKILL_IMAGE_OUTPUT_MAX_EDGE,
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      .webp({
+        quality: TECHNIQUE_SKILL_IMAGE_OUTPUT_WEBP_QUALITY,
+        effort: 4,
+      })
+      .toBuffer();
+    return compressed.length > 0 ? compressed : null;
+  } catch {
+    return null;
+  }
+};
+
 const saveImageBufferToLocal = async (buffer: Buffer, skillId: string): Promise<string | null> => {
   try {
     if (buffer.length <= 0) return null;
+    const compressedBuffer = await compressTechniqueSkillImageBuffer(buffer);
+    if (!compressedBuffer || compressedBuffer.length <= 0) return null;
     const dir = await ensureImageDir();
     const safeSkillId = getSafeSkillId(skillId);
-    const fileName = `tech-skill-${Date.now()}-${safeSkillId}.png`;
+    const fileName = `tech-skill-${Date.now()}-${safeSkillId}.webp`;
     const filePath = path.join(dir, fileName);
-    await fs.writeFile(filePath, buffer);
+    await fs.writeFile(filePath, compressedBuffer);
     return `${LOCAL_IMAGE_PREFIX}/${fileName}`;
   } catch {
     return null;
@@ -328,7 +361,7 @@ const readDashScopeImageResult = (body: Record<string, unknown>): { url: string 
 export const generateTechniqueSkillIcon = async (input: TechniqueSkillImageInput): Promise<string | null> => {
   const cfg = readImageModelConfig();
   if (!cfg || !cfg.endpoint) return null;
-  const prompt = buildPrompt(input);
+  const prompt = buildTechniqueSkillImagePrompt(input);
   debugLog('provider=', cfg.provider, 'endpoint=', cfg.endpoint, 'model=', cfg.modelName);
   try {
     if (cfg.provider === 'dashscope') {
