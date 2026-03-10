@@ -24,7 +24,8 @@
     "onlyBuiltDependencies": [
       "prisma",
       "esbuild",
-      "@prisma/engines"
+      "@prisma/engines",
+      "sharp"
     ]
   },
   "devDependencies": {
