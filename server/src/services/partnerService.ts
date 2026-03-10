@@ -270,6 +270,14 @@ type PartnerTechniqueStaticMeta = {
   passiveAttrs: Array<{ key: string; value: number }>;
 };
 
+type EffectivePartnerTechniqueEntry = {
+  row: PartnerTechniqueRow | null;
+  techniqueId: string;
+  currentLayer: number;
+  isInnate: boolean;
+  learnedFromItemDefId: string | null;
+};
+
 const normalizeInteger = (value: unknown, minimum: number = 0): number => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return minimum;
@@ -564,7 +572,7 @@ const loadPartnerBooks = async (characterId: number): Promise<PartnerBookDto[]> 
 };
 
 const buildPartnerTechniqueDto = (
-  row: PartnerTechniqueRow,
+  entry: EffectivePartnerTechniqueEntry,
   meta: PartnerTechniqueStaticMeta,
 ): PartnerTechniqueDto => {
   const skillDefinitionMap = new Map(
@@ -593,18 +601,76 @@ const buildPartnerTechniqueDto = (
     }));
 
   return {
-    techniqueId: meta.definition.id,
+    techniqueId: entry.techniqueId,
     name: normalizeText(meta.definition.name) || meta.definition.id,
     description: normalizeText(meta.definition.description) || null,
     icon: normalizeText(meta.definition.icon) || null,
     quality: normalizeText(meta.definition.quality) || '黄',
     currentLayer: meta.currentLayer,
     maxLayer: meta.maxLayer,
-    isInnate: row.is_innate,
+    isInnate: entry.isInnate,
     skillIds: meta.skillIds,
     skills,
     passiveAttrs: toPartnerPassiveAttrsDto(meta.passiveAttrs),
   };
+};
+
+const getPartnerInnateTechniqueIds = (definition: PartnerDefConfig): string[] => {
+  const ids = Array.isArray(definition.innate_technique_ids)
+    ? definition.innate_technique_ids
+        .map((entry) => normalizeText(entry))
+        .filter((entry) => entry.length > 0)
+    : [];
+  return [...new Set(ids)];
+};
+
+const buildEffectivePartnerTechniqueEntries = (
+  definition: PartnerDefConfig,
+  techniqueRows: PartnerTechniqueRow[],
+): EffectivePartnerTechniqueEntry[] => {
+  const innateTechniqueIds = getPartnerInnateTechniqueIds(definition);
+  const innateTechniqueIdSet = new Set(innateTechniqueIds);
+  const rowMap = new Map(
+    techniqueRows.map((row) => [normalizeText(row.technique_id), row] as const),
+  );
+  const entries: EffectivePartnerTechniqueEntry[] = [];
+
+  for (const techniqueId of innateTechniqueIds) {
+    const row = rowMap.get(techniqueId) ?? null;
+    entries.push({
+      row,
+      techniqueId,
+      currentLayer: row ? normalizeInteger(row.current_layer, 1) : 1,
+      isInnate: true,
+      learnedFromItemDefId: row?.learned_from_item_def_id ?? null,
+    });
+  }
+
+  for (const row of techniqueRows) {
+    const techniqueId = normalizeText(row.technique_id);
+    if (!techniqueId || innateTechniqueIdSet.has(techniqueId)) continue;
+    if (row.is_innate) continue;
+    entries.push({
+      row,
+      techniqueId,
+      currentLayer: normalizeInteger(row.current_layer, 1),
+      isInnate: false,
+      learnedFromItemDefId: row.learned_from_item_def_id ?? null,
+    });
+  }
+
+  return entries;
+};
+
+const findEffectivePartnerTechniqueEntry = (
+  definition: PartnerDefConfig,
+  techniqueRows: PartnerTechniqueRow[],
+  techniqueIdRaw: string,
+): EffectivePartnerTechniqueEntry | null => {
+  const techniqueId = normalizeText(techniqueIdRaw);
+  if (!techniqueId) return null;
+  return buildEffectivePartnerTechniqueEntries(definition, techniqueRows)
+    .find((entry) => entry.techniqueId === techniqueId) ?? null;
 };
 
 const buildPartnerDetail = (params: {
@@ -615,21 +681,25 @@ const buildPartnerDetail = (params: {
   const { row, definition, techniqueRows } = params;
   const config = getPartnerGrowthConfig();
   const growth = toPartnerGrowth(row);
-  const techniqueEntries = techniqueRows.map((techniqueRow) => {
+  const effectiveTechniqueEntries = buildEffectivePartnerTechniqueEntries(
+    definition,
+    techniqueRows,
+  );
+  const techniqueEntries = effectiveTechniqueEntries.map((entry) => {
     const meta = getPartnerTechniqueStaticMeta(
-      techniqueRow.technique_id,
-      techniqueRow.current_layer,
+      entry.techniqueId,
+      entry.currentLayer,
     );
     if (!meta) {
-      throw new Error(`伙伴功法不存在: ${techniqueRow.technique_id}`);
+      throw new Error(`伙伴功法不存在: ${entry.techniqueId}`);
     }
     return {
-      row: techniqueRow,
+      entry,
       meta,
     };
   });
   const techniques = techniqueEntries.map((entry) =>
-    buildPartnerTechniqueDto(entry.row, entry.meta),
+    buildPartnerTechniqueDto(entry.entry, entry.meta),
   );
   const passiveAttrs = mergePartnerTechniquePassives(
     techniqueEntries.map((entry) => entry.meta.passiveAttrs),
@@ -695,11 +765,12 @@ const buildPartnerDetails = (params: {
 };
 
 const buildTechniqueStateList = (
+  definition: PartnerDefConfig,
   techniqueRows: PartnerTechniqueRow[],
 ): PartnerLearnedTechniqueState[] => {
-  return techniqueRows.map((row) => ({
-    techniqueId: row.technique_id,
-    isInnate: Boolean(row.is_innate),
+  return buildEffectivePartnerTechniqueEntries(definition, techniqueRows).map((entry) => ({
+    techniqueId: entry.techniqueId,
+    isInnate: entry.isInnate,
   }));
 };
 
@@ -716,38 +787,15 @@ const assertPartnerSystemUnlocked = async (
   return { success: true, message: 'ok' };
 };
 
-const loadSinglePartnerTechniqueRow = async (
-  partnerId: number,
-  techniqueId: string,
-  forUpdate: boolean,
-): Promise<PartnerTechniqueRow | null> => {
-  const normalizedPartnerId = normalizeInteger(partnerId, 1);
-  const normalizedTechniqueId = normalizeText(techniqueId);
-  if (normalizedPartnerId <= 0 || normalizedTechniqueId.length <= 0) return null;
-  const lockSql = forUpdate ? 'FOR UPDATE' : '';
-  const result = await query(
-    `
-      SELECT *
-      FROM character_partner_technique
-      WHERE partner_id = $1 AND technique_id = $2
-      LIMIT 1
-      ${lockSql}
-    `,
-    [normalizedPartnerId, normalizedTechniqueId],
-  );
-  if (result.rows.length <= 0) return null;
-  return result.rows[0] as PartnerTechniqueRow;
-};
-
 const buildPartnerTechniqueUpgradeCost = async (params: {
-  techniqueRow: PartnerTechniqueRow;
+  techniqueId: string;
   techniqueMeta: PartnerTechniqueStaticMeta;
 }): Promise<PartnerTechniqueUpgradeCostDto | null> => {
-  const { techniqueRow, techniqueMeta } = params;
+  const { techniqueId, techniqueMeta } = params;
   if (techniqueMeta.currentLayer >= techniqueMeta.maxLayer) return null;
   const nextLayer = techniqueMeta.currentLayer + 1;
   const nextLayerConfig = getTechniqueLayerByTechniqueAndLayerStatic(
-    techniqueRow.technique_id,
+    techniqueId,
     nextLayer,
   );
   if (!nextLayerConfig) return null;
@@ -996,20 +1044,30 @@ class PartnerService {
 
       const partnerRow = await loadSinglePartnerRow(characterId, partnerId, false);
       if (!partnerRow) return { success: false, message: '伙伴不存在' };
+      const partnerDef = getPartnerDefinitionById(partnerRow.partner_def_id);
+      if (!partnerDef) {
+        throw new Error(`伙伴模板不存在: ${partnerRow.partner_def_id}`);
+      }
 
-      const techniqueRow = await loadSinglePartnerTechniqueRow(partnerId, techniqueId, false);
-      if (!techniqueRow) return { success: false, message: '该伙伴未学习此功法' };
+      const techniqueMap = await loadPartnerTechniqueRows([partnerId], false);
+      const techniqueRows = techniqueMap.get(partnerId) ?? [];
+      const techniqueEntry = findEffectivePartnerTechniqueEntry(
+        partnerDef,
+        techniqueRows,
+        techniqueId,
+      );
+      if (!techniqueEntry) return { success: false, message: '该伙伴未学习此功法' };
 
       const techniqueMeta = getPartnerTechniqueStaticMeta(
-        techniqueRow.technique_id,
-        techniqueRow.current_layer,
+        techniqueEntry.techniqueId,
+        techniqueEntry.currentLayer,
       );
       if (!techniqueMeta) {
         return { success: false, message: '伙伴功法不存在或未开放' };
       }
 
       const cost = await buildPartnerTechniqueUpgradeCost({
-        techniqueRow,
+        techniqueId: techniqueEntry.techniqueId,
         techniqueMeta,
       });
       if (!cost) {
@@ -1044,20 +1102,30 @@ class PartnerService {
 
       const partnerRow = await loadSinglePartnerRow(characterId, partnerId, true);
       if (!partnerRow) return { success: false, message: '伙伴不存在' };
+      const partnerDef = getPartnerDefinitionById(partnerRow.partner_def_id);
+      if (!partnerDef) {
+        throw new Error(`伙伴模板不存在: ${partnerRow.partner_def_id}`);
+      }
 
-      const techniqueRow = await loadSinglePartnerTechniqueRow(partnerId, techniqueId, true);
-      if (!techniqueRow) return { success: false, message: '该伙伴未学习此功法' };
+      const persistedTechniqueMap = await loadPartnerTechniqueRows([partnerId], true);
+      const techniqueRows = persistedTechniqueMap.get(partnerId) ?? [];
+      const techniqueEntry = findEffectivePartnerTechniqueEntry(
+        partnerDef,
+        techniqueRows,
+        techniqueId,
+      );
+      if (!techniqueEntry) return { success: false, message: '该伙伴未学习此功法' };
 
       const techniqueMeta = getPartnerTechniqueStaticMeta(
-        techniqueRow.technique_id,
-        techniqueRow.current_layer,
+        techniqueEntry.techniqueId,
+        techniqueEntry.currentLayer,
       );
       if (!techniqueMeta) {
         return { success: false, message: '伙伴功法不存在或未开放' };
       }
 
       const cost = await buildPartnerTechniqueUpgradeCost({
-        techniqueRow,
+        techniqueId: techniqueEntry.techniqueId,
         techniqueMeta,
       });
       if (!cost) {
@@ -1138,20 +1206,34 @@ class PartnerService {
         }
       }
 
-      await query(
-        `
-          UPDATE character_partner_technique
-          SET current_layer = $2,
-              updated_at = NOW()
-          WHERE id = $1
-        `,
-        [techniqueRow.id, cost.nextLayer],
-      );
-
-      const partnerDef = getPartnerDefinitionById(partnerRow.partner_def_id);
-      if (!partnerDef) {
-        throw new Error(`伙伴模板不存在: ${partnerRow.partner_def_id}`);
+      if (techniqueEntry.row) {
+        await query(
+          `
+            UPDATE character_partner_technique
+            SET current_layer = $2,
+                updated_at = NOW()
+            WHERE id = $1
+          `,
+          [techniqueEntry.row.id, cost.nextLayer],
+        );
+      } else {
+        await query(
+          `
+            INSERT INTO character_partner_technique (
+              partner_id,
+              technique_id,
+              current_layer,
+              is_innate,
+              learned_from_item_def_id,
+              created_at,
+              updated_at
+            )
+            VALUES ($1, $2, $3, TRUE, NULL, NOW(), NOW())
+          `,
+          [partnerId, techniqueEntry.techniqueId, cost.nextLayer],
+        );
       }
+
       const refreshedTechniqueMap = await loadPartnerTechniqueRows([partnerId], false);
       const partner = buildPartnerDetailWithNextLevel({
         row: partnerRow,
@@ -1217,7 +1299,7 @@ class PartnerService {
 
       const maxTechniqueSlots = normalizeInteger(partnerDef.max_technique_slots);
       const replaceableTechniqueIds = listReplaceablePartnerTechniqueIds(
-        buildTechniqueStateList(currentTechniqueRows),
+        buildTechniqueStateList(partnerDef, currentTechniqueRows),
         maxTechniqueSlots,
       );
 
@@ -1271,7 +1353,13 @@ class PartnerService {
           : null;
         const replacedTechnique =
           replacedRow && replacedTechniqueMeta
-            ? buildPartnerTechniqueDto(replacedRow, replacedTechniqueMeta)
+            ? buildPartnerTechniqueDto({
+                row: replacedRow,
+                techniqueId: replacedRow.technique_id,
+                currentLayer: normalizeInteger(replacedRow.current_layer, 1),
+                isInnate: false,
+                learnedFromItemDefId: replacedRow.learned_from_item_def_id ?? null,
+              }, replacedTechniqueMeta)
             : null;
 
         const refreshedTechniqueMap = await loadPartnerTechniqueRows([params.partnerId], false);
@@ -1350,21 +1438,25 @@ class PartnerService {
 
     const techniqueMap = await loadPartnerTechniqueRows([partnerRow.id], false);
     const techniqueRows = techniqueMap.get(partnerRow.id) ?? [];
-    const techniqueEntries = techniqueRows.map((techniqueRow) => {
+    const effectiveTechniqueEntries = buildEffectivePartnerTechniqueEntries(
+      partnerDef,
+      techniqueRows,
+    );
+    const techniqueEntries = effectiveTechniqueEntries.map((entry) => {
       const meta = getPartnerTechniqueStaticMeta(
-        techniqueRow.technique_id,
-        techniqueRow.current_layer,
+        entry.techniqueId,
+        entry.currentLayer,
       );
       if (!meta) {
-        throw new Error(`伙伴功法不存在: ${techniqueRow.technique_id}`);
+        throw new Error(`伙伴功法不存在: ${entry.techniqueId}`);
       }
       return {
-        row: techniqueRow,
+        entry,
         meta,
       };
     });
     const techniqueDtos = techniqueEntries.map((entry) =>
-      buildPartnerTechniqueDto(entry.row, entry.meta),
+      buildPartnerTechniqueDto(entry.entry, entry.meta),
     );
     const passiveAttrs = mergePartnerTechniquePassives(
       techniqueEntries.map((entry) => entry.meta.passiveAttrs),
@@ -1501,31 +1593,12 @@ class PartnerService {
     );
     const partnerId = normalizeInteger(insertResult.rows[0]?.id, 1);
 
-    const innateTechniqueIds = Array.isArray(definition.innate_technique_ids)
-      ? definition.innate_technique_ids
-          .map((entry) => normalizeText(entry))
-          .filter((entry) => entry.length > 0)
-      : [];
+    const innateTechniqueIds = getPartnerInnateTechniqueIds(definition);
     for (const techniqueId of innateTechniqueIds) {
       const techniqueMeta = getPartnerTechniqueStaticMeta(techniqueId, 1);
       if (!techniqueMeta) {
         throw new Error(`伙伴天生功法不存在: ${techniqueId}`);
       }
-      await query(
-        `
-          INSERT INTO character_partner_technique (
-            partner_id,
-            technique_id,
-            current_layer,
-            is_innate,
-            learned_from_item_def_id,
-            created_at,
-            updated_at
-          )
-          VALUES ($1, $2, 1, TRUE, NULL, NOW(), NOW())
-        `,
-        [partnerId, techniqueId],
-      );
     }
 
     return buildPartnerRewardDto(partnerId, definition);
