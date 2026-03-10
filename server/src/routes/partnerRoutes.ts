@@ -25,6 +25,7 @@ import { itemService } from '../services/itemService.js';
 import { enqueuePartnerRecruitJob } from '../services/partnerRecruitJobRunner.js';
 import { partnerRecruitService } from '../services/partnerRecruitService.js';
 import { partnerService } from '../services/partnerService.js';
+import { buildPartnerRecruitDisabledResult, isPartnerRecruitEnabled } from '../services/shared/partnerRecruitAvailability.js';
 import { getItemDefinitionById } from '../services/staticConfigLoader.js';
 import { resolveTechniqueBookLearning } from '../services/shared/techniqueBookRules.js';
 
@@ -44,6 +45,10 @@ const parseNonEmptyText = (value: unknown): string | null => {
   return normalized.length > 0 ? normalized : null;
 };
 
+const ensurePartnerRecruitEnabled = () => {
+  return isPartnerRecruitEnabled() ? null : buildPartnerRecruitDisabledResult();
+};
+
 router.get('/overview', asyncHandler(async (req, res) => {
   const characterId = req.characterId!;
   const result = await partnerService.getOverview(characterId);
@@ -51,12 +56,20 @@ router.get('/overview', asyncHandler(async (req, res) => {
 }));
 
 router.get('/recruit/status', asyncHandler(async (req, res) => {
+  const disabledResult = ensurePartnerRecruitEnabled();
+  if (disabledResult) {
+    return sendResult(res, disabledResult);
+  }
   const characterId = req.characterId!;
   const result = await partnerRecruitService.getRecruitStatus(characterId);
   return sendResult(res, result);
 }));
 
 router.post('/recruit/generate', asyncHandler(async (req, res) => {
+  const disabledResult = ensurePartnerRecruitEnabled();
+  if (disabledResult) {
+    return sendResult(res, disabledResult);
+  }
   const userId = req.userId!;
   const characterId = req.characterId!;
   const quality = partnerRecruitService.resolveQualityForNewRecruit();
@@ -89,6 +102,10 @@ router.post('/recruit/generate', asyncHandler(async (req, res) => {
 }));
 
 router.post('/recruit/:generationId/confirm', asyncHandler(async (req, res) => {
+  const disabledResult = ensurePartnerRecruitEnabled();
+  if (disabledResult) {
+    return sendResult(res, disabledResult);
+  }
   const userId = req.userId!;
   const characterId = req.characterId!;
   const generationId = parseNonEmptyText(req.params?.generationId);
@@ -105,6 +122,10 @@ router.post('/recruit/:generationId/confirm', asyncHandler(async (req, res) => {
 }));
 
 router.post('/recruit/:generationId/discard', asyncHandler(async (req, res) => {
+  const disabledResult = ensurePartnerRecruitEnabled();
+  if (disabledResult) {
+    return sendResult(res, disabledResult);
+  }
   const characterId = req.characterId!;
   const generationId = parseNonEmptyText(req.params?.generationId);
   if (!generationId) {
@@ -117,6 +138,10 @@ router.post('/recruit/:generationId/discard', asyncHandler(async (req, res) => {
 }));
 
 router.post('/recruit/mark-result-viewed', asyncHandler(async (req, res) => {
+  const disabledResult = ensurePartnerRecruitEnabled();
+  if (disabledResult) {
+    return sendResult(res, disabledResult);
+  }
   const characterId = req.characterId!;
   const result = await partnerRecruitService.markResultViewed(characterId);
   return sendResult(res, result);
