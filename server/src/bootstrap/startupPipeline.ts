@@ -41,7 +41,6 @@ import {
   shutdownPartnerRecruitJobRunner,
 } from "../services/partnerRecruitJobRunner.js";
 import { getGameServer } from "../game/gameServer.js";
-import { isPartnerRecruitEnabled } from "../services/shared/partnerRecruitAvailability.js";
 
 export interface StartServerOptions {
   httpServer: HttpServer;
@@ -89,12 +88,8 @@ export const startServerWithPipeline = async (
   console.log(`✓ Worker 池已就绪（${workerCount} 个 Worker）\n`);
   await initializeTechniqueGenerationJobRunner();
   console.log("✓ 洞府研修 worker 协调器已就绪\n");
-  if (isPartnerRecruitEnabled()) {
-    await initializePartnerRecruitJobRunner();
-    console.log("✓ AI 伙伴招募 worker 协调器已就绪\n");
-  } else {
-    console.log("○ AI 伙伴招募在生产环境暂时关闭，跳过 worker 协调器初始化\n");
-  }
+  await initializePartnerRecruitJobRunner();
+  console.log("✓ AI 伙伴招募 worker 协调器已就绪\n");
 
   await initGameTimeService();
   await initArenaWeeklySettlementService();
@@ -163,10 +158,8 @@ export const registerGracefulShutdown = (httpServer: HttpServer): void => {
       await shutdownTechniqueGenerationJobRunner();
       console.log("✓ 洞府研修 worker 协调器已关闭");
 
-      if (isPartnerRecruitEnabled()) {
-        await shutdownPartnerRecruitJobRunner();
-        console.log("✓ AI 伙伴招募 worker 协调器已关闭");
-      }
+      await shutdownPartnerRecruitJobRunner();
+      console.log("✓ AI 伙伴招募 worker 协调器已关闭");
 
       await shutdownWorkerPool();
       console.log("✓ Worker 池已关闭");

@@ -51,7 +51,6 @@ import {
   resolvePartnerRecruitPanelView,
   shouldPollPartnerRecruitStatus,
 } from './partnerRecruitShared';
-import { isPartnerRecruitEnabled } from './partnerRecruitAvailability';
 import './index.scss';
 
 interface PartnerModalProps {
@@ -83,7 +82,6 @@ type RecruitStatusRefreshMode = 'initial' | 'background';
 const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
   const { message, modal } = App.useApp();
   const isMobile = useIsMobile();
-  const recruitEnabled = isPartnerRecruitEnabled();
   const [loading, setLoading] = useState(false);
   const [actionKey, setActionKey] = useState('');
   const [panel, setPanel] = useState<PartnerPanelKey>('overview');
@@ -114,10 +112,6 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
   }, [message, open]);
 
   const refreshRecruitStatus = useCallback(async (mode: RecruitStatusRefreshMode = 'background') => {
-    if (!recruitEnabled) {
-      setRecruitStatus(null);
-      return;
-    }
     if (!open) return;
     try {
       const res = await getPartnerRecruitStatus();
@@ -131,7 +125,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
         message.error(getUnifiedApiErrorMessage(error as { message?: string }, '获取招募状态失败'));
       }
     }
-  }, [message, open, recruitEnabled]);
+  }, [message, open]);
 
   useEffect(() => {
     if (!open) {
@@ -148,16 +142,9 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
     }
     void Promise.all([
       refreshOverview(),
-      recruitEnabled ? refreshRecruitStatus('initial') : Promise.resolve(),
+      refreshRecruitStatus('initial'),
     ]);
-  }, [open, recruitEnabled, refreshOverview, refreshRecruitStatus]);
-
-  useEffect(() => {
-    if (recruitEnabled) return;
-    if (panel === 'recruit') {
-      setPanel('overview');
-    }
-  }, [panel, recruitEnabled]);
+  }, [open, refreshOverview, refreshRecruitStatus]);
 
   useEffect(() => {
     if (!overview) {
@@ -212,15 +199,15 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
   }, [characterExp, expToNextLevel, selectedPartner]);
 
   useEffect(() => {
-    if (!recruitEnabled || !open || !shouldPollPartnerRecruitStatus(recruitStatus)) return undefined;
+    if (!open || !shouldPollPartnerRecruitStatus(recruitStatus)) return undefined;
     const timer = window.setInterval(() => {
       void refreshRecruitStatus();
     }, PARTNER_RECRUIT_STATUS_POLL_INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [open, recruitEnabled, recruitStatus, refreshRecruitStatus]);
+  }, [open, recruitStatus, refreshRecruitStatus]);
 
   useEffect(() => {
-    if (!recruitEnabled || !open) return undefined;
+    if (!open) return undefined;
     const unsubscribe = gameSocket.onPartnerRecruitResult((payload) => {
       const currentCharacterId = gameSocket.getCharacter()?.id ?? null;
       if (!currentCharacterId || payload.characterId !== currentCharacterId) return;
@@ -232,10 +219,10 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
       void refreshRecruitStatus();
     });
     return unsubscribe;
-  }, [message, open, recruitEnabled, refreshRecruitStatus]);
+  }, [message, open, refreshRecruitStatus]);
 
   useEffect(() => {
-    if (!recruitEnabled || !open || panel !== 'recruit' || !recruitStatus?.hasUnreadResult || markingRecruitViewedRef.current) {
+    if (!open || panel !== 'recruit' || !recruitStatus?.hasUnreadResult || markingRecruitViewedRef.current) {
       return;
     }
     markingRecruitViewedRef.current = true;
@@ -249,7 +236,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
         markingRecruitViewedRef.current = false;
       }
     })();
-  }, [message, open, panel, recruitEnabled, recruitStatus?.hasUnreadResult, refreshRecruitStatus]);
+  }, [message, open, panel, recruitStatus?.hasUnreadResult, refreshRecruitStatus]);
 
   useEffect(() => {
     if (!open || panel !== 'technique' || !selectedPartner) {
@@ -364,7 +351,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
   }, [message, refreshOverview, selectedPartner]);
 
   const handleGenerateRecruit = useCallback(async () => {
-    if (!recruitEnabled || !recruitActionState.canGenerate) return;
+    if (!recruitActionState.canGenerate) return;
     setActionKey('recruit-generate');
     try {
       const res = await generatePartnerRecruitDraft();
@@ -377,7 +364,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
     } finally {
       setActionKey('');
     }
-  }, [message, recruitActionState.canGenerate, recruitEnabled, refreshRecruitStatus]);
+  }, [message, recruitActionState.canGenerate, refreshRecruitStatus]);
 
   const handleConfirmRecruit = useCallback(async (generationId: string) => {
     setActionKey(`recruit-confirm-${generationId}`);
@@ -865,17 +852,6 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
   };
 
   const renderRecruitPanel = () => {
-    if (!recruitEnabled) {
-      return (
-        <div className="partner-pane-card">
-          <div className="partner-section-title">AI 伙伴招募</div>
-          <div className="partner-recruit-state-card">
-            <div className="partner-meta">AI招募功能在生产环境暂时关闭。</div>
-          </div>
-        </div>
-      );
-    }
-
     const coolingDown = isPartnerRecruitCoolingDown(recruitStatus);
     const cooldownText = recruitStatus
       ? formatPartnerRecruitCooldownRemaining(recruitStatus.cooldownRemainingSeconds)
@@ -992,14 +968,12 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
   };
 
   const renderBody = () => {
-    const panelOptions = recruitEnabled
-      ? PARTNER_PANEL_OPTIONS
-      : PARTNER_PANEL_OPTIONS.filter((item) => item.value !== 'recruit');
+    const panelOptions = PARTNER_PANEL_OPTIONS;
     const renderPanelMenuLabel = (item: { value: PartnerPanelKey; label: string }) => {
       return (
         <span className="partner-menu-label">
           {item.label}
-          {item.value === 'recruit' && recruitEnabled && recruitIndicator.badgeDot ? (
+          {item.value === 'recruit' && recruitIndicator.badgeDot ? (
             <span className="partner-menu-dot" />
           ) : null}
         </span>
