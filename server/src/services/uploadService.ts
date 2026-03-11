@@ -2,19 +2,18 @@
  * 头像上传服务
  *
  * 作用：
- * - COS 启用时：生成预签名 URL 供客户端直传，confirm 阶段更新 DB
+ * - COS 启用时：配合 STS 直传链路，在 confirm 阶段更新 DB
  * - COS 未启用时：通过 multer 接收文件写入本地磁盘（本地开发回退方案）
  * - 删除头像（COS 对象或本地文件）
  *
  * 输入/输出：
- * - generatePresignUrl(filename, contentType) → { presignUrl, avatarUrl, cosKey }
  * - confirmAvatar(userId, avatarUrl) → { success, message, avatarUrl }
  * - updateAvatarLocal(userId, file) → { success, message, avatarUrl }（仅本地回退）
  * - deleteAvatar(userId) → { success, message }
  *
  * 数据流（COS 直传）：
- * - 客户端 → POST /presign 获取预签名 URL
- * - 客户端 → PUT 直传文件到 COS
+ * - 客户端 → POST /sts 获取临时密钥
+ * - 客户端 → 使用临时密钥直传文件到 COS
  * - 客户端 → POST /confirm 通知服务端更新 DB、清理旧头像
  *
  * 数据流（本地回退）：
@@ -37,6 +36,12 @@ import {
   COS_DOMAIN,
   COS_ENABLED,
 } from "../config/cos.js";
+import {
+  ALLOWED_AVATAR_MIME_TYPES,
+  AVATAR_UPLOAD_MAX_FILE_SIZE_BYTES,
+  generateAvatarFilename,
+  isAllowedAvatarMimeType,
+} from "./avatarUploadRules.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -50,37 +55,18 @@ if (!COS_ENABLED && !fs.existsSync(UPLOAD_DIR)) {
 
 // ─── 文件校验 ───
 
-export const ALLOWED_MIME_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-];
-
-/** MIME → 扩展名映射 */
-const MIME_TO_EXT: Record<string, string> = {
-  "image/jpeg": ".jpg",
-  "image/png": ".png",
-  "image/gif": ".gif",
-  "image/webp": ".webp",
-};
+export const ALLOWED_MIME_TYPES = [...ALLOWED_AVATAR_MIME_TYPES];
 
 const fileFilter = (
   _req: Express.Request,
   file: Express.Multer.File,
   cb: multer.FileFilterCallback,
 ) => {
-  if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+  if (isAllowedAvatarMimeType(file.mimetype)) {
     cb(null, true);
   } else {
     cb(new Error("只支持 JPG、PNG、GIF、WEBP 格式的图片"));
   }
-};
-
-/** 生成唯一文件名（不含目录前缀） */
-const generateFilename = (ext: string): string => {
-  const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-  return `avatar-${uniqueSuffix}${ext}`;
 };
 
 // ─── Multer 实例（仅本地回退使用） ───
@@ -90,7 +76,7 @@ const storage = multer.diskStorage({
     cb(null, UPLOAD_DIR);
   },
   filename: (_req, file, cb) => {
-    cb(null, generateFilename(path.extname(file.originalname)));
+    cb(null, generateAvatarFilename(path.extname(file.originalname)));
   },
 });
 
@@ -98,49 +84,11 @@ export const avatarUpload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 2 * 1024 * 1024, // 2MB
+    fileSize: AVATAR_UPLOAD_MAX_FILE_SIZE_BYTES,
   },
 });
 
 // ─── COS 操作 ───
-
-/**
- * 生成预签名 PUT URL，供客户端直传。
- *
- * - presignUrl：带签名的 PUT URL（始终使用 COS 默认域名，因为签名与 Host 绑定）
- * - avatarUrl：最终存入 DB 的访问 URL（优先使用自定义域名 COS_DOMAIN）
- */
-export const generatePresignUrl = (
-  contentType: string,
-): Promise<{ presignUrl: string; avatarUrl: string; cosKey: string }> => {
-  const ext = MIME_TO_EXT[contentType] || ".jpg";
-  const cosKey = `${COS_AVATAR_PREFIX}${generateFilename(ext)}`;
-
-  return new Promise((resolve, reject) => {
-    cosClient.getObjectUrl(
-      {
-        Bucket: COS_BUCKET,
-        Region: COS_REGION,
-        Key: cosKey,
-        Method: "PUT",
-        Sign: true,
-        Expires: 300, // 5 分钟有效
-      },
-      (err, data) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        const presignUrl = data.Url;
-        // avatarUrl 优先使用自定义域名
-        const avatarUrl = COS_DOMAIN
-          ? `https://${COS_DOMAIN}/${cosKey}`
-          : presignUrl.split("?")[0];
-        resolve({ presignUrl, avatarUrl, cosKey });
-      },
-    );
-  });
-};
 
 /** 从腾讯云 COS 删除对象 */
 const deleteFromCos = (key: string): Promise<void> => {

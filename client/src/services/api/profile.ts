@@ -1,4 +1,10 @@
 import api from "./core";
+import COS from "cos-js-sdk-v5";
+import {
+  resolveAvatarUploadStsPayload,
+  type AvatarUploadStsPayload,
+  type AvatarUploadStsResponse,
+} from "./avatarUploadShared";
 
 // ─── 头像上传（COS 客户端直传 + 本地回退） ───
 
@@ -8,19 +14,12 @@ export interface UploadResponse {
   avatarUrl?: string;
 }
 
-/**
- * 预签名响应类型
- * - cosEnabled=true：返回预签名 URL，客户端直传到 COS
- * - cosEnabled=false：COS 未配置，客户端需走 FormData 本地上传
- */
-type PresignResponse =
-  | { success: true; cosEnabled: true; presignUrl: string; avatarUrl: string }
-  | { success: true; cosEnabled: false }
-  | { success: false; message: string };
-
-/** 获取预签名 URL（同时探测 COS 是否启用） */
-const getPresignUrl = (contentType: string): Promise<PresignResponse> => {
-  return api.post("/upload/avatar/presign", { contentType });
+/** 获取头像上传 STS（同时探测 COS 是否启用） */
+const getAvatarUploadSts = (
+  contentType: string,
+  fileSize: number,
+): Promise<AvatarUploadStsResponse> => {
+  return api.post("/upload/avatar/sts", { contentType, fileSize });
 };
 
 /** 通知服务端客户端直传完成，更新 DB */
@@ -37,42 +36,67 @@ const uploadAvatarLocal = (file: File): Promise<UploadResponse> => {
   });
 };
 
+const uploadAvatarToCos = (
+  sts: Extract<AvatarUploadStsPayload, { cosEnabled: true }>,
+  file: File,
+  onProgress?: (percent: number) => void,
+): Promise<void> => {
+  const cos = new COS({
+    SecretId: sts.credentials.tmpSecretId,
+    SecretKey: sts.credentials.tmpSecretKey,
+    SecurityToken: sts.credentials.sessionToken,
+    StartTime: sts.startTime,
+    ExpiredTime: sts.expiredTime,
+  });
+
+  return new Promise((resolve, reject) => {
+    cos.putObject(
+      {
+        Bucket: sts.bucket,
+        Region: sts.region,
+        Key: sts.key,
+        Body: file,
+        ContentType: file.type,
+        onProgress: (progressData) => {
+          onProgress?.(Math.max(0, Math.min(100, progressData.percent * 100)));
+        },
+      },
+      (error) => {
+        if (error) {
+          reject(new Error(error.message || "COS 上传失败"));
+          return;
+        }
+        resolve();
+      },
+    );
+  });
+};
+
 /**
  * 上传头像（统一入口）
  *
  * 流程：
- * 1. 请求 presign 端点探测 COS 是否启用
- * 2. COS 启用：PUT 直传文件到预签名 URL → confirm 更新 DB
+ * 1. 请求 STS 端点探测 COS 是否启用并获取临时密钥
+ * 2. COS 启用：使用临时密钥上传文件到 COS → confirm 更新 DB
  * 3. COS 未启用：走 FormData 本地上传
  *
  * 被 PlayerInfo 上传头像处复用，是唯一的头像上传入口。
  */
-export const uploadAvatar = async (file: File): Promise<UploadResponse> => {
-  const presign = await getPresignUrl(file.type);
+export const uploadAvatar = async (
+  file: File,
+  options?: { onProgress?: (percent: number) => void },
+): Promise<UploadResponse> => {
+  const stsResponse = await getAvatarUploadSts(file.type, file.size);
+  const sts: AvatarUploadStsPayload =
+    resolveAvatarUploadStsPayload(stsResponse);
 
-  if (!presign.success) {
-    return {
-      success: false,
-      message: (presign as { message: string }).message,
-    };
-  }
-
-  if (!presign.cosEnabled) {
+  if (!sts.cosEnabled) {
     return uploadAvatarLocal(file);
   }
 
-  // COS 客户端直传
-  const putRes = await fetch(presign.presignUrl, {
-    method: "PUT",
-    headers: { "Content-Type": file.type },
-    body: file,
-  });
+  await uploadAvatarToCos(sts, file, options?.onProgress);
 
-  if (!putRes.ok) {
-    return { success: false, message: `COS 上传失败 (${putRes.status})` };
-  }
-
-  return confirmAvatarUpload(presign.avatarUrl);
+  return confirmAvatarUpload(sts.avatarUrl);
 };
 
 // 删除头像

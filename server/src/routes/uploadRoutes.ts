@@ -3,58 +3,80 @@ import { Router, NextFunction, Request, Response } from "express";
  * 头像上传路由
  *
  * 作用：
- * - COS 模式：presign → 客户端直传 → confirm 三步流程
+ * - COS 模式：STS 临时密钥 → 客户端直传 → confirm 三步流程
  * - 本地模式：POST /avatar multipart 单步上传（开发回退）
  * - DELETE /avatar 通用删除
  *
  * 数据流（COS 直传）：
- * - POST /avatar/presign → { cosEnabled, presignUrl, avatarUrl }
- * - 客户端 PUT 文件到 presignUrl
+ * - POST /avatar/sts → { cosEnabled, avatarUrl, credentials, key }
+ * - 客户端使用临时密钥上传文件到 COS
  * - POST /avatar/confirm → 更新 DB
  *
  * 数据流（本地回退）：
- * - POST /avatar/presign → { cosEnabled: false }
+ * - POST /avatar/sts → { cosEnabled: false }
  * - POST /avatar（multipart） → 写本地 + 更新 DB
  *
  * 关键边界条件：
- * 1) presign 端点同时返回 cosEnabled 标记，客户端据此决定走直传还是 FormData
+ * 1) STS 端点同时返回 cosEnabled 标记，客户端据此决定走直传还是 FormData
  * 2) confirm 端点校验 avatarUrl 域名，防止客户端伪造任意 URL
  */
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
 import {
-  ALLOWED_MIME_TYPES,
   avatarUpload,
   COS_ENABLED,
-  generatePresignUrl,
   confirmAvatar,
   updateAvatarLocal,
   deleteAvatar,
 } from "../services/uploadService.js";
+import { issueAvatarUploadSts } from "../services/avatarUploadStsService.js";
+import {
+  isLocalAvatarUploadEnabled,
+  LOCAL_AVATAR_UPLOAD_DISABLED_MESSAGE,
+} from "../services/avatarUploadMode.js";
 import { safePushCharacterUpdate } from "../middleware/pushUpdate.js";
 import { sendSuccess, sendResult } from "../middleware/response.js";
 import { BusinessError } from "../middleware/BusinessError.js";
+import {
+  AVATAR_UPLOAD_MAX_FILE_SIZE_BYTES,
+  isAllowedAvatarMimeType,
+} from "../services/avatarUploadRules.js";
 
 const router = Router();
 
-// ─── COS 直传：获取预签名 URL ───
+// ─── COS 直传：获取临时密钥 ───
 
 router.post(
-  "/avatar/presign",
+  "/avatar/sts",
   requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
-    if (!COS_ENABLED) {
-      sendSuccess(res, { cosEnabled: false });
-      return;
-    }
-
-    const { contentType } = req.body as { contentType?: string };
-    if (!contentType || !ALLOWED_MIME_TYPES.includes(contentType)) {
+    const { contentType, fileSize } = req.body as {
+      contentType?: string;
+      fileSize?: number;
+    };
+    const normalizedFileSize = Number(fileSize);
+    if (!contentType || !isAllowedAvatarMimeType(contentType)) {
       throw new BusinessError("只支持 JPG、PNG、GIF、WEBP 格式的图片");
     }
 
-    const { presignUrl, avatarUrl } = await generatePresignUrl(contentType);
-    sendSuccess(res, { cosEnabled: true, presignUrl, avatarUrl });
+    if (
+      !Number.isFinite(normalizedFileSize) ||
+      normalizedFileSize <= 0 ||
+      normalizedFileSize > AVATAR_UPLOAD_MAX_FILE_SIZE_BYTES
+    ) {
+      throw new BusinessError("图片大小不能超过2MB");
+    }
+
+    if (!COS_ENABLED) {
+      sendSuccess(res, {
+        cosEnabled: false,
+        maxFileSizeBytes: AVATAR_UPLOAD_MAX_FILE_SIZE_BYTES,
+      });
+      return;
+    }
+
+    const payload = await issueAvatarUploadSts(contentType, normalizedFileSize);
+    sendSuccess(res, payload);
   }),
 );
 
@@ -118,9 +140,23 @@ const avatarUploadMiddleware = (
   });
 };
 
+const ensureLocalAvatarUploadEnabled = (
+  _req: Request,
+  _res: Response,
+  next: NextFunction,
+) => {
+  if (!isLocalAvatarUploadEnabled(COS_ENABLED)) {
+    next(new BusinessError(LOCAL_AVATAR_UPLOAD_DISABLED_MESSAGE));
+    return;
+  }
+
+  next();
+};
+
 router.post(
   "/avatar",
   requireAuth,
+  ensureLocalAvatarUploadEnabled,
   avatarUploadMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.userId!;
