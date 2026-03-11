@@ -4,13 +4,15 @@
  * 作用：
  * 1. 统一“哪些物品允许吃掉落数量倍率”的判定规则
  * 2. 统一“怪物境界数量倍率”的应用方式
- * 3. 给展示层提供与结算层一致的数量区间计算，避免前后端观感不一致
+ * 3. 统一“最小/最大数量随怪物境界步进增长”的配置解释
+ * 4. 给展示层提供与结算层一致的数量区间计算，避免前后端观感不一致
  *
  * 输入：
  * - itemDefId：物品定义 ID
  * - qtyMin/qtyMax：基础数量区间
  * - sourceType/sourcePoolId：掉落条目来源（专属池/通用池）
  * - dropMultiplierOptions：掉落倍率场景（秘境/世界、普通/精英/BOSS）
+ * - qtyMinAddByMonsterRealm/qtyMaxAddByMonsterRealm：数量区间随怪物境界的步进增量
  * - qtyMultiplyByMonsterRealm：条目上的怪物境界数量倍率
  *
  * 输出：
@@ -22,7 +24,10 @@ import {
   type DropEntrySourceType,
   type DropMultiplierContext,
 } from './dropRateMultiplier.js';
-import { getRealmRankOneBasedStrict } from './realmRules.js';
+import {
+  getRealmRankOneBasedStrict,
+  getRealmRankZeroBased,
+} from './realmRules.js';
 
 const dropQtyMultiplierEligibilityCache = new Map<string, boolean>();
 
@@ -77,24 +82,65 @@ export const applyMonsterRealmDropQtyMultiplier = (
   return Math.max(1, Math.floor(safeBase * effectiveMultiplier));
 };
 
+/**
+ * 解释掉落条目上的“数量区间随怪物境界步进增长”配置。
+ * - 凡人（0阶追加）保持原始区间
+ * - 每升 1 阶，分别给 qtyMin/qtyMax 累加一次对应增量
+ * - 若 max 的步进配置小于 min，统一按 min 对齐，保证最终区间合法
+ */
+export const getMonsterRealmAdjustedBaseQuantityRange = (params: {
+  qtyMin: number;
+  qtyMax: number;
+  qtyMinAddByMonsterRealm?: number;
+  qtyMaxAddByMonsterRealm?: number;
+  monsterRealm?: string | null;
+}): { qtyMin: number; qtyMax: number } => {
+  const baseMin = Math.max(1, Math.floor(Number(params.qtyMin) || 1));
+  const baseMax = Math.max(baseMin, Math.floor(Number(params.qtyMax) || baseMin));
+  const realmRank = Math.max(0, getRealmRankZeroBased(params.monsterRealm));
+  const qtyMinAddByMonsterRealm = Math.max(
+    0,
+    Math.floor(Number(params.qtyMinAddByMonsterRealm) || 0),
+  );
+  const qtyMaxAddByMonsterRealm = Math.max(
+    qtyMinAddByMonsterRealm,
+    Math.floor(Number(params.qtyMaxAddByMonsterRealm) || qtyMinAddByMonsterRealm),
+  );
+
+  const adjustedMin = baseMin + realmRank * qtyMinAddByMonsterRealm;
+  const adjustedMax = baseMax + realmRank * qtyMaxAddByMonsterRealm;
+
+  return {
+    qtyMin: adjustedMin,
+    qtyMax: Math.max(adjustedMin, adjustedMax),
+  };
+};
+
 export const getAdjustedDropQuantityRange = (params: {
   itemDefId: string;
   qtyMin: number;
   qtyMax: number;
+  qtyMinAddByMonsterRealm?: number;
+  qtyMaxAddByMonsterRealm?: number;
   sourceType: DropEntrySourceType;
   sourcePoolId: string;
   dropMultiplierOptions?: DropMultiplierContext;
   qtyMultiplyByMonsterRealm?: number;
   monsterRealm?: string | null;
 }): { qtyMin: number; qtyMax: number } => {
-  const baseMin = Math.max(1, Math.floor(Number(params.qtyMin) || 1));
-  const baseMax = Math.max(baseMin, Math.floor(Number(params.qtyMax) || baseMin));
+  const baseQuantityRange = getMonsterRealmAdjustedBaseQuantityRange({
+    qtyMin: params.qtyMin,
+    qtyMax: params.qtyMax,
+    qtyMinAddByMonsterRealm: params.qtyMinAddByMonsterRealm,
+    qtyMaxAddByMonsterRealm: params.qtyMaxAddByMonsterRealm,
+    monsterRealm: params.monsterRealm,
+  });
   const shouldApplyMultiplier = shouldApplyDropQuantityMultiplier(params.itemDefId);
   const qtyMultiplyByMonsterRealm = Number(params.qtyMultiplyByMonsterRealm ?? 1);
 
   const adjustedMin = applyMonsterRealmDropQtyMultiplier(
     getAdjustedQuantity(
-      baseMin,
+      baseQuantityRange.qtyMin,
       params.sourceType,
       params.sourcePoolId,
       params.dropMultiplierOptions,
@@ -105,7 +151,7 @@ export const getAdjustedDropQuantityRange = (params: {
   );
   const adjustedMax = applyMonsterRealmDropQtyMultiplier(
     getAdjustedQuantity(
-      baseMax,
+      baseQuantityRange.qtyMax,
       params.sourceType,
       params.sourcePoolId,
       params.dropMultiplierOptions,

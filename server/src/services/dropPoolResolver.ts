@@ -4,6 +4,7 @@
  * 作用：
  * - 将怪物专属掉落池与通用掉落池合并为一个可直接消费的池
  * - 统一做字段标准化，避免业务层重复处理 chance/qty/bind 等细节
+ * - 统一保留“数量区间随怪物境界步进增长”的配置，避免结算层与预览层各自解析一遍
  * - 处理冲突覆盖：同 item_def_id 时，专属池条目覆盖通用池条目
  *
  * 输入：
@@ -33,6 +34,8 @@ type ResolvedDropPoolEntry = {
   chance_add_by_monster_realm: number;
   qty_min: number;
   qty_max: number;
+  qty_min_add_by_monster_realm: number;
+  qty_max_add_by_monster_realm: number;
   qty_multiply_by_monster_realm: number;
   quality_weights: Record<string, number> | null;
   bind_type: string;
@@ -80,6 +83,14 @@ const normalizeEntry = (entry: DropPoolEntryConfig): Omit<ResolvedDropPoolEntry,
   if (!itemDefId) return null;
 
   const { qtyMin, qtyMax } = normalizeQtyRange(entry);
+  const qtyMinAddByMonsterRealm = Math.max(
+    0,
+    Math.floor(toFiniteNumber(entry.qty_min_add_by_monster_realm, 0)),
+  );
+  const qtyMaxAddByMonsterRealm = Math.max(
+    qtyMinAddByMonsterRealm,
+    Math.floor(toFiniteNumber(entry.qty_max_add_by_monster_realm, qtyMinAddByMonsterRealm)),
+  );
   const qtyMultiplyByMonsterRealmRaw = toFiniteNumber(entry.qty_multiply_by_monster_realm, 1);
   const qtyMultiplyByMonsterRealm = qtyMultiplyByMonsterRealmRaw > 0 ? qtyMultiplyByMonsterRealmRaw : 1;
   return {
@@ -89,6 +100,8 @@ const normalizeEntry = (entry: DropPoolEntryConfig): Omit<ResolvedDropPoolEntry,
     chance_add_by_monster_realm: Math.max(0, toFiniteNumber(entry.chance_add_by_monster_realm, 0)),
     qty_min: qtyMin,
     qty_max: qtyMax,
+    qty_min_add_by_monster_realm: qtyMinAddByMonsterRealm,
+    qty_max_add_by_monster_realm: qtyMaxAddByMonsterRealm,
     qty_multiply_by_monster_realm: qtyMultiplyByMonsterRealm,
     quality_weights: normalizeQualityWeights(entry.quality_weights),
     bind_type: typeof entry.bind_type === 'string' && entry.bind_type.trim().length > 0 ? entry.bind_type.trim() : 'none',

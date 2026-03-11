@@ -41,6 +41,8 @@ type DropEntryRow = {
   chance_add_by_monster_realm: number;
   qty_min: number;
   qty_max: number;
+  qty_min_add_by_monster_realm: number;
+  qty_max_add_by_monster_realm: number;
   qty_multiply_by_monster_realm: number;
   sort_order: number;
   bind_type: string | null;
@@ -322,6 +324,14 @@ const getDropsByPoolId = async (
       const itemDefId = entry.item_def_id.trim();
       const qtyMin = Math.max(1, Number(entry.qty_min) || 1);
       const qtyMax = Math.max(qtyMin, Number(entry.qty_max) || qtyMin);
+      const qtyMinAddByMonsterRealm = Math.max(
+        0,
+        Math.floor(Number(entry.qty_min_add_by_monster_realm) || 0),
+      );
+      const qtyMaxAddByMonsterRealm = Math.max(
+        qtyMinAddByMonsterRealm,
+        Math.floor(Number(entry.qty_max_add_by_monster_realm) || qtyMinAddByMonsterRealm),
+      );
       return {
         mode,
         item_def_id: itemDefId,
@@ -330,6 +340,8 @@ const getDropsByPoolId = async (
         chance_add_by_monster_realm: Number(entry.chance_add_by_monster_realm) || 0,
         qty_min: qtyMin,
         qty_max: qtyMax,
+        qty_min_add_by_monster_realm: qtyMinAddByMonsterRealm,
+        qty_max_add_by_monster_realm: qtyMaxAddByMonsterRealm,
         qty_multiply_by_monster_realm: Number(entry.qty_multiply_by_monster_realm) || 1,
         sort_order: Math.max(0, Math.floor(Number(entry.sort_order) || 0)),
         bind_type: entry.bind_type,
@@ -371,6 +383,8 @@ const getDropsByPoolId = async (
       itemDefId: r.item_def_id,
       qtyMin: r.qty_min,
       qtyMax: r.qty_max,
+      qtyMinAddByMonsterRealm: r.qty_min_add_by_monster_realm,
+      qtyMaxAddByMonsterRealm: r.qty_max_add_by_monster_realm,
       sourceType: r.sourceType,
       sourcePoolId: r.sourcePoolId,
       dropMultiplierOptions: multiplierOptions,

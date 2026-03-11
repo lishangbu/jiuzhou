@@ -361,6 +361,8 @@ export const getDungeonPreview = async (
     chance_add_by_monster_realm: number;
     qty_min: number;
     qty_max: number;
+    qty_min_add_by_monster_realm: number;
+    qty_max_add_by_monster_realm: number;
     qty_multiply_by_monster_realm: number;
     quality_weights: Record<string, unknown> | null;
     bind_type: string | null;
@@ -380,6 +382,14 @@ export const getDungeonPreview = async (
       if (!itemDefId) continue;
       const qtyMin = Math.max(1, Math.floor(asNumber(entry.qty_min, 1)));
       const qtyMax = Math.max(qtyMin, Math.floor(asNumber(entry.qty_max, qtyMin)));
+      const qtyMinAddByMonsterRealm = Math.max(
+        0,
+        Math.floor(asNumber(entry.qty_min_add_by_monster_realm, 0)),
+      );
+      const qtyMaxAddByMonsterRealm = Math.max(
+        qtyMinAddByMonsterRealm,
+        Math.floor(asNumber(entry.qty_max_add_by_monster_realm, qtyMinAddByMonsterRealm)),
+      );
       dropPreviewRows.push({
         drop_pool_id: poolId,
         mode,
@@ -389,6 +399,8 @@ export const getDungeonPreview = async (
         chance_add_by_monster_realm: asNumber(entry.chance_add_by_monster_realm, 0),
         qty_min: qtyMin,
         qty_max: qtyMax,
+        qty_min_add_by_monster_realm: qtyMinAddByMonsterRealm,
+        qty_max_add_by_monster_realm: qtyMaxAddByMonsterRealm,
         qty_multiply_by_monster_realm: asNumber(entry.qty_multiply_by_monster_realm, 1),
         quality_weights: entry.quality_weights,
         bind_type: entry.bind_type,
@@ -430,6 +442,8 @@ export const getDungeonPreview = async (
       chance_add_by_monster_realm: number;
       qty_min: number;
       qty_max: number;
+      qty_min_add_by_monster_realm: number;
+      qty_max_add_by_monster_realm: number;
       qty_multiply_by_monster_realm: number;
       quality_weights: Record<string, unknown> | null;
       bind_type: string | null;
@@ -452,6 +466,8 @@ export const getDungeonPreview = async (
       chance_add_by_monster_realm: r.chance_add_by_monster_realm,
       qty_min: r.qty_min,
       qty_max: r.qty_max,
+      qty_min_add_by_monster_realm: r.qty_min_add_by_monster_realm,
+      qty_max_add_by_monster_realm: r.qty_max_add_by_monster_realm,
       qty_multiply_by_monster_realm: r.qty_multiply_by_monster_realm,
       quality_weights: r.quality_weights,
       bind_type: r.bind_type,
@@ -471,6 +487,8 @@ export const getDungeonPreview = async (
       chance_add_by_monster_realm: number;
       qty_min: number;
       qty_max: number;
+      qty_min_add_by_monster_realm: number;
+      qty_max_add_by_monster_realm: number;
       qty_multiply_by_monster_realm: number;
       quality_weights: Record<string, unknown> | null;
       bind_type: string | null;
@@ -499,6 +517,8 @@ export const getDungeonPreview = async (
           itemDefId: r.item_def_id,
           qtyMin: r.qty_min,
           qtyMax: r.qty_max,
+          qtyMinAddByMonsterRealm: r.qty_min_add_by_monster_realm,
+          qtyMaxAddByMonsterRealm: r.qty_max_add_by_monster_realm,
           sourceType: r.sourceType,
           sourcePoolId: r.sourcePoolId,
           dropMultiplierOptions: options,

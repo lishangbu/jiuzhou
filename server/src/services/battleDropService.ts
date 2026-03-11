@@ -29,6 +29,7 @@ import {
 } from './shared/dropRateMultiplier.js';
 import {
   applyMonsterRealmDropQtyMultiplier,
+  getMonsterRealmAdjustedBaseQuantityRange,
   shouldApplyDropQuantityMultiplier,
 } from './shared/dropQuantityMultiplier.js';
 import { lockCharacterInventoryMutexesByClient } from './inventoryMutex.js';
@@ -56,6 +57,8 @@ interface DropPoolEntry {
   chance_add_by_monster_realm: number;
   qty_min: number;
   qty_max: number;
+  qty_min_add_by_monster_realm: number;
+  qty_max_add_by_monster_realm: number;
   qty_multiply_by_monster_realm: number;
   quality_weights: Record<string, number> | null;  // 装备品质权重
   bind_type: string;
@@ -235,6 +238,8 @@ class BattleDropService {
         chance_add_by_monster_realm: entry.chance_add_by_monster_realm,
         qty_min: entry.qty_min,
         qty_max: entry.qty_max,
+        qty_min_add_by_monster_realm: entry.qty_min_add_by_monster_realm,
+        qty_max_add_by_monster_realm: entry.qty_max_add_by_monster_realm,
         qty_multiply_by_monster_realm: entry.qty_multiply_by_monster_realm,
         quality_weights: entry.quality_weights,
         bind_type: entry.bind_type,
@@ -276,8 +281,15 @@ class BattleDropService {
           }) * realmSuppressionMultiplier,
         );
         if (Math.random() < effectiveChance) {
+          const baseQuantityRange = getMonsterRealmAdjustedBaseQuantityRange({
+            qtyMin: entry.qty_min,
+            qtyMax: entry.qty_max,
+            qtyMinAddByMonsterRealm: entry.qty_min_add_by_monster_realm,
+            qtyMaxAddByMonsterRealm: entry.qty_max_add_by_monster_realm,
+            monsterRealm,
+          });
           const adjustedQuantity = getAdjustedQuantity(
-            this.randomInt(entry.qty_min, entry.qty_max),
+            this.randomInt(baseQuantityRange.qtyMin, baseQuantityRange.qtyMax),
             entry.sourceType,
             entry.sourcePoolId,
             { isDungeonBattle, monsterKind },
@@ -314,8 +326,15 @@ class BattleDropService {
             monsterKind,
           });
           if (roll <= 0) {
+            const baseQuantityRange = getMonsterRealmAdjustedBaseQuantityRange({
+              qtyMin: entry.qty_min,
+              qtyMax: entry.qty_max,
+              qtyMinAddByMonsterRealm: entry.qty_min_add_by_monster_realm,
+              qtyMaxAddByMonsterRealm: entry.qty_max_add_by_monster_realm,
+              monsterRealm,
+            });
             const adjustedQuantity = getAdjustedQuantity(
-              this.randomInt(entry.qty_min, entry.qty_max),
+              this.randomInt(baseQuantityRange.qtyMin, baseQuantityRange.qtyMax),
               entry.sourceType,
               entry.sourcePoolId,
               { isDungeonBattle, monsterKind },
