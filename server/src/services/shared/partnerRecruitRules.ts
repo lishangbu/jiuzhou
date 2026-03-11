@@ -3,11 +3,11 @@
  *
  * 作用（做什么 / 不做什么）：
  * 1) 做什么：集中定义招募成本、冷却、预览保留时长、品质权重、属性约束与草稿校验规则。
- * 2) 做什么：统一把模型输出约束在稳定范围内，避免 service、worker、前端各自散落一份业务规则。
+ * 2) 做什么：统一把模型输出约束在稳定范围内，并收敛开发环境冷却绕过规则，避免 service、worker、前端各自散落一份业务规则。
  * 3) 不做什么：不访问数据库、不执行扣费、不负责图片生成或任务调度。
  *
  * 输入/输出：
- * - 输入：模型返回草稿、最近一次冷却起点、当前时间。
+ * - 输入：模型返回草稿、最近一次冷却起点、当前时间、可选运行环境覆盖。
  * - 输出：合法化后的伙伴草稿、冷却状态、格式化剩余时间等。
  *
  * 数据流/状态流：
@@ -19,6 +19,13 @@
  * 2) 冷却判断与状态接口必须共用同一套纯函数，否则前端倒计时与服务端拦截会在临界秒不一致。
  */
 import type { PartnerBaseAttrConfig } from '../staticConfigLoader.js';
+import {
+  buildTechniqueTextModelJsonSchemaResponseFormat,
+  type TechniqueTextModelJsonSchema,
+  type TechniqueTextModelJsonSchemaObject,
+  type TechniqueTextModelJsonSchemaProperties,
+  type TechniqueTextModelResponseFormat,
+} from './techniqueTextModelShared.js';
 import {
   PARTNER_INTEGER_ATTR_KEYS,
   normalizePartnerAttrValue,
@@ -72,10 +79,22 @@ type DraftStatRanges = {
   innateTechniqueCount: AttrRange;
 };
 
+type TextLengthRange = {
+  min: number;
+  max: number;
+};
+
 const SECOND_MS = 1_000;
 const MINUTE_SECONDS = 60;
 const HOUR_SECONDS = 60 * MINUTE_SECONDS;
 const DAY_SECONDS = 24 * HOUR_SECONDS;
+
+const PARTNER_RECRUIT_TEXT_LENGTH_LIMITS = {
+  partnerName: { min: 2, max: 6 },
+  partnerDescription: { min: 35, max: 90 },
+  techniqueName: { min: 2, max: 6 },
+  techniqueDescription: { min: 18, max: 60 },
+} as const satisfies Record<string, TextLengthRange>;
 
 export const PARTNER_RECRUIT_SPIRIT_STONES_COST = 50_000;
 export const PARTNER_RECRUIT_COOLDOWN_HOURS = 12;
@@ -128,6 +147,32 @@ const PARTNER_RECRUIT_STRICT_POSITIVE_ATTR_KEYS = new Set<keyof PartnerRecruitBa
   'max_qixue',
   'sudu',
 ]);
+
+const PARTNER_RECRUIT_TOP_LEVEL_REQUIRED_KEYS = ['partner', 'innateTechniques'] as const;
+const PARTNER_RECRUIT_PARTNER_REQUIRED_KEYS = [
+  'name',
+  'description',
+  'quality',
+  'attributeElement',
+  'role',
+  'maxTechniqueSlots',
+  'baseAttrs',
+  'levelAttrGains',
+] as const;
+const PARTNER_RECRUIT_INNATE_TECHNIQUE_REQUIRED_KEYS = [
+  'name',
+  'description',
+  'kind',
+  'passiveKey',
+  'passiveValue',
+] as const;
+const PARTNER_RECRUIT_FORBIDDEN_ALIAS_KEYS = ['element', 'slots', 'techniques'] as const;
+const PARTNER_RECRUIT_QUALITY_SCHEMA_NAME_SEGMENT: Record<PartnerRecruitQuality, string> = {
+  黄: 'huang',
+  玄: 'xuan',
+  地: 'di',
+  天: 'tian',
+};
 
 const DRAFT_STAT_RANGES_BY_QUALITY: Record<PartnerRecruitQuality, DraftStatRanges> = {
   黄: {
@@ -283,6 +328,136 @@ const validateBaseAttrs = (
   });
 };
 
+const isTextLengthInRange = (value: string, range: TextLengthRange): boolean => {
+  return value.length >= range.min && value.length <= range.max;
+};
+
+const buildPartnerRecruitNumberSchema = (
+  type: 'integer' | 'number',
+  params: {
+    minimum?: number;
+    exclusiveMinimum?: number;
+  },
+): TechniqueTextModelJsonSchema => {
+  return {
+    type,
+    ...(params.minimum === undefined ? {} : { minimum: params.minimum }),
+    ...(params.exclusiveMinimum === undefined ? {} : { exclusiveMinimum: params.exclusiveMinimum }),
+  };
+};
+
+const buildPartnerRecruitAttrJsonSchema = (
+  key: keyof PartnerRecruitBaseAttrs,
+  requirePositiveCoreAttrs: boolean,
+): TechniqueTextModelJsonSchema => {
+  const minimum = requirePositiveCoreAttrs && PARTNER_RECRUIT_STRICT_POSITIVE_ATTR_KEYS.has(key) ? 1 : 0;
+  if (PARTNER_INTEGER_ATTR_KEYS.has(key)) {
+    return buildPartnerRecruitNumberSchema('integer', { minimum });
+  }
+  return buildPartnerRecruitNumberSchema('number', { minimum });
+};
+
+const buildPartnerRecruitBaseAttrsJsonSchema = (
+  requirePositiveCoreAttrs: boolean,
+): TechniqueTextModelJsonSchemaObject => {
+  const properties = Object.fromEntries(
+    PARTNER_RECRUIT_BASE_ATTR_KEYS.map((key) => [
+      key,
+      buildPartnerRecruitAttrJsonSchema(key, requirePositiveCoreAttrs),
+    ]),
+  ) as TechniqueTextModelJsonSchemaProperties;
+
+  return {
+    type: 'object',
+    additionalProperties: false,
+    properties,
+    required: [...PARTNER_RECRUIT_BASE_ATTR_KEYS],
+  };
+};
+
+export const buildPartnerRecruitResponseFormat = (
+  quality: PartnerRecruitQuality,
+): TechniqueTextModelResponseFormat => {
+  const ranges = DRAFT_STAT_RANGES_BY_QUALITY[quality];
+  return buildTechniqueTextModelJsonSchemaResponseFormat({
+    name: `partner_recruit_draft_${PARTNER_RECRUIT_QUALITY_SCHEMA_NAME_SEGMENT[quality]}`,
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      required: [...PARTNER_RECRUIT_TOP_LEVEL_REQUIRED_KEYS],
+      properties: {
+        partner: {
+          type: 'object',
+          additionalProperties: false,
+          required: [...PARTNER_RECRUIT_PARTNER_REQUIRED_KEYS],
+          properties: {
+            name: {
+              type: 'string',
+              minLength: PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.partnerName.min,
+              maxLength: PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.partnerName.max,
+            },
+            description: {
+              type: 'string',
+              minLength: PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.partnerDescription.min,
+              maxLength: PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.partnerDescription.max,
+            },
+            quality: {
+              type: 'string',
+              enum: [quality],
+            },
+            attributeElement: {
+              type: 'string',
+              enum: [...PARTNER_RECRUIT_ALLOWED_ELEMENTS],
+            },
+            role: {
+              type: 'string',
+              enum: [...PARTNER_RECRUIT_ALLOWED_ROLES],
+            },
+            maxTechniqueSlots: {
+              type: 'integer',
+              minimum: ranges.techniqueSlots.min,
+              maximum: ranges.techniqueSlots.max,
+            },
+            baseAttrs: buildPartnerRecruitBaseAttrsJsonSchema(true),
+            levelAttrGains: buildPartnerRecruitBaseAttrsJsonSchema(false),
+          },
+        },
+        innateTechniques: {
+          type: 'array',
+          minItems: ranges.innateTechniqueCount.min,
+          maxItems: ranges.innateTechniqueCount.max,
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: [...PARTNER_RECRUIT_INNATE_TECHNIQUE_REQUIRED_KEYS],
+            properties: {
+              name: {
+                type: 'string',
+                minLength: PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.techniqueName.min,
+                maxLength: PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.techniqueName.max,
+              },
+              description: {
+                type: 'string',
+                minLength: PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.techniqueDescription.min,
+                maxLength: PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.techniqueDescription.max,
+              },
+              kind: {
+                type: 'string',
+                enum: [...PARTNER_RECRUIT_ALLOWED_TECHNIQUE_KINDS],
+              },
+              passiveKey: {
+                type: 'string',
+                enum: [...PARTNER_RECRUIT_ALLOWED_PASSIVE_KEYS],
+              },
+              passiveValue: buildPartnerRecruitNumberSchema('number', { exclusiveMinimum: 0 }),
+            },
+          },
+        },
+      },
+    },
+  });
+};
+
 export const resolvePartnerRecruitQualityByWeight = (): PartnerRecruitQuality => {
   const totalWeight = QUALITY_ROLL_TABLE.reduce((sum, entry) => sum + entry.weight, 0);
   let rolled = Math.random() * totalWeight;
@@ -321,14 +496,20 @@ export const buildPartnerRecruitPromptInput = (quality: PartnerRecruitQuality): 
     techniqueCount: getPartnerRecruitExpectedInnateTechniqueCount(quality),
     techniqueMaxLayer: getPartnerRecruitTechniqueMaxLayer(quality),
     techniqueSlotRange: ranges.techniqueSlots,
+    requiredTopLevelKeys: [...PARTNER_RECRUIT_TOP_LEVEL_REQUIRED_KEYS],
+    partnerRequiredKeys: [...PARTNER_RECRUIT_PARTNER_REQUIRED_KEYS],
+    innateTechniqueRequiredKeys: [...PARTNER_RECRUIT_INNATE_TECHNIQUE_REQUIRED_KEYS],
+    forbiddenAliasKeys: [...PARTNER_RECRUIT_FORBIDDEN_ALIAS_KEYS],
     requiredAttrKeys: [...PARTNER_RECRUIT_BASE_ATTR_KEYS],
     integerAttrKeys: [...PARTNER_INTEGER_ATTR_KEYS],
     percentAttrKeys,
     constraints: [
       '必须返回严格 JSON 对象，禁止额外解释文本',
-      '伙伴名字 2-6 个中文字符，不得包含标点或空格',
-      '伙伴描述 35-90 个中文字符',
-      '每个天生功法名字 2-6 个中文字符，描述 18-60 个中文字符',
+      '顶层字段必须且只能使用 requiredTopLevelKeys，禁止使用 forbiddenAliasKeys 中的别名字段',
+      `伙伴名字 ${PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.partnerName.min}-${PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.partnerName.max} 个中文字符，不得包含标点或空格`,
+      `伙伴描述 ${PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.partnerDescription.min}-${PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.partnerDescription.max} 个中文字符`,
+      `每个天生功法名字 ${PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.techniqueName.min}-${PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.techniqueName.max} 个中文字符，描述 ${PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.techniqueDescription.min}-${PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.techniqueDescription.max} 个中文字符`,
+      'partner 必须完整包含 partnerRequiredKeys；每个 innateTechniques 项必须完整包含 innateTechniqueRequiredKeys',
       'partner.baseAttrs 与 partner.levelAttrGains 必须完整包含 requiredAttrKeys 中的全部字段，禁止缺项',
       'integerAttrKeys 中的属性必须使用非负整数；其中 partner.baseAttrs.max_qixue 与 partner.baseAttrs.sudu 必须大于 0，成长值允许为 0',
       'percentAttrKeys 中的属性必须使用非负数字，小数表示百分比，例如 0.18 表示 18%',
@@ -355,7 +536,10 @@ export const validatePartnerRecruitDraft = (
 
   const name = asString(partner.name);
   const description = asString(partner.description);
-  if (name.length < 2 || name.length > 12 || description.length < 18 || description.length > 120) {
+  if (
+    !isTextLengthInRange(name, PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.partnerName) ||
+    !isTextLengthInRange(description, PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.partnerDescription)
+  ) {
     return null;
   }
 
@@ -387,10 +571,8 @@ export const validatePartnerRecruitDraft = (
     const passiveKey = row.passiveKey;
     const passiveValue = asFiniteNumber(row.passiveValue);
     if (
-      techniqueName.length < 2 ||
-      techniqueName.length > 12 ||
-      techniqueDescription.length < 12 ||
-      techniqueDescription.length > 100 ||
+      !isTextLengthInRange(techniqueName, PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.techniqueName) ||
+      !isTextLengthInRange(techniqueDescription, PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.techniqueDescription) ||
       !isPartnerRecruitTechniqueKind(kind) ||
       !isPartnerRecruitPassiveKey(passiveKey) ||
       !Number.isFinite(passiveValue) ||
@@ -432,8 +614,29 @@ export type PartnerRecruitCooldownState = {
   isCoolingDown: boolean;
 };
 
-const buildIdleCooldownState = (): PartnerRecruitCooldownState => ({
-  cooldownHours: PARTNER_RECRUIT_COOLDOWN_HOURS,
+type PartnerRecruitCooldownOptions = {
+  bypassCooldown?: boolean;
+};
+
+/**
+ * 复用点：
+ * - 当前由 `buildPartnerRecruitCooldownState` 默认消费，统一让状态接口与创建任务校验共享同一环境口径。
+ * - 纯函数测试可通过 `bypassCooldown` 显式覆盖，避免测试直接改全局环境变量。
+ *
+ * 设计原因：
+ * - 项目本地开发默认不是 production，因此这里沿用仓库既有“非 production 视为开发态”的约定。
+ * - 将环境判断收敛在共享规则后，服务层只消费冷却状态，避免重复实现“开发环境 0 冷却”。
+ */
+export const shouldBypassPartnerRecruitCooldown = (
+  nodeEnv: string | undefined = process.env.NODE_ENV,
+): boolean => {
+  return nodeEnv !== 'production';
+};
+
+const buildIdleCooldownState = (
+  cooldownHours: number,
+): PartnerRecruitCooldownState => ({
+  cooldownHours,
   cooldownUntil: null,
   cooldownRemainingSeconds: 0,
   isCoolingDown: false,
@@ -442,13 +645,19 @@ const buildIdleCooldownState = (): PartnerRecruitCooldownState => ({
 export const buildPartnerRecruitCooldownState = (
   latestStartedAt: string | null,
   now: Date = new Date(),
+  options: PartnerRecruitCooldownOptions = {},
 ): PartnerRecruitCooldownState => {
+  const bypassCooldown = options.bypassCooldown ?? shouldBypassPartnerRecruitCooldown();
+  const cooldownHours = bypassCooldown ? 0 : PARTNER_RECRUIT_COOLDOWN_HOURS;
+  if (bypassCooldown) {
+    return buildIdleCooldownState(cooldownHours);
+  }
   const startedAtMs = latestStartedAt ? new Date(latestStartedAt).getTime() : Number.NaN;
-  if (!Number.isFinite(startedAtMs)) return buildIdleCooldownState();
-  const cooldownUntilMs = startedAtMs + PARTNER_RECRUIT_COOLDOWN_HOURS * HOUR_SECONDS * SECOND_MS;
+  if (!Number.isFinite(startedAtMs)) return buildIdleCooldownState(cooldownHours);
+  const cooldownUntilMs = startedAtMs + cooldownHours * HOUR_SECONDS * SECOND_MS;
   const remainingSeconds = Math.max(0, Math.ceil((cooldownUntilMs - now.getTime()) / SECOND_MS));
   return {
-    cooldownHours: PARTNER_RECRUIT_COOLDOWN_HOURS,
+    cooldownHours,
     cooldownUntil: new Date(cooldownUntilMs).toISOString(),
     cooldownRemainingSeconds: remainingSeconds,
     isCoolingDown: remainingSeconds > 0,

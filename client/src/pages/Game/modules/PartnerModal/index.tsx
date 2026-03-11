@@ -869,6 +869,9 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
     const cooldownText = recruitStatus
       ? formatPartnerRecruitCooldownRemaining(recruitStatus.cooldownRemainingSeconds)
       : '';
+    const cooldownRuleText = recruitStatus?.cooldownHours === 0
+      ? '当前环境已关闭伙伴招募冷却，可连续招募。'
+      : `当前可招募，冷却 ${recruitStatus?.cooldownHours ?? 12} 小时`;
 
     return (
       <div className="partner-pane-card">
@@ -887,7 +890,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
             <div className="partner-meta">
               {recruitStatus && recruitStatus.cooldownRemainingSeconds > 0
                 ? `冷却中，还需等待 ${cooldownText}`
-                : `当前可招募，冷却 ${recruitStatus?.cooldownHours ?? 12} 小时`}
+                : cooldownRuleText}
             </div>
           </div>
         </div>

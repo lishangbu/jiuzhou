@@ -20,6 +20,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   buildTechniqueTextModelPayload,
+  buildTechniqueTextModelJsonSchemaResponseFormat,
   extractTechniqueTextModelContent,
   parseTechniqueTextModelJsonObject,
   TECHNIQUE_TEXT_MODEL_SEED_MAX,
@@ -83,6 +84,39 @@ test('显式传入 seed 时应保留调用方提供的值', () => {
   });
 
   assert.equal(payload.seed, 20260308);
+});
+
+test('显式传入 response_format 时应原样写入 payload', () => {
+  const responseFormat = buildTechniqueTextModelJsonSchemaResponseFormat({
+    name: 'partner_recruit_draft',
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['partner'],
+      properties: {
+        partner: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['name'],
+          properties: {
+            name: {
+              type: 'string',
+              minLength: 2,
+              maxLength: 6,
+            },
+          },
+        },
+      },
+    },
+  });
+  const payload = buildTechniqueTextModelPayload({
+    modelName: 'gpt-4o-mini',
+    systemMessage: 'system prompt',
+    userMessage: '{"quality":"黄"}',
+    responseFormat,
+  });
+
+  assert.deepEqual(payload.response_format, responseFormat);
 });
 
 test('分段 content 应拼接为统一文本', () => {

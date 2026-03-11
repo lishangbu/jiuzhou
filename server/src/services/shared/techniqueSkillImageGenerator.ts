@@ -20,6 +20,10 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import sharp from 'sharp';
+import {
+  buildDashScopeImageGenerationPayload,
+  readDashScopeImageGenerationResult,
+} from './dashScopeImageGenerationShared.js';
 
 export type TechniqueSkillImageInput = {
   skillId: string;
@@ -338,26 +342,6 @@ const readOpenAIImageResult = (body: Record<string, unknown>): { b64: string; ur
   };
 };
 
-const readDashScopeImageResult = (body: Record<string, unknown>): { url: string } => {
-  const output = body.output;
-  if (!output || typeof output !== 'object' || Array.isArray(output)) return { url: '' };
-  const outputRow = output as Record<string, unknown>;
-  const choices = Array.isArray(outputRow.choices) ? outputRow.choices : [];
-  const firstChoice = choices[0];
-  if (!firstChoice || typeof firstChoice !== 'object' || Array.isArray(firstChoice)) return { url: '' };
-  const message = (firstChoice as Record<string, unknown>).message;
-  if (!message || typeof message !== 'object' || Array.isArray(message)) return { url: '' };
-  const contentList = Array.isArray((message as Record<string, unknown>).content)
-    ? ((message as Record<string, unknown>).content as unknown[])
-    : [];
-  for (const row of contentList) {
-    if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
-    const imageUrl = asString((row as Record<string, unknown>).image);
-    if (imageUrl) return { url: imageUrl };
-  }
-  return { url: '' };
-};
-
 export const generateTechniqueSkillIcon = async (input: TechniqueSkillImageInput): Promise<string | null> => {
   const cfg = readImageModelConfig();
   if (!cfg || !cfg.endpoint) return null;
@@ -365,27 +349,17 @@ export const generateTechniqueSkillIcon = async (input: TechniqueSkillImageInput
   debugLog('provider=', cfg.provider, 'endpoint=', cfg.endpoint, 'model=', cfg.modelName);
   try {
     if (cfg.provider === 'dashscope') {
-      const payload = {
-        model: cfg.modelName,
-        input: {
-          messages: [{
-            role: 'user',
-            content: [{ text: prompt }],
-          }],
-        },
-        parameters: {
-          size: normalizeSizeForDashScope(cfg.size),
-          n: 1,
-          prompt_extend: true,
-          watermark: false,
-        },
-      };
+      const payload = buildDashScopeImageGenerationPayload(
+        cfg.modelName,
+        prompt,
+        normalizeSizeForDashScope(cfg.size),
+      );
       const result = await fetchJsonWithTimeout(cfg.endpoint, payload, cfg.apiKey, cfg.timeoutMs);
       if (!result.ok || !result.body) {
         debugLog('dashscope request failed status=', result.status, 'body=', result.rawText.slice(0, 500));
         return null;
       }
-      const { url } = readDashScopeImageResult(result.body);
+      const { url } = readDashScopeImageGenerationResult(result.body);
       if (!url) {
         debugLog('dashscope response has no image url', JSON.stringify(result.body).slice(0, 500));
         return null;

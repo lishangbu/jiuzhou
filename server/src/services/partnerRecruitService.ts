@@ -49,6 +49,7 @@ import {
   buildPartnerRecruitCooldownState,
   buildPartnerRecruitPreviewExpireAt,
   buildPartnerRecruitPromptInput,
+  buildPartnerRecruitResponseFormat,
   fillPartnerRecruitBaseAttrs,
   formatPartnerRecruitCooldownRemaining,
   getPartnerRecruitExpectedInnateTechniqueCount,
@@ -163,6 +164,7 @@ const PARTNER_RECRUIT_PROMPT_SYSTEM_MESSAGE = [
   '你是《九州修仙录》的伙伴创作引擎。',
   '你必须返回严格 JSON，不得输出 markdown、解释、注释。',
   '你要生成一个可招募的仙侠伙伴草稿，字段必须完整且满足输入约束。',
+  '字段名必须与输入约束和 response schema 完全一致，不得自创别名。',
   '不要生成现代词汇、科幻词汇、英文名、阿拉伯数字名。',
 ].join('\n');
 
@@ -447,6 +449,7 @@ const tryCallPartnerRecruitTextModel = async (
 
   const payload = buildTechniqueTextModelPayload({
     modelName,
+    responseFormat: buildPartnerRecruitResponseFormat(quality),
     systemMessage: PARTNER_RECRUIT_PROMPT_SYSTEM_MESSAGE,
     userMessage: JSON.stringify(buildPartnerRecruitPromptInput(quality)),
   });

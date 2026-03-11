@@ -2,11 +2,11 @@
  * AI 文本模型共享解析
  *
  * 作用（做什么 / 不做什么）：
- * 1) 做什么：集中处理文生成功法所需的文本模型地址归一化、请求 payload 构造、seed 生成、消息正文提取、JSON 对象解析。
+ * 1) 做什么：集中处理文生成功法所需的文本模型地址归一化、请求 payload 构造、结构化输出 response_format、seed 生成、消息正文提取、JSON 对象解析。
  * 2) 不做什么：不负责读取环境变量、不负责发起 HTTP 请求、不负责业务校验与数据库落库。
  *
  * 输入/输出：
- * - 输入：模型基础地址或完整地址、模型名、可选 seed、system/user 消息文本、模型消息 content、模型返回文本。
+ * - 输入：模型基础地址或完整地址、模型名、可选 seed、可选 JSON Schema response_format、system/user 消息文本、模型消息 content、模型返回文本。
  * - 输出：可直接请求的 `chat/completions` 地址、统一请求 payload、纯文本 content、结构化 JSON 解析结果。
  *
  * 数据流/状态流：
@@ -17,6 +17,7 @@
  * 2) 文本模型请求参数（尤其 temperature/seed）要由单一入口构造，避免正式服务与联调脚本只改到一边。
  * 3) 未显式传入 seed 时必须在共享层自动生成，这样正式服务与联调脚本才能保持同一套随机策略。
  * 4) 模型 content 既可能是字符串，也可能是分段数组；若不集中处理，脚本与服务很容易再次分叉。
+ * 5) 结构化输出 schema 一旦开始使用，必须由共享层统一承接，避免每个业务 service 自己拼 `response_format` 导致字段名继续漂移。
  */
 import { randomInt } from 'crypto';
 
@@ -35,8 +36,65 @@ export type TechniqueModelContentPart = {
   text?: string | null;
 };
 
+type TechniqueTextModelJsonSchemaBase = {
+  description?: string;
+};
+
+type TechniqueTextModelJsonSchemaString = TechniqueTextModelJsonSchemaBase & {
+  type: 'string';
+  enum?: string[];
+  maxLength?: number;
+  minLength?: number;
+  pattern?: string;
+};
+
+type TechniqueTextModelJsonSchemaNumber = TechniqueTextModelJsonSchemaBase & {
+  type: 'integer' | 'number';
+  exclusiveMaximum?: number;
+  exclusiveMinimum?: number;
+  maximum?: number;
+  minimum?: number;
+};
+
+type TechniqueTextModelJsonSchemaBoolean = TechniqueTextModelJsonSchemaBase & {
+  type: 'boolean';
+};
+
+type TechniqueTextModelJsonSchemaArray = TechniqueTextModelJsonSchemaBase & {
+  type: 'array';
+  items: TechniqueTextModelJsonSchema;
+  maxItems?: number;
+  minItems?: number;
+};
+
+export type TechniqueTextModelJsonSchemaProperties = Record<string, TechniqueTextModelJsonSchema>;
+
+export type TechniqueTextModelJsonSchemaObject = TechniqueTextModelJsonSchemaBase & {
+  type: 'object';
+  additionalProperties: false;
+  properties: TechniqueTextModelJsonSchemaProperties;
+  required: string[];
+};
+
+export type TechniqueTextModelJsonSchema =
+  | TechniqueTextModelJsonSchemaArray
+  | TechniqueTextModelJsonSchemaBoolean
+  | TechniqueTextModelJsonSchemaNumber
+  | TechniqueTextModelJsonSchemaObject
+  | TechniqueTextModelJsonSchemaString;
+
+export type TechniqueTextModelResponseFormat = {
+  type: 'json_schema';
+  json_schema: {
+    name: string;
+    schema: TechniqueTextModelJsonSchemaObject;
+    strict: true;
+  };
+};
+
 export type TechniqueTextModelRequestPayload = {
   model: string;
+  response_format?: TechniqueTextModelResponseFormat;
   seed: number;
   temperature: number;
   messages: [
@@ -91,13 +149,27 @@ export const resolveTechniqueTextModelEndpoint = (rawEndpoint: string): string =
 export const generateTechniqueTextModelSeed = (): number =>
   randomInt(TECHNIQUE_TEXT_MODEL_SEED_MIN, TECHNIQUE_TEXT_MODEL_SEED_MAX + 1);
 
+export const buildTechniqueTextModelJsonSchemaResponseFormat = (params: {
+  name: string;
+  schema: TechniqueTextModelJsonSchemaObject;
+}): TechniqueTextModelResponseFormat => ({
+  type: 'json_schema',
+  json_schema: {
+    name: params.name,
+    schema: params.schema,
+    strict: true,
+  },
+});
+
 export const buildTechniqueTextModelPayload = (params: {
   modelName: string;
+  responseFormat?: TechniqueTextModelResponseFormat;
   systemMessage: string;
   userMessage: string;
   seed?: number;
 }): TechniqueTextModelRequestPayload => ({
   model: params.modelName,
+  response_format: params.responseFormat,
   seed: params.seed ?? generateTechniqueTextModelSeed(),
   temperature: TECHNIQUE_TEXT_MODEL_TEMPERATURE,
   messages: [

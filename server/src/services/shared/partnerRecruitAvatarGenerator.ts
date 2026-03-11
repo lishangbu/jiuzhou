@@ -21,6 +21,10 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import sharp from 'sharp';
+import {
+  buildDashScopeImageGenerationPayload,
+  readDashScopeImageGenerationResult,
+} from './dashScopeImageGenerationShared.js';
 
 type ImageProvider = 'openai' | 'dashscope';
 
@@ -226,18 +230,10 @@ const extractDashScopeImage = async (
   body: Record<string, unknown>,
   timeoutMs: number,
 ): Promise<Buffer> => {
-  const output = body.output && typeof body.output === 'object' && !Array.isArray(body.output)
-    ? (body.output as Record<string, unknown>)
-    : null;
-  const results = output && Array.isArray(output.results) ? output.results : [];
-  const first = results[0] && typeof results[0] === 'object' && !Array.isArray(results[0])
-    ? (results[0] as Record<string, unknown>)
-    : null;
-  const b64 = asString(first?.b64_image);
+  const { b64, url } = readDashScopeImageGenerationResult(body);
   if (b64) {
     return Buffer.from(b64, 'base64');
   }
-  const url = asString(first?.url);
   if (url) {
     return readBufferFromUrl(url, timeoutMs);
   }
@@ -254,15 +250,11 @@ export const generatePartnerRecruitAvatar = async (
 
   try {
     const payload = config.provider === 'dashscope'
-      ? {
-          model: config.modelName,
-          input: {
-            prompt,
-          },
-          parameters: {
-            size: normalizeSizeForDashScope(config.size),
-          },
-        }
+      ? buildDashScopeImageGenerationPayload(
+          config.modelName,
+          prompt,
+          normalizeSizeForDashScope(config.size),
+        )
       : {
           model: config.modelName,
           prompt,
