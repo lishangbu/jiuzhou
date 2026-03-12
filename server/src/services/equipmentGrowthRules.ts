@@ -284,7 +284,7 @@ export const buildEnhanceCostPlan = (
     materialItemDefId: target <= 10 ? "enhance-001" : "enhance-002",
     materialQty: target * realmMultiplier,
     silverCost: Math.max(100, Math.floor(125 * target * realmMultiplier)),
-    spiritStoneCost: Math.max(0, 25 * target * realmMultiplier),
+    spiritStoneCost: Math.max(0, 20 * target * realmMultiplier),
   };
 };
 
@@ -298,7 +298,7 @@ export const buildRefineCostPlan = (
     materialItemDefId: "enhance-002",
     materialQty: target * realmMultiplier,
     silverCost: Math.max(100, Math.floor(125 * target * realmMultiplier)),
-    spiritStoneCost: Math.max(0, 25 * target * realmMultiplier),
+    spiritStoneCost: Math.max(0, 20 * target * realmMultiplier),
   };
 };
 
