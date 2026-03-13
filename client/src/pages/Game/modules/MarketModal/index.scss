@@ -276,12 +276,16 @@
 }
 
 .market-item-name {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 900;
   color: var(--text-color);
+  line-height: 1.2;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
 }
 
 .market-equipment-summary {
@@ -379,8 +383,8 @@
 }
 
 .market-partner-avatar {
-  width: 52px;
-  height: 52px;
+  width: 48px;
+  height: 48px;
   border-radius: 12px;
   object-fit: cover;
   border: 1px solid var(--border-color-soft);
@@ -394,11 +398,10 @@
   border-radius: 14px;
 }
 
-.market-partner-subtitle {
-  font-size: 11px;
+.market-partner-level {
+  font-size: 12px;
   font-weight: 700;
   color: var(--text-tertiary);
-  line-height: 1.4;
 }
 
 .market-partner-preview-list {

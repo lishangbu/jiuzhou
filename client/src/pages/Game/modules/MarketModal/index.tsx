@@ -1649,8 +1649,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                   <div className="market-mobile-card-head">
                     <img className="market-partner-avatar" src={resolvePartnerAvatar(row.partner.avatar)} alt={row.partner.name} />
                     <div className="market-mobile-head-main">
-                      <div className="market-item-name">{row.partner.nickname || row.partner.name}</div>
-                      <div className="market-partner-subtitle">{row.partner.name} · 等级 {row.partner.level}</div>
+                      <div className="market-item-name">{row.partner.nickname || row.partner.name} <span className="market-partner-level">Lv.{row.partner.level}</span></div>
                       <div className="market-item-tags">
                         <Tag className={`market-tag market-tag-quality ${getQualityClassName(row.partner.quality)}`}>{row.partner.quality}</Tag>
                         <Tag className="market-tag">{formatPartnerElementLabel(row.partner.element)}</Tag>
@@ -1877,8 +1876,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                 <div className="market-mobile-card-head">
                   <img className="market-partner-avatar" src={resolvePartnerAvatar(row.partner.avatar)} alt={row.partner.name} />
                   <div className="market-mobile-head-main">
-                    <div className="market-item-name">{row.partner.nickname || row.partner.name}</div>
-                    <div className="market-partner-subtitle">{row.partner.name} · 等级 {row.partner.level}</div>
+                    <div className="market-item-name">{row.partner.nickname || row.partner.name} <span className="market-partner-level">Lv.{row.partner.level}</span></div>
                     <div className="market-item-tags">
                       <Tag className={`market-tag market-tag-quality ${getQualityClassName(row.partner.quality)}`}>{row.partner.quality}</Tag>
                       <Tag className="market-tag">{formatPartnerElementLabel(row.partner.element)}</Tag>
@@ -2167,8 +2165,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
             <div className="market-mobile-card-head">
               <img className="market-partner-avatar" src={resolvePartnerAvatar(partner.avatar)} alt={partner.name} />
               <div className="market-mobile-head-main">
-                <div className="market-item-name">{partner.nickname || partner.name}</div>
-                <div className="market-partner-subtitle">{partner.name} · 等级 {partner.level}</div>
+                <div className="market-item-name">{partner.nickname || partner.name} <span className="market-partner-level">Lv.{partner.level}</span></div>
                 <div className="market-item-tags">
                   <Tag className={`market-tag market-tag-quality ${getQualityClassName(partner.quality)}`}>{partner.quality}</Tag>
                   <Tag className="market-tag">{formatPartnerElementLabel(partner.element)}</Tag>
@@ -2243,10 +2240,6 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                     </div>
 
                     <div className="market-list-detail-scroll">
-                      <div className="market-list-detail-section">
-                        <div className="market-list-detail-title">基本信息</div>
-                        <div className="market-list-detail-text">原型：{selectedPartner.name}</div>
-                      </div>
                       <div className="market-list-detail-section">
                         <div className="market-list-detail-title">属性</div>
                         <div className="market-list-detail-attr-grid">
@@ -2415,8 +2408,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                 <div className="market-mobile-card-head">
                   <img className="market-partner-avatar" src={resolvePartnerAvatar(row.partner.avatar)} alt={row.partner.name} />
                   <div className="market-mobile-head-main">
-                    <div className="market-item-name">{row.partner.nickname || row.partner.name}</div>
-                    <div className="market-partner-subtitle">{row.partner.name} · 等级 {row.partner.level}</div>
+                    <div className="market-item-name">{row.partner.nickname || row.partner.name} <span className="market-partner-level">Lv.{row.partner.level}</span></div>
                     <div className="market-item-tags">
                       <Tag className={`market-tag market-tag-record ${row.type === '买入' ? 'buy' : 'sell'}`}>{row.type}</Tag>
                       <Tag className={`market-tag market-tag-quality ${getQualityClassName(row.partner.quality)}`}>{row.partner.quality}</Tag>
