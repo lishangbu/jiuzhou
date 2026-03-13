@@ -1652,7 +1652,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                       <div className="market-item-name">{row.partner.nickname || row.partner.name}</div>
                       <div className="market-partner-subtitle">{row.partner.name} · 等级 {row.partner.level}</div>
                       <div className="market-item-tags">
-                        <Tag className="market-tag">{row.partner.quality}</Tag>
+                        <Tag className={`market-tag market-tag-quality ${getQualityClassName(row.partner.quality)}`}>{row.partner.quality}</Tag>
                         <Tag className="market-tag">{formatPartnerElementLabel(row.partner.element)}</Tag>
                         <Tag className="market-tag">{row.partner.role}</Tag>
                         {row.seller === playerName ? <Tag className="market-tag market-tag-mine">我的上架</Tag> : null}
@@ -1880,7 +1880,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                     <div className="market-item-name">{row.partner.nickname || row.partner.name}</div>
                     <div className="market-partner-subtitle">{row.partner.name} · 等级 {row.partner.level}</div>
                     <div className="market-item-tags">
-                      <Tag className="market-tag">{row.partner.quality}</Tag>
+                      <Tag className={`market-tag market-tag-quality ${getQualityClassName(row.partner.quality)}`}>{row.partner.quality}</Tag>
                       <Tag className="market-tag">{formatPartnerElementLabel(row.partner.element)}</Tag>
                       <Tag className="market-tag">{row.partner.role}</Tag>
                     </div>
@@ -2170,7 +2170,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                 <div className="market-item-name">{partner.nickname || partner.name}</div>
                 <div className="market-partner-subtitle">{partner.name} · 等级 {partner.level}</div>
                 <div className="market-item-tags">
-                  <Tag className="market-tag">{partner.quality}</Tag>
+                  <Tag className={`market-tag market-tag-quality ${getQualityClassName(partner.quality)}`}>{partner.quality}</Tag>
                   <Tag className="market-tag">{formatPartnerElementLabel(partner.element)}</Tag>
                   <Tag className="market-tag">{partner.role}</Tag>
                   {partner.isActive ? <Tag color="green">当前出战</Tag> : null}
@@ -2419,7 +2419,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                     <div className="market-partner-subtitle">{row.partner.name} · 等级 {row.partner.level}</div>
                     <div className="market-item-tags">
                       <Tag className={`market-tag market-tag-record ${row.type === '买入' ? 'buy' : 'sell'}`}>{row.type}</Tag>
-                      <Tag className="market-tag">{row.partner.quality}</Tag>
+                      <Tag className={`market-tag market-tag-quality ${getQualityClassName(row.partner.quality)}`}>{row.partner.quality}</Tag>
                       <Tag className="market-tag">{formatPartnerElementLabel(row.partner.element)}</Tag>
                     </div>
                   </div>
