@@ -266,48 +266,60 @@ const PartnerListSheet: React.FC<PartnerListSheetProps> = ({
 
         {/* 头部 */}
         <div className="market-list-sheet-head">
-          <div className="market-list-sheet-icon-box">
-            <img className="market-list-sheet-icon-img" style={{ borderRadius: '12px', width: '100%', height: '100%' }} src={resolvePartnerAvatar(partner.avatar)} alt={partner.name} />
-          </div>
-          <div className="market-list-sheet-meta">
-            <div className="market-list-sheet-name">
-              {partner.nickname || partner.name}
+          <div className="market-list-sheet-head-main">
+            <div className="market-list-sheet-icon-box">
+              <img className="market-list-sheet-icon-img" style={{ borderRadius: '12px', width: '100%', height: '100%' }} src={resolvePartnerAvatar(partner.avatar)} alt={partner.name} />
             </div>
-            <div className="market-list-sheet-tags">
-              <span className={`market-list-sheet-tag market-list-sheet-tag--quality ${getQualityClassName(partner.quality)}`}>
-                {partner.quality}
-              </span>
-              <span className="market-list-sheet-tag">{formatPartnerElementLabel(partner.element)}</span>
-              <span className="market-list-sheet-tag">{partner.role}</span>
-              <span className="market-list-sheet-tag">等级 {partner.level}</span>
-              {partner.isActive ? <span className="market-list-sheet-tag market-list-sheet-tag--locked">当前出战</span> : null}
-              {partner.tradeStatus === 'market_listed' ? <span className="market-list-sheet-tag market-list-sheet-tag--locked">坊市中</span> : null}
-            </div>
-            <div className="market-list-sheet-qty">{partner.name}</div>
-          </div>
-        </div>
-
-        {/* 详情 */}
-        <div className="market-list-sheet-body">
-          <div className="market-list-sheet-section">
-            <div className="market-list-sheet-section-title">核心属性</div>
-            <div className="market-list-sheet-effect-list">
-              {buildPartnerCombatPreview(partner).map((line) => (
-                <div key={line} className="market-list-sheet-effect-chip">{line}</div>
-              ))}
+            <div className="market-list-sheet-meta">
+              <div className="market-list-sheet-name">
+                {partner.nickname || partner.name}
+              </div>
+              <div className="market-list-sheet-tags">
+                <span className={`market-list-sheet-tag market-list-sheet-tag--quality ${getQualityClassName(partner.quality)}`}>
+                  {partner.quality}
+                </span>
+                <span className="market-list-sheet-tag">{formatPartnerElementLabel(partner.element)}</span>
+                <span className="market-list-sheet-tag">{partner.role}</span>
+                <span className="market-list-sheet-tag">等级 {partner.level}</span>
+                {partner.isActive ? <span className="market-list-sheet-tag market-list-sheet-tag--locked">当前出战</span> : null}
+                {partner.tradeStatus === 'market_listed' ? <span className="market-list-sheet-tag market-list-sheet-tag--locked">坊市中</span> : null}
+              </div>
+              <div className="market-list-sheet-qty">{partner.name}</div>
             </div>
           </div>
-          <div className="market-list-sheet-section">
-            <div className="market-list-sheet-section-title">功法</div>
-            <div className="market-list-sheet-section-text">{buildPartnerTechniquePreview(partner)}</div>
-          </div>
-
           {partner.isActive ? (
             <div className="market-list-sheet-locked-tip">出战中的伙伴不可上架，请先下阵。</div>
           ) : null}
           {partner.tradeStatus === 'market_listed' ? (
             <div className="market-list-sheet-locked-tip">该伙伴已在坊市挂单中，无法重复上架。</div>
           ) : null}
+        </div>
+
+        {/* 详情 */}
+        <div className="market-list-sheet-body">
+          <div className="market-list-sheet-section">
+            <div className="market-list-sheet-section-title">属性</div>
+            <div className="market-list-sheet-effect-list">
+              {buildPartnerAllAttrsPreview(partner).map((line) => (
+                <div key={line} className="market-list-sheet-effect-chip">{line}</div>
+              ))}
+            </div>
+          </div>
+          <div className="market-list-sheet-section">
+            <div className="market-list-sheet-section-title">功法</div>
+            <div className="market-partner-technique-grid">
+              {partner.techniques.length > 0 ? (
+                partner.techniques.map((tech) => (
+                  <div key={tech.techniqueId} className="market-partner-technique-cell">
+                    <div className="market-partner-technique-name">{tech.name} <span className="market-partner-technique-level">一层</span></div>
+                    <div className="market-partner-technique-desc">{tech.description || '暂无描述'}</div>
+                  </div>
+                ))
+              ) : (
+                <div className="market-list-detail-text">暂无功法</div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* 上架表单 */}
@@ -536,9 +548,8 @@ const calculateListingFeeSilver = (priceInput: string, qtyInput: string): number
   return safeUnitPrice * safeQty * MARKET_LISTING_FEE_SILVER_PER_SPIRIT_STONE;
 };
 
-const buildPartnerCombatPreview = (partner: PartnerDisplayDto): string[] => {
+const buildPartnerAllAttrsPreview = (partner: PartnerDisplayDto): string[] => {
   return getPartnerVisibleCombatAttrs(partner.computedAttrs)
-    .slice(0, 4)
     .map((entry) => `${getPartnerAttrLabel(entry.key)} ${formatPartnerAttrValue(entry.key, entry.value)}`);
 };
 
@@ -1631,7 +1642,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
           <div className="market-mobile-list">
             {partnerMarketLoading && partnerMarketListings.length === 0 ? <div className="market-empty">加载中...</div> : null}
             {partnerMarketListings.map((row) => {
-              const combatPreview = buildPartnerCombatPreview(row.partner);
+              const combatPreview = buildPartnerAllAttrsPreview(row.partner).slice(0, 4);
               const techniquePreview = buildPartnerTechniquePreview(row.partner);
               return (
                 <div key={row.id} className="market-mobile-card market-mobile-card--partner">
@@ -1880,7 +1891,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                   </div>
                 </div>
                 <div className="market-partner-preview-list">
-                  {buildPartnerCombatPreview(row.partner).map((line) => (
+                  {buildPartnerAllAttrsPreview(row.partner).slice(0, 4).map((line) => (
                     <div key={line} className="market-partner-preview-chip">{line}</div>
                   ))}
                 </div>
@@ -2036,15 +2047,17 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                 {selectedBagItem ? (
                   <>
                     <div className="market-list-detail-head">
-                      <img className={`market-list-detail-icon ${getQualityClassName(selectedBagItem.quality)}`} src={selectedBagItem.icon} alt={selectedBagItem.name} />
-                      <div className="market-list-detail-meta">
-                        <div className="market-list-detail-name">{selectedBagItem.name}</div>
-                        <div className="market-list-detail-tags">
-                          <Tag className={`market-tag market-tag-quality ${getQualityClassName(selectedBagItem.quality)}`}>{selectedBagItem.quality}</Tag>
-                          <Tag className="market-tag">{bagCategoryLabels[selectedBagItem.category]}</Tag>
-                          <Tag className="market-tag">{selectedBagItem.bind.detailLabel}</Tag>
-                          <Tag className="market-tag">数量 {selectedBagItem.qty}</Tag>
-                          {selectedBagItem.locked ? <Tag color="red">已锁定</Tag> : null}
+                      <div className="market-list-detail-head-main">
+                        <img className={`market-list-detail-icon ${getQualityClassName(selectedBagItem.quality)}`} src={selectedBagItem.icon} alt={selectedBagItem.name} />
+                        <div className="market-list-detail-meta">
+                          <div className="market-list-detail-name">{selectedBagItem.name}</div>
+                          <div className="market-list-detail-tags">
+                            <Tag className={`market-tag market-tag-quality ${getQualityClassName(selectedBagItem.quality)}`}>{selectedBagItem.quality}</Tag>
+                            <Tag className="market-tag">{bagCategoryLabels[selectedBagItem.category]}</Tag>
+                            <Tag className="market-tag">{selectedBagItem.bind.detailLabel}</Tag>
+                            <Tag className="market-tag">数量 {selectedBagItem.qty}</Tag>
+                            {selectedBagItem.locked ? <Tag color="red">已锁定</Tag> : null}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -2207,18 +2220,26 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                 {selectedPartner ? (
                   <>
                     <div className="market-list-detail-head">
-                      <img className={`market-list-detail-icon market-partner-avatar--detail`} src={resolvePartnerAvatar(selectedPartner.avatar)} alt={selectedPartner.name} />
-                      <div className="market-list-detail-meta">
-                        <div className="market-list-detail-name">{selectedPartner.nickname || selectedPartner.name}</div>
-                        <div className="market-list-detail-tags">
-                          <Tag className={`market-tag market-tag-quality ${getQualityClassName(selectedPartner.quality)}`}>{selectedPartner.quality}</Tag>
-                          <Tag className="market-tag">{formatPartnerElementLabel(selectedPartner.element)}</Tag>
-                          <Tag className="market-tag">{selectedPartner.role}</Tag>
-                          <Tag className="market-tag">等级 {selectedPartner.level}</Tag>
-                          {selectedPartner.isActive ? <Tag color="green">当前出战</Tag> : null}
-                          {selectedPartner.tradeStatus === 'market_listed' ? <Tag color="gold">坊市中</Tag> : null}
+                      <div className="market-list-detail-head-main">
+                        <img className={`market-list-detail-icon market-partner-avatar--detail`} src={resolvePartnerAvatar(selectedPartner.avatar)} alt={selectedPartner.name} />
+                        <div className="market-list-detail-meta">
+                          <div className="market-list-detail-name">{selectedPartner.nickname || selectedPartner.name}</div>
+                          <div className="market-list-detail-tags">
+                            <Tag className={`market-tag market-tag-quality ${getQualityClassName(selectedPartner.quality)}`}>{selectedPartner.quality}</Tag>
+                            <Tag className="market-tag">{formatPartnerElementLabel(selectedPartner.element)}</Tag>
+                            <Tag className="market-tag">{selectedPartner.role}</Tag>
+                            <Tag className="market-tag">等级 {selectedPartner.level}</Tag>
+                            {selectedPartner.isActive ? <Tag color="green">当前出战</Tag> : null}
+                            {selectedPartner.tradeStatus === 'market_listed' ? <Tag color="gold">坊市中</Tag> : null}
+                          </div>
                         </div>
                       </div>
+                      {selectedPartner.isActive ? (
+                        <div className="market-list-locked-tip" style={{ marginTop: 12 }}>出战中的伙伴不可上架，请先下阵。</div>
+                      ) : null}
+                      {selectedPartner.tradeStatus === 'market_listed' ? (
+                        <div className="market-list-locked-tip" style={{ marginTop: 12 }}>该伙伴已在坊市挂单中，无法重复上架。</div>
+                      ) : null}
                     </div>
 
                     <div className="market-list-detail-scroll">
@@ -2227,24 +2248,28 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                         <div className="market-list-detail-text">原型：{selectedPartner.name}</div>
                       </div>
                       <div className="market-list-detail-section">
-                        <div className="market-list-detail-title">核心属性</div>
-                        <div className="market-list-detail-lines">
-                          {buildPartnerCombatPreview(selectedPartner).map((line) => (
+                        <div className="market-list-detail-title">属性</div>
+                        <div className="market-list-detail-attr-grid">
+                          {buildPartnerAllAttrsPreview(selectedPartner).map((line) => (
                             <div key={line} className="market-list-detail-line">{line}</div>
                           ))}
                         </div>
                       </div>
                       <div className="market-list-detail-section">
                         <div className="market-list-detail-title">功法</div>
-                        <div className="market-list-detail-text">{buildPartnerTechniquePreview(selectedPartner)}</div>
+                        <div className="market-partner-technique-grid">
+                          {selectedPartner.techniques.length > 0 ? (
+                            selectedPartner.techniques.map((tech) => (
+                              <div key={tech.techniqueId} className="market-partner-technique-cell">
+                                <div className="market-partner-technique-name">{tech.name} <span className="market-partner-technique-level">一层</span></div>
+                                <div className="market-partner-technique-desc">{tech.description || '暂无描述'}</div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="market-list-detail-text">暂无功法</div>
+                          )}
+                        </div>
                       </div>
-
-                      {selectedPartner.isActive ? (
-                        <div className="market-list-locked-tip">出战中的伙伴不可上架，请先下阵。</div>
-                      ) : null}
-                      {selectedPartner.tradeStatus === 'market_listed' ? (
-                        <div className="market-list-locked-tip">该伙伴已在坊市挂单中，无法重复上架。</div>
-                      ) : null}
                     </div>
 
                     <div className="market-list-form">
