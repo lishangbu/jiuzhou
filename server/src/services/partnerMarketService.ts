@@ -26,6 +26,7 @@ import {
   loadSinglePartnerRowById,
   normalizeInteger,
   normalizeText,
+  toPartnerBaseAttrsDto,
   type PartnerDisplayDto,
 } from './shared/partnerView.js';
 import {
@@ -101,8 +102,14 @@ const parseMaybeString = (v: string | null | undefined): string =>
 const readPartnerSnapshot = (snapshot: PartnerDisplayDto | null): PartnerDisplayDto | null => {
   if (!snapshot) return null;
   if (!Number.isInteger(snapshot.id) || snapshot.id <= 0) return null;
-  if (!normalizeText(snapshot.partnerDefId)) return null;
-  return snapshot;
+  const partnerDefId = normalizeText(snapshot.partnerDefId);
+  if (!partnerDefId) return null;
+  const definition = getPartnerDefinitionById(partnerDefId);
+  if (!definition) return null;
+  return {
+    ...snapshot,
+    levelAttrGains: toPartnerBaseAttrsDto(definition.level_attr_gains),
+  };
 };
 
 const buildListingDto = (row: PartnerListingRow): MarketPartnerListingDto | null => {

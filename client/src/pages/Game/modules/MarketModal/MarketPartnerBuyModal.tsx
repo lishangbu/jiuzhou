@@ -6,11 +6,7 @@ import {
   resolvePartnerAvatar,
 } from '../../shared/partnerDisplay';
 import { getItemQualityMeta } from '../../shared/itemQuality';
-import {
-  getPartnerVisibleCombatAttrs,
-  getPartnerAttrLabel,
-  formatPartnerAttrValue,
-} from '../../shared/partnerDisplay';
+import { buildPartnerMarketAttrRows } from './partnerMarketShared';
 
 interface MarketPartnerBuyModalProps {
   partner: PartnerDisplayDto | null;
@@ -23,11 +19,6 @@ interface MarketPartnerBuyModalProps {
 
 const getQualityClassName = (value: unknown): string => {
   return getItemQualityMeta(value)?.className ?? '';
-};
-
-const buildPartnerAllAttrsPreview = (partner: PartnerDisplayDto): string[] => {
-  return getPartnerVisibleCombatAttrs(partner.computedAttrs)
-    .map((entry) => `${getPartnerAttrLabel(entry.key)} ${formatPartnerAttrValue(entry.key, entry.value)}`);
 };
 
 const MarketPartnerBuyModal: React.FC<MarketPartnerBuyModalProps> = ({
@@ -76,9 +67,15 @@ const MarketPartnerBuyModal: React.FC<MarketPartnerBuyModalProps> = ({
         <div className="market-list-detail-scroll" style={{ padding: '16px 0', display: 'flex', flexDirection: 'row', gap: '24px' }}>
           <div className="market-list-detail-section" style={{ flex: '0 0 300px', paddingRight: '8px' }}>
             <div className="market-list-detail-title">属性</div>
-            <div className="market-list-detail-attr-grid" style={{ gap: '8px 12px' }}>
-              {buildPartnerAllAttrsPreview(partner).map((line) => (
-                <div key={line} className="market-list-detail-line">{line}</div>
+            <div className="market-list-detail-attr-grid" style={{ gap: '12px 12px' }}>
+              {buildPartnerMarketAttrRows(partner).map((item) => (
+                <div key={item.key} className="market-list-detail-line market-partner-attr-row">
+                  <span className="market-partner-attr-row__label">{item.label}</span>
+                  <span className="market-partner-attr-row__value">{item.valueText}</span>
+                  {item.growthText ? (
+                    <span className="market-partner-attr-row__growth">+ {item.growthText}</span>
+                  ) : null}
+                </div>
               ))}
             </div>
           </div>

@@ -121,6 +121,7 @@ export type PartnerDisplayDto = {
   isActive: boolean;
   obtainedFrom: string | null;
   growth: PartnerGrowthDto;
+  levelAttrGains: PartnerBaseAttrsDto;
   computedAttrs: PartnerComputedAttrsDto;
   techniques: PartnerTechniqueDto[];
 };

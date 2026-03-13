@@ -5,11 +5,7 @@ import {
   resolvePartnerAvatar,
 } from '../../shared/partnerDisplay';
 import { getItemQualityMeta } from '../../shared/itemQuality';
-import {
-  getPartnerVisibleCombatAttrs,
-  getPartnerAttrLabel,
-  formatPartnerAttrValue,
-} from '../../shared/partnerDisplay';
+import { buildPartnerMarketAttrRows } from './partnerMarketShared';
 
 interface MarketPartnerPreviewSheetProps {
   partner: PartnerDisplayDto | null;
@@ -22,11 +18,6 @@ interface MarketPartnerPreviewSheetProps {
 
 const getQualityClassName = (value: unknown): string => {
   return getItemQualityMeta(value)?.className ?? '';
-};
-
-const buildPartnerAllAttrsPreview = (partner: PartnerDisplayDto): string[] => {
-  return getPartnerVisibleCombatAttrs(partner.computedAttrs)
-    .map((entry) => `${getPartnerAttrLabel(entry.key)} ${formatPartnerAttrValue(entry.key, entry.value)}`);
 };
 
 const MarketPartnerPreviewSheet: React.FC<MarketPartnerPreviewSheetProps> = ({
@@ -68,7 +59,6 @@ const MarketPartnerPreviewSheet: React.FC<MarketPartnerPreviewSheetProps> = ({
                 <span className="market-list-sheet-tag">{partner.role}</span>
                 <span className="market-list-sheet-tag">等级 {partner.level}</span>
               </div>
-              <div className="market-list-sheet-qty">{partner.name}</div>
             </div>
           </div>
         </div>
@@ -77,9 +67,15 @@ const MarketPartnerPreviewSheet: React.FC<MarketPartnerPreviewSheetProps> = ({
         <div className="market-list-sheet-body">
           <div className="market-list-sheet-section">
             <div className="market-list-sheet-section-title">属性</div>
-            <div className="market-list-sheet-effect-list">
-              {buildPartnerAllAttrsPreview(partner).map((line) => (
-                <div key={line} className="market-list-sheet-effect-chip">{line}</div>
+            <div className="market-list-sheet-effect-list market-list-sheet-effect-list--partner-attrs">
+              {buildPartnerMarketAttrRows(partner).map((item) => (
+                <div key={item.key} className="market-list-sheet-effect-chip market-partner-attr-row">
+                  <span className="market-partner-attr-row__label">{item.label}</span>
+                  <span className="market-partner-attr-row__value">{item.valueText}</span>
+                  {item.growthText ? (
+                    <span className="market-partner-attr-row__growth">+ {item.growthText}</span>
+                  ) : null}
+                </div>
               ))}
             </div>
           </div>
@@ -102,14 +98,16 @@ const MarketPartnerPreviewSheet: React.FC<MarketPartnerPreviewSheetProps> = ({
 
         {/* 购买操作区 */}
         {unitPrice !== undefined ? (
-          <div className="market-list-sheet-form">
-            <div className="market-list-sheet-row" style={{ justifyContent: 'space-between' }}>
-              <span className="market-list-sheet-label">一口价（灵石）</span>
-              <span className="market-list-sheet-value" style={{ fontWeight: 800, color: 'var(--warning-color)' }}>{unitPrice.toLocaleString()}</span>
+          <div className="market-list-sheet-form market-list-sheet-form--partner-buy">
+            <div className="market-list-sheet-price-card">
+              <span className="market-list-sheet-label market-list-sheet-label--compact">一口价（灵石）</span>
+              <span className="market-list-sheet-value market-list-sheet-value--compact" style={{ fontWeight: 800, color: 'var(--warning-color)' }}>
+                {unitPrice.toLocaleString()}
+              </span>
             </div>
-            <div className="market-list-sheet-actions" style={{ marginTop: 12 }}>
+            <div className="market-list-sheet-actions market-list-sheet-actions--partner-buy">
               <button
-                className="market-list-sheet-btn is-primary"
+                className="market-list-sheet-btn market-list-sheet-btn--partner-buy is-primary"
                 disabled={!canBuy}
                 onClick={onBuy}
               >

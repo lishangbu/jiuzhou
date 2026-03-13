@@ -1042,6 +1042,29 @@
   line-height: 1.5;
 }
 
+.market-partner-attr-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.market-partner-attr-row__label {
+  color: var(--text-secondary);
+}
+
+.market-partner-attr-row__value {
+  color: var(--text-color);
+  font-weight: 800;
+}
+
+.market-partner-attr-row__growth {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .market-list-detail-head {
   display: flex;
   flex-direction: column;
@@ -1732,19 +1755,19 @@
     background: var(--panel-bg-soft);
     color: var(--text-secondary);
 
-    &.q-huang {
+    &.item-quality--huang {
       color: var(--rarity-huang);
     }
 
-    &.q-xuan {
+    &.item-quality--xuan {
       color: var(--rarity-xuan);
     }
 
-    &.q-di {
+    &.item-quality--di {
       color: var(--rarity-di);
     }
 
-    &.q-tian {
+    &.item-quality--tian {
       color: var(--rarity-tian);
     }
   }
@@ -1758,12 +1781,6 @@
     background: color-mix(in srgb, var(--warning-color) 12%, transparent);
     color: var(--warning-color);
   }
-}
-
-.market-list-sheet-qty {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-tertiary);
 }
 
 .market-list-sheet-body {
@@ -1802,6 +1819,12 @@
   gap: 4px;
 }
 
+.market-list-sheet-effect-list--partner-attrs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
 .market-list-sheet-effect-chip {
   font-size: 12px;
   font-weight: 600;
@@ -1832,6 +1855,13 @@
   gap: 10px;
 }
 
+.market-list-sheet-form--partner-buy {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .market-list-sheet-row {
   display: flex;
   align-items: center;
@@ -1844,6 +1874,10 @@
   font-size: 12px;
   font-weight: 700;
   color: var(--text-tertiary);
+}
+
+.market-list-sheet-label--compact {
+  width: auto;
 }
 
 .market-list-sheet-input {
@@ -1877,6 +1911,11 @@
   color: var(--text-color);
 }
 
+.market-list-sheet-value--compact {
+  flex: 0 0 auto;
+  min-height: auto;
+}
+
 .market-list-sheet-fee-tip {
   margin-top: -2px;
   font-size: 12px;
@@ -1886,6 +1925,18 @@
 .market-list-sheet-actions {
   display: flex;
   justify-content: flex-end;
+}
+
+.market-list-sheet-actions--partner-buy {
+  flex: 0 0 auto;
+}
+
+.market-list-sheet-price-card {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 12px;
 }
 
 .market-list-sheet-btn {
@@ -1913,4 +1964,8 @@
     opacity: 0.4;
     cursor: not-allowed;
   }
+}
+
+.market-list-sheet-btn--partner-buy {
+  min-width: 160px;
 }

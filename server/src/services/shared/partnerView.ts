@@ -108,6 +108,8 @@ export interface PartnerComputedAttrsDto {
   lingqi_huifu: number;
 }
 
+export type PartnerBaseAttrsDto = Omit<PartnerComputedAttrsDto, 'qixue' | 'lingqi'>;
+
 export type PartnerPassiveAttrsDto = Record<string, number>;
 
 export interface PartnerTechniqueSkillDto {
@@ -158,6 +160,7 @@ export interface PartnerDisplayDto {
   isActive: boolean;
   obtainedFrom: string | null;
   growth: PartnerGrowthDto;
+  levelAttrGains: PartnerBaseAttrsDto;
   computedAttrs: PartnerComputedAttrsDto;
   techniques: PartnerTechniqueDto[];
 }
@@ -410,6 +413,40 @@ export const toPartnerComputedAttrsDto = (
   };
 };
 
+export const toPartnerBaseAttrsDto = (
+  rawAttrs: Record<string, unknown> | null | undefined,
+): PartnerBaseAttrsDto => {
+  return {
+    max_qixue: Number(rawAttrs?.max_qixue) || 0,
+    max_lingqi: Number(rawAttrs?.max_lingqi) || 0,
+    wugong: Number(rawAttrs?.wugong) || 0,
+    fagong: Number(rawAttrs?.fagong) || 0,
+    wufang: Number(rawAttrs?.wufang) || 0,
+    fafang: Number(rawAttrs?.fafang) || 0,
+    mingzhong: Number(rawAttrs?.mingzhong) || 0,
+    shanbi: Number(rawAttrs?.shanbi) || 0,
+    zhaojia: Number(rawAttrs?.zhaojia) || 0,
+    baoji: Number(rawAttrs?.baoji) || 0,
+    baoshang: Number(rawAttrs?.baoshang) || 0,
+    jianbaoshang: Number(rawAttrs?.jianbaoshang) || 0,
+    kangbao: Number(rawAttrs?.kangbao) || 0,
+    zengshang: Number(rawAttrs?.zengshang) || 0,
+    zhiliao: Number(rawAttrs?.zhiliao) || 0,
+    jianliao: Number(rawAttrs?.jianliao) || 0,
+    xixue: Number(rawAttrs?.xixue) || 0,
+    lengque: Number(rawAttrs?.lengque) || 0,
+    sudu: Number(rawAttrs?.sudu) || 0,
+    kongzhi_kangxing: Number(rawAttrs?.kongzhi_kangxing) || 0,
+    jin_kangxing: Number(rawAttrs?.jin_kangxing) || 0,
+    mu_kangxing: Number(rawAttrs?.mu_kangxing) || 0,
+    shui_kangxing: Number(rawAttrs?.shui_kangxing) || 0,
+    huo_kangxing: Number(rawAttrs?.huo_kangxing) || 0,
+    tu_kangxing: Number(rawAttrs?.tu_kangxing) || 0,
+    qixue_huifu: Number(rawAttrs?.qixue_huifu) || 0,
+    lingqi_huifu: Number(rawAttrs?.lingqi_huifu) || 0,
+  };
+};
+
 export const buildPartnerTechniqueDto = (
   entry: EffectivePartnerTechniqueEntry,
   meta: PartnerTechniqueStaticMeta,
@@ -574,6 +611,7 @@ export const buildPartnerDisplay = (params: {
     isActive: Boolean(row.is_active),
     obtainedFrom: normalizeText(row.obtained_from) || null,
     growth: toPartnerGrowthDto(growth),
+    levelAttrGains: toPartnerBaseAttrsDto(definition.level_attr_gains),
     computedAttrs: toPartnerComputedAttrsDto(finalAttrs),
     techniques,
   };
