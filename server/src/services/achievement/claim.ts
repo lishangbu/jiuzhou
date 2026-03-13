@@ -24,6 +24,7 @@ import {
   getTitleDefinitions,
 } from '../staticConfigLoader.js';
 import { grantPermanentTitleTx } from './titleOwnership.js';
+import { lockCharacterRewardSettlementTargets } from '../shared/characterRewardTargetLock.js';
 
 /**
  * 成就领取服务
@@ -32,14 +33,39 @@ import { grantPermanentTitleTx } from './titleOwnership.js';
  * 不做：不处理成就进度更新（由 progress.ts 负责）
  *
  * 数据流：
- * - claimAchievement：锁定成就记录 → 发放奖励 → 更新状态为已领取
- * - claimAchievementPointsReward：锁定点数记录 → 发放奖励 → 更新已领取阈值列表
+ * - claimAchievement：先统一锁定奖励目标（背包互斥锁 + characters 行锁）→ 锁定成就记录 → 发放奖励 → 更新状态为已领取
+ * - claimAchievementPointsReward：先统一锁定奖励目标 → 锁定点数记录 → 发放奖励 → 更新已领取阈值列表
  *
  * 边界条件：
  * 1) 使用 @Transactional 保证奖励发放与状态更新的原子性
- * 2) 物品发放失败时抛出异常触发回滚，避免部分奖励发放成功但状态未更新
+ * 2) 奖励相关入口统一先拿角色奖励目标锁，避免先占住成就行锁、后等待背包锁时把并发请求拖到 statement timeout
+ * 3) 物品发放失败时抛出异常触发回滚，避免部分奖励发放成功但状态未更新
  */
 class AchievementClaimService {
+  /**
+   * 统一锁定成就领奖目标
+   *
+   * 作用：
+   * - 复用共享的奖励目标锁顺序，先拿背包互斥锁，再锁 `characters` 行；
+   * - 避免 claimAchievement / claimAchievementPointsReward 各自散落同样的锁协议。
+   *
+   * 输入/输出：
+   * - 输入：单个角色 ID。
+   * - 输出：Promise<void>，成功即表示后续奖励写入不会再在背包锁与角色行锁之间反向等待。
+   *
+   * 数据流：
+   * - 领取入口先调用本方法；
+   * - 本方法转调 `lockCharacterRewardSettlementTargets([characterId])`；
+   * - 后续成就表锁、货币更新、物品入包都沿用同一事务里的既定锁顺序。
+   *
+   * 关键边界条件与坑点：
+   * 1) 这里只处理单角色场景，但仍复用批量锁工具，避免再维护一套单独实现。
+   * 2) 必须在进入 `FOR UPDATE character_achievement*` 之前调用，否则无法消除“先锁成就记录再等背包锁”的超时链路。
+   */
+  private async lockClaimRewardTarget(characterId: number): Promise<void> {
+    await lockCharacterRewardSettlementTargets([characterId]);
+  }
+
   private asRewardType(value: unknown): 'silver' | 'spirit_stones' | 'exp' | 'item' | null {
     const raw = asNonEmptyString(value);
     if (!raw) return null;
@@ -170,6 +196,13 @@ class AchievementClaimService {
     if (!cid) return { success: false, message: '角色不存在' };
     if (!aid) return { success: false, message: '成就ID不能为空' };
 
+    const achievementDef = getAchievementDefinitions().find((entry) => entry.id === aid && entry.enabled !== false);
+    if (!achievementDef) {
+      return { success: false, message: '成就不存在或未解锁' };
+    }
+
+    await this.lockClaimRewardTarget(cid);
+
     const lockedRes = await query(
       `
         SELECT status
@@ -182,11 +215,6 @@ class AchievementClaimService {
     );
 
     if ((lockedRes.rows ?? []).length === 0) {
-      return { success: false, message: '成就不存在或未解锁' };
-    }
-
-    const achievementDef = getAchievementDefinitions().find((entry) => entry.id === aid && entry.enabled !== false);
-    if (!achievementDef) {
       return { success: false, message: '成就不存在或未解锁' };
     }
 
@@ -338,6 +366,15 @@ class AchievementClaimService {
     if (!cid) return { success: false, message: '角色不存在' };
     if (th < 0) return { success: false, message: '阈值无效' };
 
+    const defRow = getAchievementPointsRewardDefinitions().find(
+      (entry) => entry.enabled !== false && asFiniteNonNegativeInt(entry.points_threshold, -1) === th,
+    );
+
+    if (!defRow) {
+      return { success: false, message: '点数奖励不存在' };
+    }
+
+    await this.lockClaimRewardTarget(cid);
     await ensureCharacterAchievementPoints(cid);
 
     const pointsRes = await query(
@@ -360,14 +397,6 @@ class AchievementClaimService {
 
     if (totalPoints < th) {
       return { success: false, message: '成就点数不足' };
-    }
-
-    const defRow = getAchievementPointsRewardDefinitions().find(
-      (entry) => entry.enabled !== false && asFiniteNonNegativeInt(entry.points_threshold, -1) === th,
-    );
-
-    if (!defRow) {
-      return { success: false, message: '点数奖励不存在' };
     }
 
     const rewards = normalizeRewards(defRow.rewards);
