@@ -45,6 +45,8 @@ import MarketItemTooltipContent, {
   ITEM_TOOLTIP_CLASS_NAMES,
 } from '../../shared/MarketItemTooltipContent';
 import MarketBuyDialog from './MarketBuyDialog';
+import MarketPartnerPreviewSheet from './MarketPartnerPreviewSheet';
+import MarketPartnerBuyModal from './MarketPartnerBuyModal';
 import MarketEquipmentSummary from './MarketEquipmentSummary';
 import {
   buildMarketEquipmentSummary,
@@ -553,15 +555,6 @@ const buildPartnerAllAttrsPreview = (partner: PartnerDisplayDto): string[] => {
     .map((entry) => `${getPartnerAttrLabel(entry.key)} ${formatPartnerAttrValue(entry.key, entry.value)}`);
 };
 
-const buildPartnerTechniquePreview = (partner: PartnerDisplayDto): string => {
-  const names = partner.techniques.slice(0, 3).map((technique) => technique.name);
-  if (names.length <= 0) return '暂无功法';
-  if (partner.techniques.length > 3) {
-    return `${names.join(' / ')} 等 ${partner.techniques.length} 门`;
-  }
-  return names.join(' / ');
-};
-
 interface MarketModalProps {
   open: boolean;
   onClose: () => void;
@@ -639,6 +632,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
   const [partnerOverviewLoading, setPartnerOverviewLoading] = useState(false);
   const [partnerOverview, setPartnerOverview] = useState<PartnerDetailDto[]>([]);
   const [selectedPartnerId, setSelectedPartnerId] = useState<number | null>(null);
+  const [previewPartnerListing, setPreviewPartnerListing] = useState<PartnerListingItem | null>(null);
   const [partnerListPrice, setPartnerListPrice] = useState('');
   const [partnerListingActionLoading, setPartnerListingActionLoading] = useState(false);
   const resolveMarketTooltipPlacement = useCallback((event: React.MouseEvent<HTMLElement>) => {
@@ -1642,11 +1636,13 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
           <div className="market-mobile-list">
             {partnerMarketLoading && partnerMarketListings.length === 0 ? <div className="market-empty">加载中...</div> : null}
             {partnerMarketListings.map((row) => {
-              const combatPreview = buildPartnerAllAttrsPreview(row.partner).slice(0, 4);
-              const techniquePreview = buildPartnerTechniquePreview(row.partner);
               return (
                 <div key={row.id} className="market-mobile-card market-mobile-card--partner">
-                  <div className="market-mobile-card-head">
+                  <div 
+                    className="market-mobile-card-head"
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => setPreviewPartnerListing(row)}
+                  >
                     <img className="market-partner-avatar" src={resolvePartnerAvatar(row.partner.avatar)} alt={row.partner.name} />
                     <div className="market-mobile-head-main">
                       <div className="market-item-name">{row.partner.nickname || row.partner.name} <span className="market-partner-level">Lv.{row.partner.level}</span></div>
@@ -1662,12 +1658,6 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                       <div className="market-mobile-price-value">{row.unitPrice.toLocaleString()} 灵石</div>
                     </div>
                   </div>
-                  <div className="market-partner-preview-list">
-                    {combatPreview.map((line) => (
-                      <div key={line} className="market-partner-preview-chip">{line}</div>
-                    ))}
-                  </div>
-                  <div className="market-partner-technique-line">{techniquePreview}</div>
                   <div className="market-mobile-card-foot">
                     <div className="market-mobile-meta-line">
                       <span className="market-mobile-meta-item">
@@ -1685,9 +1675,8 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                       <Button
                         type="primary"
                         size="small"
-                        disabled={characterId !== null && row.sellerCharacterId === characterId}
                         onClick={() => {
-                          void buyPartnerListing(row);
+                          setPreviewPartnerListing(row);
                         }}
                       >
                         购买伙伴
@@ -1873,7 +1862,11 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
             {myPartnerLoading && myPartnerListings.length === 0 ? <div className="market-empty">加载中...</div> : null}
             {myPartnerListings.map((row) => (
               <div key={row.id} className="market-mobile-card market-mobile-card--partner">
-                <div className="market-mobile-card-head">
+                <div 
+                  className="market-mobile-card-head"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => setPreviewPartnerListing(row)}
+                >
                   <img className="market-partner-avatar" src={resolvePartnerAvatar(row.partner.avatar)} alt={row.partner.name} />
                   <div className="market-mobile-head-main">
                     <div className="market-item-name">{row.partner.nickname || row.partner.name} <span className="market-partner-level">Lv.{row.partner.level}</span></div>
@@ -1887,11 +1880,6 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                     <div className="market-mobile-price-label">一口价</div>
                     <div className="market-mobile-price-value">{row.unitPrice.toLocaleString()} 灵石</div>
                   </div>
-                </div>
-                <div className="market-partner-preview-list">
-                  {buildPartnerAllAttrsPreview(row.partner).slice(0, 4).map((line) => (
-                    <div key={line} className="market-partner-preview-chip">{line}</div>
-                  ))}
                 </div>
                 <div className="market-mobile-card-foot">
                   <div className="market-mobile-meta-line">
@@ -2584,6 +2572,33 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
           }}
         />
       ) : null}
+      {previewPartnerListing && (
+        isMobile ? (
+          <MarketPartnerPreviewSheet
+            partner={previewPartnerListing.partner}
+            unitPrice={previewPartnerListing.unitPrice}
+            sellerCharacterId={previewPartnerListing.sellerCharacterId}
+            myCharacterId={characterId}
+            onClose={() => setPreviewPartnerListing(null)}
+            onBuy={() => {
+              void buyPartnerListing(previewPartnerListing);
+              setPreviewPartnerListing(null);
+            }}
+          />
+        ) : (
+          <MarketPartnerBuyModal
+            partner={previewPartnerListing.partner}
+            unitPrice={previewPartnerListing.unitPrice}
+            sellerCharacterId={previewPartnerListing.sellerCharacterId}
+            myCharacterId={characterId}
+            onClose={() => setPreviewPartnerListing(null)}
+            onBuy={() => {
+              void buyPartnerListing(previewPartnerListing);
+              setPreviewPartnerListing(null);
+            }}
+          />
+        )
+      )}
     </Modal>
   );
 };

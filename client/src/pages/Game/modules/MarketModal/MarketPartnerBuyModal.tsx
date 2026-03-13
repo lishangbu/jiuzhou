@@ -1,0 +1,122 @@
+import React from 'react';
+import { Modal, Button, Tag } from 'antd';
+import type { PartnerDisplayDto } from '../../../../services/api';
+import {
+  formatPartnerElementLabel,
+  resolvePartnerAvatar,
+} from '../../shared/partnerDisplay';
+import { getItemQualityMeta } from '../../shared/itemQuality';
+import {
+  getPartnerVisibleCombatAttrs,
+  getPartnerAttrLabel,
+  formatPartnerAttrValue,
+} from '../../shared/partnerDisplay';
+
+interface MarketPartnerBuyModalProps {
+  partner: PartnerDisplayDto | null;
+  unitPrice?: number;
+  sellerCharacterId?: number;
+  myCharacterId?: number | null;
+  onClose: () => void;
+  onBuy?: () => void;
+}
+
+const getQualityClassName = (value: unknown): string => {
+  return getItemQualityMeta(value)?.className ?? '';
+};
+
+const buildPartnerAllAttrsPreview = (partner: PartnerDisplayDto): string[] => {
+  return getPartnerVisibleCombatAttrs(partner.computedAttrs)
+    .map((entry) => `${getPartnerAttrLabel(entry.key)} ${formatPartnerAttrValue(entry.key, entry.value)}`);
+};
+
+const MarketPartnerBuyModal: React.FC<MarketPartnerBuyModalProps> = ({
+  partner,
+  unitPrice,
+  sellerCharacterId,
+  myCharacterId,
+  onClose,
+  onBuy,
+}) => {
+  if (!partner) return null;
+
+  const isMyOwn = myCharacterId !== null && myCharacterId !== undefined && sellerCharacterId === myCharacterId;
+  const canBuy = !!onBuy && !isMyOwn;
+
+  return (
+    <Modal
+      open={!!partner}
+      onCancel={onClose}
+      footer={null}
+      title="伙伴详情"
+      centered
+      width={460}
+      destroyOnHidden
+      className="market-partner-buy-modal"
+      styles={{
+        body: { padding: '0 24px 24px 24px' }
+      }}
+    >
+      <div className="market-list-detail-card" style={{ padding: 0, border: 'none', background: 'transparent', height: '600px', maxHeight: '70vh' }}>
+        <div className="market-list-detail-head" style={{ padding: '0 0 16px 0', borderBottom: '1px solid var(--border-color-soft)' }}>
+          <div className="market-list-detail-head-main">
+            <img className={`market-list-detail-icon market-partner-avatar--detail`} src={resolvePartnerAvatar(partner.avatar)} alt={partner.name} />
+            <div className="market-list-detail-meta">
+              <div className="market-list-detail-name">{partner.nickname || partner.name}</div>
+              <div className="market-list-detail-tags">
+                <Tag className={`market-tag market-tag-quality ${getQualityClassName(partner.quality)}`}>{partner.quality}</Tag>
+                <Tag className="market-tag">{formatPartnerElementLabel(partner.element)}</Tag>
+                <Tag className="market-tag">{partner.role}</Tag>
+                <Tag className="market-tag">等级 {partner.level}</Tag>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="market-list-detail-scroll" style={{ padding: '16px 0' }}>
+          <div className="market-list-detail-section">
+            <div className="market-list-detail-title">属性</div>
+            <div className="market-list-detail-attr-grid">
+              {buildPartnerAllAttrsPreview(partner).map((line) => (
+                <div key={line} className="market-list-detail-line">{line}</div>
+              ))}
+            </div>
+          </div>
+          <div className="market-list-detail-section">
+            <div className="market-list-detail-title">功法</div>
+            <div className="market-partner-technique-grid">
+              {partner.techniques.length > 0 ? (
+                partner.techniques.map((tech) => (
+                  <div key={tech.techniqueId} className="market-partner-technique-cell">
+                    <div className="market-partner-technique-name">{tech.name} <span className="market-partner-technique-level">一层</span></div>
+                    <div className="market-partner-technique-desc">{tech.description || '暂无描述'}</div>
+                  </div>
+                ))
+              ) : (
+                <div className="market-list-detail-text">暂无功法</div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {unitPrice !== undefined ? (
+          <div className="market-list-form" style={{ padding: '16px 0 0 0', marginTop: 'auto', borderTop: '1px solid var(--border-color-soft)' }}>
+            <div className="market-list-row" style={{ justifyContent: 'space-between' }}>
+              <div className="market-list-k">一口价</div>
+              <div className="market-list-v" style={{ fontWeight: 800, color: 'var(--warning-color)', fontSize: '16px' }}>
+                {unitPrice.toLocaleString()} 灵石
+              </div>
+            </div>
+            <div className="market-list-actions" style={{ marginTop: 16 }}>
+              <Button type="primary" disabled={!canBuy} onClick={onBuy} block>
+                {isMyOwn ? '不可购买自己的上架' : '确认购买'}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </Modal>
+  );
+};
+
+export default MarketPartnerBuyModal;

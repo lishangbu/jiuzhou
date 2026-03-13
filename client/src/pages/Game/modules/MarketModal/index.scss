@@ -1582,7 +1582,7 @@
 .market-list-sheet-mask {
   position: fixed;
   inset: 0;
-  z-index: 1100;
+  z-index: 2100;
   background: rgba(0, 0, 0, 0.4);
   animation: mbag-mask-in 0.2s ease;
 }
@@ -1602,7 +1602,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 1101;
+  z-index: 2101;
   max-height: 80vh;
   border-radius: 20px 20px 0 0;
   background: var(--panel-bg);
