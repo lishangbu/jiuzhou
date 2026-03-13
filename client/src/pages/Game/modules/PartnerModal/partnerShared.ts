@@ -58,18 +58,6 @@ export const PARTNER_GROWTH_ATTRS: Array<keyof PartnerDetailDto['growth']> = [
   'sudu',
 ];
 
-const PARTNER_OBTAINED_FROM_LABELS: Record<string, string> = {
-  main_quest: '主线任务',
-  main_quest_section: '主线章节',
-  main_quest_chapter: '主线章节奖励',
-  partner_recruit: 'AI招募',
-};
-
-export const formatPartnerObtainedFromLabel = (obtainedFrom: string | null): string => {
-  if (!obtainedFrom) return '主线获得';
-  return PARTNER_OBTAINED_FROM_LABELS[obtainedFrom] ?? '其他来源';
-};
-
 export const resolvePartnerActionLabel = (isActive: boolean): string => {
   return isActive ? '下阵' : '设为出战';
 };

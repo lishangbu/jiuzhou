@@ -538,8 +538,10 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
               <Tag color="gold">{selectedPartner.quality}</Tag>
               {selectedPartner.tradeStatus === 'market_listed' ? <Tag color="orange">坊市中</Tag> : null}
             </div>
-            <div className="partner-role-line">
-              {formatPartnerElementLabel(selectedPartner.element)} · {selectedPartner.role} · 功法槽 {selectedPartner.slotCount}
+            <div className="partner-tag-row">
+              <Tag color="blue">{formatPartnerElementLabel(selectedPartner.element)}</Tag>
+              <Tag color="cyan">{selectedPartner.role}</Tag>
+              <Tag color="purple">功法槽 {selectedPartner.slotCount}</Tag>
             </div>
             {selectedPartner.tradeStatus === 'market_listed' ? (
               <div className="partner-meta partner-meta--warning">已在坊市挂单，无法出战、灌注或修炼功法。</div>
