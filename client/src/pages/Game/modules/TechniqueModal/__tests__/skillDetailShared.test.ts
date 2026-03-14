@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { TechniqueResearchJobDto } from '../../../../../services/api/technique';
 import {
   getSkillCardSections,
+  getSkillInlineDetailItems,
   mapResearchPreviewSkillToDetail,
 } from '../skillDetailShared';
 
@@ -35,6 +36,13 @@ const createPreviewSkill = (): NonNullable<TechniqueResearchJobDto['preview']>['
       scaleAttr: 'wugong',
       valueType: 'scale',
     },
+    {
+      type: 'mark',
+      operation: 'apply',
+      markId: 'moon_echo',
+      maxStacks: 3,
+      duration: 2,
+    },
   ],
 });
 
@@ -57,7 +65,7 @@ describe('skillDetailShared', () => {
     });
   });
 
-  it('getSkillCardSections: 应拆出顶部元信息、信息网格与摘要区', () => {
+  it('getSkillCardSections: 应拆出顶部元信息、信息网格与摘要区，并保留全部 effects', () => {
     const sections = getSkillCardSections(mapResearchPreviewSkillToDetail(createPreviewSkill()));
 
     expect(sections.metaItems).toStrictEqual([
@@ -76,6 +84,17 @@ describe('skillDetailShared', () => {
       '惊鸿步的第1式。',
       '施加增益：下一次闪避（数值 1），持续2回合',
       '造成物理伤害，金属性，倍率 92%（物攻）',
+      '施加月痕印记（每次+1层，上限3层，持续2回合；被消耗时返还灵气并强化下一次技能）',
+    ]);
+  });
+
+  it('getSkillInlineDetailItems: 应保留全部 effects，不因描述与元信息截断后续效果', () => {
+    const items = getSkillInlineDetailItems(mapResearchPreviewSkillToDetail(createPreviewSkill()));
+
+    expect(items.filter((item) => item.isEffect).map((item) => item.value)).toStrictEqual([
+      '施加增益：下一次闪避（数值 1），持续2回合',
+      '造成物理伤害，金属性，倍率 92%（物攻）',
+      '施加月痕印记（每次+1层，上限3层，持续2回合；被消耗时返还灵气并强化下一次技能）',
     ]);
   });
 });

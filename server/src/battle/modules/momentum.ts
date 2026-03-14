@@ -19,7 +19,15 @@
 import type { ActiveMomentum, BattleUnit } from '../types.js';
 
 export const BATTLE_MOMENTUM_ID = 'battle_momentum';
-export const MOMENTUM_ID_LIST = [BATTLE_MOMENTUM_ID] as const;
+export const BLOOD_TIDE_MOMENTUM_ID = 'blood_tide';
+export const LUNAR_PHASE_MOMENTUM_ID = 'lunar_phase';
+export const CURSE_FLAME_MOMENTUM_ID = 'curse_flame';
+export const MOMENTUM_ID_LIST = [
+  BATTLE_MOMENTUM_ID,
+  BLOOD_TIDE_MOMENTUM_ID,
+  LUNAR_PHASE_MOMENTUM_ID,
+  CURSE_FLAME_MOMENTUM_ID,
+] as const;
 export const MOMENTUM_OPERATION_LIST = ['gain', 'consume'] as const;
 export const MOMENTUM_CONSUME_MODE_LIST = ['all', 'fixed'] as const;
 export const MOMENTUM_BONUS_TYPE_LIST = ['damage', 'heal', 'shield', 'resource', 'all'] as const;

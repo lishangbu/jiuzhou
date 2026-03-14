@@ -7,8 +7,10 @@ import type {
   BattleUnit, 
   BattleAttrs,
   ActiveBuff, 
+  DelayedBurstEffect,
   DotEffect,
   HotEffect,
+  NextSkillBonusEffect,
   ReflectDamageEffect,
   Shield,
   BattleLogEntry 
@@ -49,6 +51,9 @@ export function addBuff(
     existing.dot = buff.dot;
     existing.hot = buff.hot;
     existing.reflectDamage = buff.reflectDamage;
+    existing.delayedBurst = buff.delayedBurst;
+    existing.nextSkillBonus = buff.nextSkillBonus;
+    existing.healForbidden = buff.healForbidden;
     existing.control = buff.control;
     existing.tags = [...buff.tags];
     existing.dispellable = buff.dispellable;
@@ -124,6 +129,23 @@ export function processRoundStartEffects(
   const logs: BattleLogEntry[] = [];
   
   for (const buff of unit.buffs) {
+    if (buff.delayedBurst) {
+      if (buff.delayedBurst.remainingRounds > 1) {
+        buff.delayedBurst.remainingRounds -= 1;
+      } else if (unit.isAlive) {
+        const { actualDamage } = applyDamage(state, unit, buff.delayedBurst.damage, buff.delayedBurst.damageType);
+        logs.push({
+          type: 'dot',
+          round: state.roundCount,
+          unitId: unit.id,
+          unitName: unit.name,
+          buffName: `${buff.name || '延迟爆发'}（延迟爆发）`,
+          damage: actualDamage,
+        });
+        buff.remainingDuration = 0;
+      }
+    }
+
     // DOT伤害
     if (buff.dot) {
       const dotDamage = calculateDotDamage(buff.dot, unit);
@@ -150,7 +172,7 @@ export function processRoundStartEffects(
     }
     
     // HOT治疗
-    if (buff.hot && unit.isAlive) {
+    if (buff.hot && unit.isAlive && !isHealingForbidden(unit)) {
       const hotHeal = calculateHotHeal(buff.hot, unit);
       const actualHeal = applyHealing(unit, hotHeal);
       
@@ -241,6 +263,10 @@ function calculateHotHeal(hot: HotEffect, target: BattleUnit): number {
   return Math.floor(Math.max(1, heal));
 }
 
+export function isHealingForbidden(unit: BattleUnit): boolean {
+  return unit.buffs.some((buff) => buff.healForbidden === true);
+}
+
 export function getUnitReflectDamageRate(unit: BattleUnit): number {
   let totalRate = 0;
 
@@ -261,6 +287,26 @@ function resolveReflectDamageRate(reflectDamage: ReflectDamageEffect, stacks: nu
   const safeStacks = Math.max(1, Math.floor(stacks));
   return reflectDamage.rate * safeStacks;
 }
+
+export const createDelayedBurstRuntime = (params: {
+  damage: number;
+  damageType: DelayedBurstEffect['damageType'];
+  element?: string;
+  remainingRounds: number;
+}): DelayedBurstEffect => ({
+  damage: params.damage,
+  damageType: params.damageType,
+  element: params.element,
+  remainingRounds: Math.max(1, Math.floor(params.remainingRounds)),
+});
+
+export const createNextSkillBonusRuntime = (params: {
+  rate: number;
+  bonusType: NextSkillBonusEffect['bonusType'];
+}): NextSkillBonusEffect => ({
+  rate: Math.max(0, params.rate),
+  bonusType: params.bonusType,
+});
 
 /**
  * 重新计算单位属性

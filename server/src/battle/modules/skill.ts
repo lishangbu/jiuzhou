@@ -8,8 +8,10 @@ import type {
   BattleSkill, 
   SkillEffect,
   AttrModifier,
+  DelayedBurstEffect,
   DotEffect,
   HotEffect,
+  NextSkillBonusEffect,
   ReflectDamageEffect,
   ActionLog,
   BattleLogEntry,
@@ -20,11 +22,24 @@ import { BATTLE_CONSTANTS } from '../types.js';
 import { rollChance } from '../utils/random.js';
 import { calculateDamage, applyDamage } from './damage.js';
 import { applyHealing, applyLifesteal } from './healing.js';
-import { addBuff, addShield, getUnitReflectDamageRate, removeBuff } from './buff.js';
+import {
+  addBuff,
+  addShield,
+  createDelayedBurstRuntime,
+  createNextSkillBonusRuntime,
+  getUnitReflectDamageRate,
+  removeBuff,
+} from './buff.js';
 import { tryApplyControl, canUseSkill, isSilenced, isDisarmed } from './control.js';
 import { resolveTargets } from './target.js';
 import { triggerSetBonusEffects } from './setBonus.js';
-import { applyMarkStacks, consumeMarkStacks, resolveMarkEffectConfig } from './mark.js';
+import {
+  applyMarkStacks,
+  applySoulShackleRecoveryReduction,
+  consumeMarkStacks,
+  resolveMarkEffectConfig,
+} from './mark.js';
+import { applyMarkConsumeRuntimeAddon } from './markAddonRuntime.js';
 import {
   consumeMomentumStacks,
   gainMomentumStacks,
@@ -67,12 +82,16 @@ type BuffRuntimeData = {
   dot?: DotEffect;
   hot?: HotEffect;
   reflectDamage?: ReflectDamageEffect;
+  delayedBurst?: DelayedBurstEffect;
+  nextSkillBonus?: NextSkillBonusEffect;
+  healForbidden?: boolean;
 };
 
 type SkillExecutionContext = {
   momentumBonusRateByType: Record<'damage' | 'heal' | 'shield' | 'resource', number>;
   momentumGained: string[];
   momentumConsumed: string[];
+  consumedNextSkillBuffIds: string[];
 };
 
 type BuffOrDebuffEffect = SkillEffect & { type: 'buff' | 'debuff' };
@@ -82,6 +101,9 @@ function hasBuffRuntimeData(data: BuffRuntimeData): boolean {
     data.dot
     || data.hot
     || data.reflectDamage
+    || data.delayedBurst
+    || data.nextSkillBonus
+    || data.healForbidden
     || (Array.isArray(data.attrModifiers) && data.attrModifiers.length > 0)
   );
 }
@@ -96,6 +118,7 @@ function createSkillExecutionContext(): SkillExecutionContext {
     },
     momentumGained: [],
     momentumConsumed: [],
+    consumedNextSkillBuffIds: [],
   };
 }
 
@@ -119,6 +142,25 @@ function addMomentumBonusToContext(
     return;
   }
   context.momentumBonusRateByType[bonusType] += bonusRate;
+}
+
+function consumeNextSkillBonusBuffs(
+  caster: BattleUnit,
+  context: SkillExecutionContext,
+): void {
+  for (const buff of caster.buffs) {
+    const nextSkillBonus = buff.nextSkillBonus;
+    if (!nextSkillBonus || nextSkillBonus.rate <= 0) continue;
+    addMomentumBonusToContext(context, nextSkillBonus.bonusType, nextSkillBonus.rate);
+    context.consumedNextSkillBuffIds.push(buff.id);
+  }
+}
+
+function clearConsumedNextSkillBonusBuffs(caster: BattleUnit, context: SkillExecutionContext): void {
+  for (const buffId of context.consumedNextSkillBuffIds) {
+    removeBuff(caster, buffId);
+  }
+  context.consumedNextSkillBuffIds = [];
 }
 
 function toFiniteNumber(value: unknown, fallback = 0): number {
@@ -245,6 +287,22 @@ function buildBuffRuntimeData(
   if (buffKind === 'reflect_damage') {
     const reflectDamage = resolveReflectDamageEffect(effect);
     return reflectDamage ? { reflectDamage } : {};
+  }
+
+  if (buffKind === 'heal_forbid') {
+    return { healForbidden: true };
+  }
+
+  if (buffKind === 'next_skill_bonus') {
+    const rate = Math.max(0, toFiniteNumber(effect.value, 0));
+    const bonusType = effect.bonusType ?? 'all';
+    if (rate <= 0) return {};
+    return {
+      nextSkillBonus: createNextSkillBonusRuntime({
+        rate,
+        bonusType,
+      }),
+    };
   }
 
   if (buffKind !== 'attr') return {};
@@ -558,6 +616,7 @@ export function executeSkill(
   state.logs.push(...onSkillLogs);
 
   processMomentumEffectsByOperation(state, caster, skill, context, 'consume');
+  consumeNextSkillBonusBuffs(caster, context);
   
   for (const target of targets) {
     const result = executeSkillOnTarget(state, caster, target, skill, context);
@@ -565,6 +624,7 @@ export function executeSkill(
   }
 
   processMomentumEffectsByOperation(state, caster, skill, context, 'gain');
+  clearConsumedNextSkillBonusBuffs(caster, context);
 
   if (targetResults.length > 0) {
     if (context.momentumConsumed.length > 0) {
@@ -693,6 +753,14 @@ function executeEffect(
 
     case 'momentum':
       break;
+
+    case 'delayed_burst':
+      executeDelayedBurstEffect(caster, target, skill, effect, result);
+      break;
+
+    case 'fate_swap':
+      executeFateSwapEffect(caster, target, effect, result);
+      break;
   }
 }
 
@@ -728,6 +796,14 @@ function executeMarkEffect(
 
   const consumeText = consumed.wasCapped ? `${consumed.text}（触发35%上限）` : consumed.text;
   result.marksConsumed?.push(consumeText);
+  applyMarkConsumeRuntimeAddon({
+    caster,
+    target,
+    config,
+    consumed,
+    targetResult: result,
+    sourceSkillId: skill.id,
+  });
 
   const convertedValue = Math.max(0, consumed.finalValue);
   if (convertedValue <= 0) return;
@@ -889,11 +965,119 @@ function executeBuffEffect(
     dot: runtimeData.dot,
     hot: runtimeData.hot,
     reflectDamage: runtimeData.reflectDamage,
+    delayedBurst: runtimeData.delayedBurst,
+    nextSkillBonus: runtimeData.nextSkillBonus,
+    healForbidden: runtimeData.healForbidden,
     tags: [],
     dispellable: true,
   }, duration, stacks);
   
   result.buffsApplied?.push(buffDefId);
+}
+
+function executeDelayedBurstEffect(
+  caster: BattleUnit,
+  target: BattleUnit,
+  skill: BattleSkill,
+  effect: SkillEffect,
+  result: TargetResult,
+): void {
+  const damageType = resolveEffectDamageType(skill, effect) ?? 'true';
+  const damage = Math.max(1, resolveEffectValue(caster, skill, effect, damageType === 'magic' ? 'fagong' : 'wugong'));
+  const duration = Math.max(1, Math.floor(toFiniteNumber(effect.duration, 2)));
+  const buffDefId = `delayed-burst:${skill.id}:${effect.element ?? skill.element ?? 'none'}`;
+
+  addBuff(target, {
+    id: `${buffDefId}-${Date.now()}`,
+    buffDefId,
+    name: '延迟爆发',
+    type: 'debuff',
+    category: 'skill',
+    sourceUnitId: caster.id,
+    maxStacks: 1,
+    delayedBurst: createDelayedBurstRuntime({
+      damage,
+      damageType,
+      element: resolveEffectDamageElement(skill, effect),
+      remainingRounds: duration,
+    }),
+    tags: ['delayed_burst'],
+    dispellable: true,
+  }, duration + 1, 1);
+
+  result.buffsApplied?.push(`延迟爆发（${duration}回合后）`);
+}
+
+type FateSwapMode = NonNullable<SkillEffect['swapMode']>;
+
+function resolveFateSwapMode(raw: SkillEffect['swapMode']): FateSwapMode {
+  if (raw === 'buff_to_self') return 'buff_to_self';
+  if (raw === 'shield_steal') return 'shield_steal';
+  return 'debuff_to_target';
+}
+
+function executeFateSwapEffect(
+  caster: BattleUnit,
+  target: BattleUnit,
+  effect: SkillEffect,
+  result: TargetResult,
+): void {
+  const swapMode = resolveFateSwapMode(effect.swapMode);
+
+  if (swapMode === 'shield_steal') {
+    const rate = Math.min(1, Math.max(0, toFiniteNumber(effect.value, 1)));
+    const firstShield = target.shields[0];
+    if (!firstShield || firstShield.value <= 0 || rate <= 0) return;
+    const stolenValue = Math.max(1, Math.floor(firstShield.value * rate));
+    firstShield.value = Math.max(0, firstShield.value - stolenValue);
+    firstShield.maxValue = Math.max(firstShield.value, firstShield.maxValue - stolenValue);
+    target.shields = target.shields.filter((shield) => shield.value > 0);
+    addShield(caster, {
+      value: stolenValue,
+      maxValue: stolenValue,
+      duration: Math.max(1, firstShield.duration),
+      absorbType: firstShield.absorbType,
+      priority: firstShield.priority,
+      sourceSkillId: '',
+    }, '');
+    result.buffsApplied?.push(`夺取护盾 ${stolenValue}`);
+    return;
+  }
+
+  const count = Math.max(1, Math.floor(toFiniteNumber(effect.count, 1)));
+  const sourceBuffs = (swapMode === 'debuff_to_target'
+    ? caster.buffs.filter((buff) => buff.type === 'debuff' && buff.dispellable)
+    : target.buffs.filter((buff) => buff.type === 'buff' && buff.dispellable)
+  ).slice(0, count);
+
+  if (sourceBuffs.length <= 0) return;
+
+  for (const buff of sourceBuffs) {
+    const sourceUnit = swapMode === 'debuff_to_target' ? caster : target;
+    const destinationUnit = swapMode === 'debuff_to_target' ? target : caster;
+    addBuff(destinationUnit, {
+      id: buff.id,
+      buffDefId: buff.buffDefId,
+      name: buff.name,
+      type: buff.type,
+      category: buff.category,
+      sourceUnitId: buff.sourceUnitId,
+      maxStacks: buff.maxStacks,
+      attrModifiers: buff.attrModifiers,
+      dot: buff.dot,
+      hot: buff.hot,
+      reflectDamage: buff.reflectDamage,
+      delayedBurst: buff.delayedBurst,
+      nextSkillBonus: buff.nextSkillBonus,
+      healForbidden: buff.healForbidden,
+      control: buff.control,
+      tags: [...buff.tags],
+      dispellable: buff.dispellable,
+    }, buff.remainingDuration, buff.stacks);
+    removeBuff(sourceUnit, buff.id);
+    result.buffsRemoved?.push(`转移${buff.name}`);
+    result.buffsApplied?.push(`承接${buff.name}`);
+  }
 }
 
 /**
@@ -1016,13 +1200,14 @@ function executeRestoreLingqiEffect(
   result: TargetResult,
   context: SkillExecutionContext,
 ): void {
-  const value = Math.max(
+  const rawValue = Math.max(
     0,
     applyContextBonus(
       Math.floor(toFiniteNumber(effect.value, 0)),
       context.momentumBonusRateByType.resource,
     ),
   );
+  const value = applySoulShackleRecoveryReduction(rawValue, target);
   if (value <= 0) return;
   target.lingqi = Math.min(target.lingqi + value, target.currentAttrs.max_lingqi);
   result.resources = [...(result.resources ?? []), { type: 'lingqi', amount: value }];
@@ -1037,7 +1222,10 @@ function executeResourceEffect(
   result: TargetResult,
   context: SkillExecutionContext,
 ): void {
-  const value = applyContextBonus(toFiniteNumber(effect.value, 0), context.momentumBonusRateByType.resource);
+  const rawValue = applyContextBonus(toFiniteNumber(effect.value, 0), context.momentumBonusRateByType.resource);
+  const value = effect.resourceType === 'lingqi' && rawValue > 0
+    ? applySoulShackleRecoveryReduction(rawValue, target)
+    : rawValue;
   if (value === 0) return;
   
   if (effect.resourceType === 'lingqi') {

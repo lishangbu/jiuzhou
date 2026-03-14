@@ -726,7 +726,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
                                   ) : null}
                                   <div className="partner-technique-skill-summary">
                                     {sections.summaryItems.length > 0 ? (
-                                      sections.summaryItems.slice(0, 2).map((item, index) => (
+                                      sections.summaryItems.map((item, index) => (
                                         <div
                                           key={`${skill.id}-${item.label}-${index}`}
                                           className={`partner-technique-skill-summary-line${item.isEffect ? ' is-effect' : ''}`}

@@ -4,6 +4,7 @@
 
 import type { BattleUnit } from '../types.js';
 import { BATTLE_CONSTANTS } from '../types.js';
+import { applySoulShackleRecoveryReduction } from './mark.js';
 
 /**
  * 应用治疗
@@ -13,8 +14,15 @@ export function applyHealing(
   healAmount: number,
   _healerId?: string
 ): number {
+  if (target.buffs.some((buff) => buff.healForbidden)) {
+    return 0;
+  }
+  const effectiveHealAmount = applySoulShackleRecoveryReduction(healAmount, target);
+  if (effectiveHealAmount <= 0) {
+    return 0;
+  }
   const missingHp = target.currentAttrs.max_qixue - target.qixue;
-  const actualHeal = Math.min(healAmount, missingHp);
+  const actualHeal = Math.min(effectiveHealAmount, missingHp);
   
   target.qixue += actualHeal;
   target.stats.healingReceived += actualHeal;

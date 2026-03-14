@@ -152,8 +152,26 @@ const collectStructuredBuffEntries = (): TechniqueBuffCatalogEntry[] => {
   return entries;
 };
 
+const collectBuiltInTechniqueBuffEntries = (): TechniqueBuffCatalogEntry[] => {
+  return [
+    {
+      type: 'debuff',
+      buffKind: 'heal_forbid',
+      buffKey: 'debuff-heal-forbid',
+    },
+    {
+      type: 'buff',
+      buffKind: 'next_skill_bonus',
+      buffKey: 'buff-next-skill-chaos',
+    },
+  ];
+};
+
 const buildTechniqueBuffCatalogCache = (): TechniqueBuffCatalogCache => {
-  const entries = collectStructuredBuffEntries();
+  const entries = [
+    ...collectStructuredBuffEntries(),
+    ...collectBuiltInTechniqueBuffEntries(),
+  ];
   const kindSet = new Set<string>();
   const attrKeySet = new Set<string>();
   const buffKeySetByType = {

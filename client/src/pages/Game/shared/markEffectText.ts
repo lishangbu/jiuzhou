@@ -36,9 +36,28 @@ type ParsedMarkEffect = {
 };
 
 const VOID_EROSION_MARK_ID = "void_erosion";
+const EMBER_BRAND_MARK_ID = "ember_brand";
+const SOUL_SHACKLE_MARK_ID = "soul_shackle";
+const MOON_ECHO_MARK_ID = "moon_echo";
 
 const MARK_NAME_MAP: Record<string, string> = {
   [VOID_EROSION_MARK_ID]: "虚蚀印记",
+  [EMBER_BRAND_MARK_ID]: "灼痕",
+  [SOUL_SHACKLE_MARK_ID]: "蚀心锁",
+  [MOON_ECHO_MARK_ID]: "月痕印记",
+};
+
+const APPLY_TRAIT_TEXT_BY_ID: Record<string, string> = {
+  [VOID_EROSION_MARK_ID]: "同源层数额外提升伤害",
+  [EMBER_BRAND_MARK_ID]: "被消耗时附加灼烧与余烬潜爆",
+  [SOUL_SHACKLE_MARK_ID]: "压低受疗与回灵效率，消耗时抽取灵气",
+  [MOON_ECHO_MARK_ID]: "被消耗时返还灵气并强化下一次技能",
+};
+
+const CONSUME_TRAIT_TEXT_BY_ID: Record<string, string> = {
+  [EMBER_BRAND_MARK_ID]: "并附加灼烧与余烬潜爆",
+  [SOUL_SHACKLE_MARK_ID]: "并抽取灵气",
+  [MOON_ECHO_MARK_ID]: "并返还灵气、强化下一次技能",
 };
 
 const RESULT_TYPE_TEXT: Record<MarkResultType, string> = {
@@ -126,12 +145,16 @@ export const formatMarkEffectText = (raw: Record<string, unknown>): string | nul
   if (!parsed) return null;
 
   const markName = MARK_NAME_MAP[parsed.markId] || parsed.markId;
+  const applyTraitText = APPLY_TRAIT_TEXT_BY_ID[parsed.markId] || '';
+  const consumeTraitText = CONSUME_TRAIT_TEXT_BY_ID[parsed.markId] || '';
   if (parsed.operation === "apply") {
-    return `施加${markName}（每次+${parsed.applyStacks}层，上限${parsed.maxStacks}层，持续${parsed.duration}回合）`;
+    const traitSuffix = applyTraitText ? `；${applyTraitText}` : '';
+    return `施加${markName}（每次+${parsed.applyStacks}层，上限${parsed.maxStacks}层，持续${parsed.duration}回合${traitSuffix}）`;
   }
 
   const consumeModeText =
     parsed.consumeMode === "fixed" ? `固定${parsed.consumeStacks}层` : "全部层数";
   const perStackText = parsed.perStackRate > 0 ? `每层系数${formatPercent(parsed.perStackRate)}%` : "每层系数0%";
-  return `消耗${markName}（${consumeModeText}，${perStackText}），转化为${RESULT_TYPE_TEXT[parsed.resultType]}`;
+  const traitSuffix = consumeTraitText ? `，${consumeTraitText}` : '';
+  return `消耗${markName}（${consumeModeText}，${perStackText}），转化为${RESULT_TYPE_TEXT[parsed.resultType]}${traitSuffix}`;
 };

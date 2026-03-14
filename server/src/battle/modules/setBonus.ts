@@ -16,7 +16,13 @@ import { rollChance } from '../utils/random.js';
 import { addBuff, addShield } from './buff.js';
 import { applyDamage } from './damage.js';
 import { applyHealing } from './healing.js';
-import { applyMarkStacks, consumeMarkStacks, resolveMarkEffectConfig } from './mark.js';
+import {
+  applyMarkStacks,
+  applySoulShackleRecoveryReduction,
+  consumeMarkStacks,
+  resolveMarkEffectConfig,
+} from './mark.js';
+import { applyMarkConsumeRuntimeAddon } from './markAddonRuntime.js';
 import { applyReactiveTrueDamage, calculateReactiveDamageByRate } from './reactiveDamage.js';
 import {
   convertRatingToPercent,
@@ -361,8 +367,10 @@ function applySetResource(
   }
 
   if (resourceType === 'lingqi') {
+    const effectiveAmount = applySoulShackleRecoveryReduction(amount, target);
+    if (effectiveAmount <= 0) return null;
     const before = target.lingqi;
-    const after = Math.min(target.currentAttrs.max_lingqi, before + amount);
+    const after = Math.min(target.currentAttrs.max_lingqi, before + effectiveAmount);
     const gain = Math.max(0, after - before);
     target.lingqi = after;
     if (gain <= 0) return null;
@@ -481,6 +489,14 @@ function applySetMark(
     ...buildTargetResultBase(target),
     marksConsumed: [consumeText],
   };
+  applyMarkConsumeRuntimeAddon({
+    caster: owner,
+    target,
+    config,
+    consumed,
+    targetResult,
+    sourceSkillId: effect.setId,
+  });
 
   if (convertedValue <= 0) {
     return { targetResult };

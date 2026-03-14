@@ -18,10 +18,12 @@
  * 3) 结构化 Buff 的允许列表来自静态预定义数据，若直接手写会与运行时支持集合漂移。
  */
 import { REALM_ORDER } from './realmRules.js';
+import { MARK_TRAIT_GUIDE_BY_ID } from '../../battle/modules/mark.js';
 import {
   TECHNIQUE_SKILL_CONTROL_TYPE_LIST,
   TECHNIQUE_SKILL_DISPEL_TYPE_LIST,
   TECHNIQUE_SKILL_EFFECT_TYPE_LIST,
+  TECHNIQUE_SKILL_FATE_SWAP_MODE_LIST,
   TECHNIQUE_SKILL_MARK_CONSUME_MODE_LIST,
   TECHNIQUE_SKILL_MARK_ID_LIST,
   TECHNIQUE_SKILL_MARK_OPERATION_LIST,
@@ -290,6 +292,7 @@ export const TECHNIQUE_PROMPT_MOMENTUM_ID_ENUM = TECHNIQUE_SKILL_MOMENTUM_ID_LIS
 export const TECHNIQUE_PROMPT_MOMENTUM_OPERATION_ENUM = TECHNIQUE_SKILL_MOMENTUM_OPERATION_LIST;
 export const TECHNIQUE_PROMPT_MOMENTUM_CONSUME_MODE_ENUM = TECHNIQUE_SKILL_MOMENTUM_CONSUME_MODE_LIST;
 export const TECHNIQUE_PROMPT_MOMENTUM_BONUS_TYPE_ENUM = TECHNIQUE_SKILL_MOMENTUM_BONUS_TYPE_LIST;
+export const TECHNIQUE_PROMPT_FATE_SWAP_MODE_ENUM = TECHNIQUE_SKILL_FATE_SWAP_MODE_LIST;
 
 const buildTechniquePromptBuffConfigRules = () => {
   const catalog = getTechniqueStructuredBuffCatalog();
@@ -498,6 +501,7 @@ export const TECHNIQUE_PROMPT_EFFECT_COMMON_FIELDS = {
   momentumId: '势能资源 ID，momentum 效果必填，必须在 momentumIdEnum 中',
   gainStacks: '本次获得的势层数（整数，建议 1~99）',
   bonusType: '消耗势后加成的效果类别，必须在 momentumBonusTypeEnum 中',
+  swapMode: '命运交换模式，必须在 fateSwapModeEnum 中',
 } as const;
 
 export const TECHNIQUE_PROMPT_EFFECT_SCHEMA_BY_TYPE = {
@@ -679,6 +683,7 @@ export const TECHNIQUE_PROMPT_EFFECT_SCHEMA_BY_TYPE = {
     optional: ['maxStacks', 'consumeMode', 'consumeStacks', 'perStackRate', 'resultType', 'valueType', 'scaleAttr', 'scaleRate'],
     rules: [
       'markId 必须在 allowedMarkIds 中',
+      '不同 markId 的战斗语义不同，必须参考 allowedMarkGuideById 设计技能描述与效果搭配',
       'operation 必须在 markOperationEnum 中',
       'consumeMode 必须在 markConsumeModeEnum 中',
       'resultType 必须在 markResultTypeEnum 中',
@@ -708,6 +713,40 @@ export const TECHNIQUE_PROMPT_EFFECT_SCHEMA_BY_TYPE = {
       operation: 'gain',
       gainStacks: 1,
       maxStacks: 5,
+    },
+  },
+  delayed_burst: {
+    meaning: '延迟爆发，在后续回合开始时引爆',
+    required: ['type', 'duration'],
+    optional: ['valueType', 'value', 'scaleAttr', 'scaleRate', 'damageType', 'element'],
+    rules: [
+      'duration 必须是正整数，表示还需等待多少次回合开始后引爆',
+      'damageType 必须在 damageTypeEnum 中',
+      '推荐使用 valueType=scale，并显式给出 scaleAttr + scaleRate',
+    ],
+    defaultTemplate: {
+      type: 'delayed_burst',
+      duration: 2,
+      valueType: 'scale',
+      scaleAttr: 'fagong',
+      scaleRate: 1.5,
+      damageType: 'magic',
+      element: 'huo',
+    },
+  },
+  fate_swap: {
+    meaning: '命运交换，搬运 debuff / buff / 护盾等状态',
+    required: ['type', 'swapMode'],
+    optional: ['count', 'value'],
+    rules: [
+      'swapMode 必须在 fateSwapModeEnum 中',
+      'swapMode=shield_steal 时必须提供 value，且使用 0~1 浮点比例',
+      '其余模式建议提供 count，表示最多搬运的状态数量',
+    ],
+    defaultTemplate: {
+      type: 'fate_swap',
+      swapMode: 'debuff_to_target',
+      count: 1,
     },
   },
 } as const;
@@ -821,6 +860,7 @@ export const buildTechniqueGeneratorPromptInput = (params: {
       resourceTargetEnum: [...TECHNIQUE_PROMPT_RESOURCE_TARGET_ENUM],
       dispelTypeEnum: [...TECHNIQUE_PROMPT_DISPEL_TYPE_ENUM],
       allowedMarkIds: [...TECHNIQUE_PROMPT_MARK_ID_ENUM],
+      allowedMarkGuideById: MARK_TRAIT_GUIDE_BY_ID,
       markOperationEnum: [...TECHNIQUE_PROMPT_MARK_OPERATION_ENUM],
       markConsumeModeEnum: [...TECHNIQUE_PROMPT_MARK_CONSUME_MODE_ENUM],
       markResultTypeEnum: [...TECHNIQUE_PROMPT_MARK_RESULT_TYPE_ENUM],
@@ -828,6 +868,7 @@ export const buildTechniqueGeneratorPromptInput = (params: {
       momentumOperationEnum: [...TECHNIQUE_PROMPT_MOMENTUM_OPERATION_ENUM],
       momentumConsumeModeEnum: [...TECHNIQUE_PROMPT_MOMENTUM_CONSUME_MODE_ENUM],
       momentumBonusTypeEnum: [...TECHNIQUE_PROMPT_MOMENTUM_BONUS_TYPE_ENUM],
+      fateSwapModeEnum: [...TECHNIQUE_PROMPT_FATE_SWAP_MODE_ENUM],
       allowedBuffConfigRules: promptBuffConfigRules,
       attributeKeyEnum: [...TECHNIQUE_EFFECT_SCALE_ATTR_OPTIONS],
       numericRanges: TECHNIQUE_PROMPT_NUMERIC_RANGES,

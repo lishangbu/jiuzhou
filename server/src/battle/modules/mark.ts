@@ -19,22 +19,56 @@
  * 2) 消耗层数与回合衰减顺序分离：衰减统一在回合开始执行，技能/套装仅处理本次即时消耗。
  */
 
-import type { ActiveMark, BattleUnit } from "../types.js";
+import type {
+  ActiveMark,
+  BattleUnit,
+  DelayedBurstEffect,
+  NextSkillBonusEffect,
+} from "../types.js";
 
 export const VOID_EROSION_MARK_ID = "void_erosion";
-export const MARK_ID_LIST = [VOID_EROSION_MARK_ID] as const;
+export const EMBER_BRAND_MARK_ID = "ember_brand";
+export const SOUL_SHACKLE_MARK_ID = "soul_shackle";
+export const MOON_ECHO_MARK_ID = "moon_echo";
+export const MARK_ID_LIST = [
+  VOID_EROSION_MARK_ID,
+  EMBER_BRAND_MARK_ID,
+  SOUL_SHACKLE_MARK_ID,
+  MOON_ECHO_MARK_ID,
+] as const;
 export const MARK_OPERATION_LIST = ["apply", "consume"] as const;
 export const MARK_CONSUME_MODE_LIST = ["all", "fixed"] as const;
 export const MARK_RESULT_TYPE_LIST = ["damage", "shield_self", "heal_self"] as const;
 
 const VOID_EROSION_DAMAGE_PER_STACK = 0.02;
 const VOID_EROSION_DAMAGE_BONUS_CAP = 0.1;
+const SOUL_SHACKLE_RECOVERY_BLOCK_PER_STACK = 0.08;
+const SOUL_SHACKLE_RECOVERY_BLOCK_CAP = 0.4;
+const SOUL_SHACKLE_DRAIN_LINGQI_PER_STACK = 6;
+const EMBER_BRAND_BURN_DAMAGE_RATE = 0.25;
+const EMBER_BRAND_BURN_DURATION = 2;
+const EMBER_BRAND_DELAYED_BURST_RATE = 0.35;
+const EMBER_BRAND_DELAYED_BURST_ROUNDS = 1;
+const MOON_ECHO_LINGQI_PER_STACK = 8;
+const MOON_ECHO_NEXT_SKILL_BONUS_PER_STACK = 0.12;
+const MOON_ECHO_NEXT_SKILL_BONUS_CAP = 0.36;
+const MOON_ECHO_NEXT_SKILL_BONUS_TYPE: NextSkillBonusEffect["bonusType"] = "damage";
 const DEFAULT_MARK_DURATION = 2;
 const DEFAULT_MARK_MAX_STACKS = 5;
 const DEFAULT_CONSUME_DAMAGE_CAP_RATE = 0.35;
 
 const MARK_NAME_MAP: Record<string, string> = {
   [VOID_EROSION_MARK_ID]: "虚蚀印记",
+  [EMBER_BRAND_MARK_ID]: "灼痕",
+  [SOUL_SHACKLE_MARK_ID]: "蚀心锁",
+  [MOON_ECHO_MARK_ID]: "月痕印记",
+};
+
+export const MARK_TRAIT_GUIDE_BY_ID: Record<string, string> = {
+  [VOID_EROSION_MARK_ID]: "同源层数会额外提升伤害，适合持续压制与稳定输出。",
+  [EMBER_BRAND_MARK_ID]: "被消耗后会额外附加灼烧与余烬潜爆，适合延后爆发与追击。",
+  [SOUL_SHACKLE_MARK_ID]: "存在期间会压低目标受疗与回灵效率，消耗时还会抽取灵气，适合封锁续航。",
+  [MOON_ECHO_MARK_ID]: "被消耗后会返还施法者灵气，并强化下一次技能，适合身法连段与续转。",
 };
 
 export type MarkOperation = typeof MARK_OPERATION_LIST[number];
@@ -70,6 +104,19 @@ export interface MarkConsumeResult {
   wasCapped: boolean;
   resultType: MarkResultType;
   text: string;
+}
+
+export interface MarkConsumeAddon {
+  burnDot?: {
+    damage: number;
+    duration: number;
+    damageType: 'magic';
+    element: 'huo';
+  };
+  delayedBurst?: DelayedBurstEffect;
+  restoreLingqi?: number;
+  drainLingqi?: number;
+  nextSkillBonus?: NextSkillBonusEffect;
 }
 
 const toFiniteNumber = (value: unknown, fallback = 0): number => {
@@ -112,6 +159,11 @@ const normalizeResultType = (value: unknown): MarkResultType => {
 export const getMarkName = (markId: string): string => {
   const key = String(markId || "").trim();
   return MARK_NAME_MAP[key] ?? key;
+};
+
+export const getMarkTraitGuide = (markId: string): string => {
+  const key = String(markId || "").trim();
+  return MARK_TRAIT_GUIDE_BY_ID[key] ?? '';
 };
 
 export const ensureUnitMarks = (unit: BattleUnit): ActiveMark[] => {
@@ -330,6 +382,75 @@ export const decayUnitMarksAtRoundStart = (unit: BattleUnit): void => {
     });
   }
   unit.marks = next;
+};
+
+export const getSoulShackleRecoveryBlockRate = (target: BattleUnit): number => {
+  if (!Array.isArray(target.marks) || target.marks.length === 0) return 0;
+  let stacks = 0;
+  for (const mark of target.marks) {
+    if (mark.id !== SOUL_SHACKLE_MARK_ID) continue;
+    if (mark.remainingDuration <= 0) continue;
+    stacks += Math.max(0, mark.stacks);
+  }
+  if (stacks <= 0) return 0;
+  return Math.min(stacks * SOUL_SHACKLE_RECOVERY_BLOCK_PER_STACK, SOUL_SHACKLE_RECOVERY_BLOCK_CAP);
+};
+
+export const applySoulShackleRecoveryReduction = (
+  value: number,
+  target: BattleUnit,
+): number => {
+  if (!Number.isFinite(value) || value <= 0) return value;
+  const rate = getSoulShackleRecoveryBlockRate(target);
+  if (rate <= 0) return Math.floor(value);
+  return Math.floor(value * (1 - rate));
+};
+
+export const buildMarkConsumeAddon = (
+  config: ResolvedMarkEffect,
+  consumed: MarkConsumeResult,
+): MarkConsumeAddon => {
+  if (!consumed.consumed || consumed.consumedStacks <= 0) return {};
+
+  if (config.markId === EMBER_BRAND_MARK_ID) {
+    const burnDamage = Math.max(0, Math.floor(consumed.finalValue * EMBER_BRAND_BURN_DAMAGE_RATE));
+    if (burnDamage <= 0) return {};
+    return {
+      burnDot: {
+        damage: burnDamage,
+        duration: EMBER_BRAND_BURN_DURATION,
+        damageType: 'magic',
+        element: 'huo',
+      },
+      delayedBurst: {
+        damage: Math.max(1, Math.floor(consumed.finalValue * EMBER_BRAND_DELAYED_BURST_RATE)),
+        damageType: 'magic',
+        element: 'huo',
+        remainingRounds: EMBER_BRAND_DELAYED_BURST_ROUNDS,
+      },
+    };
+  }
+
+  if (config.markId === SOUL_SHACKLE_MARK_ID) {
+    return {
+      drainLingqi: consumed.consumedStacks * SOUL_SHACKLE_DRAIN_LINGQI_PER_STACK,
+    };
+  }
+
+  if (config.markId === MOON_ECHO_MARK_ID) {
+    return {
+      restoreLingqi: consumed.consumedStacks * MOON_ECHO_LINGQI_PER_STACK,
+      nextSkillBonus: {
+        rate: Math.min(
+          consumed.consumedStacks * MOON_ECHO_NEXT_SKILL_BONUS_PER_STACK,
+          MOON_ECHO_NEXT_SKILL_BONUS_CAP,
+        ),
+        bonusType: MOON_ECHO_NEXT_SKILL_BONUS_TYPE,
+      },
+    };
+  }
+
+  return {};
 };
 
 export const getVoidErosionDamageBonusRate = (

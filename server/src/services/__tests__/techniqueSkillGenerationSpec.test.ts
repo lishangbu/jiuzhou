@@ -112,3 +112,70 @@ test('升级项中的旧式 effectChanges 字段应被拒绝', () => {
 
   assert.deepEqual(validation, { success: false, reason: 'upgrades 不支持字段 effectChanges' });
 });
+
+test('delayed_burst 效果应支持延迟爆发机制', () => {
+  const validation = validateTechniqueSkillEffect({
+    type: 'delayed_burst',
+    duration: 2,
+    valueType: 'scale',
+    scaleAttr: 'fagong',
+    scaleRate: 1.4,
+    damageType: 'magic',
+    element: 'huo',
+  });
+
+  assert.deepEqual(validation, { success: true });
+});
+
+test('fate_swap 效果应支持命运交换机制', () => {
+  const validation = validateTechniqueSkillEffect({
+    type: 'fate_swap',
+    swapMode: 'debuff_to_target',
+    count: 2,
+  });
+
+  assert.deepEqual(validation, { success: true });
+});
+
+test('heal_forbid 结构化 Buff 应被允许用于禁疗效果', () => {
+  const validation = validateTechniqueSkillEffect({
+    type: 'debuff',
+    buffKind: 'heal_forbid',
+    buffKey: 'debuff-heal-forbid',
+    duration: 2,
+  });
+
+  assert.deepEqual(validation, { success: true });
+});
+
+test('next_skill_bonus 结构化 Buff 应支持下一次技能强化', () => {
+  const validation = validateTechniqueSkillEffect({
+    type: 'buff',
+    buffKind: 'next_skill_bonus',
+    buffKey: 'buff-next-skill-chaos',
+    value: 0.5,
+    duration: 1,
+    bonusType: 'all',
+  });
+
+  assert.deepEqual(validation, { success: true });
+});
+
+test('扩充后的 markId 与 momentumId 应通过共享校验', () => {
+  const markValidation = validateTechniqueSkillEffect({
+    type: 'mark',
+    markId: 'ember_brand',
+    operation: 'apply',
+    maxStacks: 5,
+  });
+  const momentumValidation = validateTechniqueSkillEffect({
+    type: 'momentum',
+    momentumId: 'blood_tide',
+    operation: 'gain',
+    gainStacks: 2,
+    maxStacks: 6,
+  });
+
+  assert.deepEqual(markValidation, { success: true });
+  assert.deepEqual(momentumValidation, { success: true });
+});

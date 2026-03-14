@@ -60,6 +60,8 @@ export const TECHNIQUE_SKILL_EFFECT_TYPE_LIST = [
   'control',
   'mark',
   'momentum',
+  'delayed_burst',
+  'fate_swap',
 ] as const;
 
 export const TECHNIQUE_SKILL_TARGET_TYPE_LIST = [
@@ -114,6 +116,7 @@ export const TECHNIQUE_SKILL_MOMENTUM_ID_LIST = MOMENTUM_ID_LIST;
 export const TECHNIQUE_SKILL_MOMENTUM_OPERATION_LIST = MOMENTUM_OPERATION_LIST;
 export const TECHNIQUE_SKILL_MOMENTUM_CONSUME_MODE_LIST = MOMENTUM_CONSUME_MODE_LIST;
 export const TECHNIQUE_SKILL_MOMENTUM_BONUS_TYPE_LIST = MOMENTUM_BONUS_TYPE_LIST;
+export const TECHNIQUE_SKILL_FATE_SWAP_MODE_LIST = ['debuff_to_target', 'buff_to_self', 'shield_steal'] as const;
 
 export const TECHNIQUE_SKILL_UPGRADE_ALLOWED_CHANGE_KEYS = [
   'target_count',
@@ -149,6 +152,7 @@ const MOMENTUM_ID_SET = new Set<string>(TECHNIQUE_SKILL_MOMENTUM_ID_LIST);
 const MOMENTUM_OPERATION_SET = new Set<string>(TECHNIQUE_SKILL_MOMENTUM_OPERATION_LIST);
 const MOMENTUM_CONSUME_MODE_SET = new Set<string>(TECHNIQUE_SKILL_MOMENTUM_CONSUME_MODE_LIST);
 const MOMENTUM_BONUS_TYPE_SET = new Set<string>(TECHNIQUE_SKILL_MOMENTUM_BONUS_TYPE_LIST);
+const FATE_SWAP_MODE_SET = new Set<string>(TECHNIQUE_SKILL_FATE_SWAP_MODE_LIST);
 const UPGRADE_ALLOWED_CHANGE_KEY_SET = new Set<string>(TECHNIQUE_SKILL_UPGRADE_ALLOWED_CHANGE_KEYS);
 
 const asString = (value: TechniqueJsonValue | undefined): string => {
@@ -337,7 +341,7 @@ export const validateTechniqueSkillEffect = (
         return { success: false, reason: buffValidation.reason };
       }
       const buffKind = typeof effect.buffKind === 'string' ? effect.buffKind.trim() : '';
-      if (buffKind === 'dodge_next') {
+      if (buffKind === 'dodge_next' || buffKind === 'heal_forbid') {
         return { success: true };
       }
       return validateValueExpression(effect);
@@ -427,6 +431,29 @@ export const validateTechniqueSkillEffect = (
         return { success: false, reason: 'bonusType 缺失' };
       }
       return validateRequiredNumberField('perStackRate', effect.perStackRate, 0, 5);
+    }
+
+    case 'delayed_burst': {
+      const damageTypeValidation = validateOptionalEnumField('damageType', effect.damageType, new Set(['physical', 'magic', 'true']));
+      if (!damageTypeValidation.success) return damageTypeValidation;
+      const elementValidation = validateOptionalEnumField('element', effect.element, new Set(['none', 'jin', 'mu', 'shui', 'huo', 'tu']));
+      if (!elementValidation.success) return elementValidation;
+      if (effect.duration === undefined) {
+        return { success: false, reason: 'duration 缺失' };
+      }
+      return validateValueExpression(effect);
+    }
+
+    case 'fate_swap': {
+      const swapModeValidation = validateOptionalEnumField('swapMode', effect.swapMode, FATE_SWAP_MODE_SET);
+      if (!swapModeValidation.success) return swapModeValidation;
+      if (effect.swapMode === undefined) {
+        return { success: false, reason: 'swapMode 缺失' };
+      }
+      if (effect.swapMode === 'shield_steal') {
+        return validateRequiredNumberField('value', effect.value, 0, 1);
+      }
+      return validateOptionalIntegerField('count', effect.count, 1, 99);
     }
 
     default:

@@ -49,6 +49,8 @@ const BUFF_KEY_NAME: Record<string, string> = {
   'buff-hot': '持续治疗',
   'buff-dodge-next': '下一次闪避',
   'buff-reflect-damage': '受击反震',
+  'debuff-heal-forbid': '断脉',
+  'buff-next-skill-chaos': '下一式异变',
 };
 
 const PERCENT_BUFF_ATTR_SET = new Set([
@@ -273,6 +275,20 @@ const formatReflectDamageDetail = (effect: Record<string, unknown>): string => {
   return `反震本次实际受击伤害 ${formatPercent(rate)}%`;
 };
 
+const formatHealForbidDetail = (): string => {
+  return '期间无法通过治疗与持续恢复回复气血';
+};
+
+const formatNextSkillBonusDetail = (effect: Record<string, unknown>): string => {
+  const rate = toNumber(effect.value);
+  const bonusType = toText(effect.bonusType);
+  const bonusTypeText = bonusType
+    ? MOMENTUM_BONUS_LABEL[bonusType] || bonusType
+    : '全部效果';
+  if (rate === null || rate <= 0) return `下一次技能强化${bonusTypeText}`;
+  return `下一次技能的${bonusTypeText}提高${formatPercent(rate)}%`;
+};
+
 const formatBurnExtraDetail = (effect: Record<string, unknown>): string => {
   const burnBonusRate = toNumber(effect.bonusTargetMaxQixueRate);
   if (burnBonusRate === null || burnBonusRate <= 0) return '';
@@ -303,6 +319,12 @@ const formatBurnExtraDetail = (effect: Record<string, unknown>): string => {
 const BUFF_DETAIL_RESOLVER_BY_KIND: Record<string, BuffDetailResolver> = {
   reflect_damage: {
     override: formatReflectDamageDetail,
+  },
+  heal_forbid: {
+    override: formatHealForbidDetail,
+  },
+  next_skill_bonus: {
+    override: formatNextSkillBonusDetail,
   },
 };
 
@@ -473,6 +495,29 @@ const formatMomentumEffect = (effect: Record<string, unknown>): string => {
   return parts.join('，');
 };
 
+const FATE_SWAP_MODE_LABEL: Record<string, string> = {
+  debuff_to_target: '将自身减益转嫁给目标',
+  buff_to_self: '夺取目标增益归于自身',
+  shield_steal: '窃取目标护盾',
+};
+
+const formatDelayedBurstEffect = (effect: Record<string, unknown>, context: SkillEffectContext): string => {
+  const duration = Math.max(1, toPositiveInt(effect.duration) || 1);
+  const damageText = formatDamageEffect(effect, context);
+  return `埋下延迟爆发，${duration}次回合开始后触发：${damageText}`;
+};
+
+const formatFateSwapEffect = (effect: Record<string, unknown>): string => {
+  const swapMode = toText(effect.swapMode);
+  const count = Math.max(1, toPositiveInt(effect.count) || 1);
+  if (swapMode === 'shield_steal') {
+    const rate = toNumber(effect.value);
+    const rateText = rate !== null && rate > 0 ? `${formatPercent(rate)}%` : '100%';
+    return `命运交换：${FATE_SWAP_MODE_LABEL[swapMode] || '窃取目标护盾'} ${rateText}`;
+  }
+  return `命运交换：${FATE_SWAP_MODE_LABEL[swapMode] || '搬运状态'}（最多${count}个）`;
+};
+
 export const formatSkillEffectLines = (effectsRaw: unknown, context: SkillEffectContext = {}): string[] => {
   if (!Array.isArray(effectsRaw)) return [];
 
@@ -537,6 +582,14 @@ export const formatSkillEffectLines = (effectsRaw: unknown, context: SkillEffect
     }
     if (type === 'momentum') {
       lines.push(formatMomentumEffect(effect));
+      continue;
+    }
+    if (type === 'delayed_burst') {
+      lines.push(formatDelayedBurstEffect(effect, context));
+      continue;
+    }
+    if (type === 'fate_swap') {
+      lines.push(formatFateSwapEffect(effect));
       continue;
     }
 

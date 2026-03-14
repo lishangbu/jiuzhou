@@ -1,10 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  EMBER_BRAND_MARK_ID,
+  MOON_ECHO_MARK_ID,
+  SOUL_SHACKLE_MARK_ID,
   VOID_EROSION_MARK_ID,
   applyMarkStacks,
+  buildMarkConsumeAddon,
   consumeMarkStacks,
   decayUnitMarksAtRoundStart,
+  getSoulShackleRecoveryBlockRate,
   getVoidErosionDamageBonusRate,
   resolveMarkEffectConfig,
 } from '../../battle/modules/mark.js';
@@ -157,4 +162,128 @@ test('虚蚀增伤应按层数 +2% 且封顶 10%', () => {
 
   const bonus = getVoidErosionDamageBonusRate(attacker, defender);
   assert.equal(bonus, 0.1);
+});
+
+test('蚀心锁应按总层数压低恢复效率且封顶 40%', () => {
+  const target = createUnit({ id: 'monster-10', name: '木桩妖', type: 'monster' });
+  target.marks = [
+    {
+      id: SOUL_SHACKLE_MARK_ID,
+      sourceUnitId: 'player-1',
+      stacks: 3,
+      maxStacks: 5,
+      remainingDuration: 2,
+    },
+    {
+      id: SOUL_SHACKLE_MARK_ID,
+      sourceUnitId: 'player-2',
+      stacks: 4,
+      maxStacks: 5,
+      remainingDuration: 2,
+    },
+  ];
+
+  const rate = getSoulShackleRecoveryBlockRate(target);
+  assert.equal(rate, 0.4);
+});
+
+test('灼痕与月痕印记应生成各自的消耗附加效果', () => {
+  const target = createUnit({ id: 'monster-11', name: '木桩妖', type: 'monster' });
+
+  const emberApply = resolveMarkEffectConfig({
+    operation: 'apply',
+    markId: EMBER_BRAND_MARK_ID,
+    applyStacks: 2,
+    maxStacks: 5,
+    duration: 2,
+  });
+  assert.ok(emberApply, 'ember apply 配置解析失败');
+  applyMarkStacks(target, 'player-1', emberApply);
+
+  const emberConsume = resolveMarkEffectConfig({
+    operation: 'consume',
+    markId: EMBER_BRAND_MARK_ID,
+    consumeMode: 'all',
+    perStackRate: 1,
+    resultType: 'damage',
+  });
+  assert.ok(emberConsume, 'ember consume 配置解析失败');
+  const emberConsumed = consumeMarkStacks(target, 'player-1', emberConsume, 100, target.currentAttrs.max_qixue);
+  const emberAddon = buildMarkConsumeAddon(emberConsume, emberConsumed);
+  assert.equal(emberAddon.burnDot?.damage, 50);
+  assert.equal(emberAddon.burnDot?.duration, 2);
+  assert.equal(emberAddon.burnDot?.element, 'huo');
+
+  const moonApply = resolveMarkEffectConfig({
+    operation: 'apply',
+    markId: MOON_ECHO_MARK_ID,
+    applyStacks: 2,
+    maxStacks: 3,
+    duration: 2,
+  });
+  assert.ok(moonApply, 'moon apply 配置解析失败');
+  applyMarkStacks(target, 'player-2', moonApply);
+
+  const moonConsume = resolveMarkEffectConfig({
+    operation: 'consume',
+    markId: MOON_ECHO_MARK_ID,
+    consumeMode: 'all',
+    perStackRate: 1,
+    resultType: 'damage',
+  });
+  assert.ok(moonConsume, 'moon consume 配置解析失败');
+  const moonConsumed = consumeMarkStacks(target, 'player-2', moonConsume, 100, target.currentAttrs.max_qixue);
+  const moonAddon = buildMarkConsumeAddon(moonConsume, moonConsumed);
+  assert.equal(moonAddon.restoreLingqi, 16);
+  assert.equal(moonAddon.nextSkillBonus?.rate, 0.24);
+  assert.equal(moonAddon.nextSkillBonus?.bonusType, 'damage');
+});
+
+test('灼痕与蚀心锁应生成潜爆与抽灵附加效果', () => {
+  const target = createUnit({ id: 'monster-12', name: '木桩妖', type: 'monster' });
+
+  const emberApply = resolveMarkEffectConfig({
+    operation: 'apply',
+    markId: EMBER_BRAND_MARK_ID,
+    applyStacks: 2,
+    maxStacks: 5,
+    duration: 2,
+  });
+  assert.ok(emberApply, 'ember apply 配置解析失败');
+  applyMarkStacks(target, 'player-1', emberApply);
+
+  const emberConsume = resolveMarkEffectConfig({
+    operation: 'consume',
+    markId: EMBER_BRAND_MARK_ID,
+    consumeMode: 'all',
+    perStackRate: 1,
+    resultType: 'damage',
+  });
+  assert.ok(emberConsume, 'ember consume 配置解析失败');
+  const emberConsumed = consumeMarkStacks(target, 'player-1', emberConsume, 100, target.currentAttrs.max_qixue);
+  const emberAddon = buildMarkConsumeAddon(emberConsume, emberConsumed);
+  assert.equal(emberAddon.delayedBurst?.damage, 70);
+  assert.equal(emberAddon.delayedBurst?.remainingRounds, 1);
+
+  const shackleApply = resolveMarkEffectConfig({
+    operation: 'apply',
+    markId: SOUL_SHACKLE_MARK_ID,
+    applyStacks: 3,
+    maxStacks: 5,
+    duration: 2,
+  });
+  assert.ok(shackleApply, 'shackle apply 配置解析失败');
+  applyMarkStacks(target, 'player-2', shackleApply);
+
+  const shackleConsume = resolveMarkEffectConfig({
+    operation: 'consume',
+    markId: SOUL_SHACKLE_MARK_ID,
+    consumeMode: 'all',
+    perStackRate: 1,
+    resultType: 'damage',
+  });
+  assert.ok(shackleConsume, 'shackle consume 配置解析失败');
+  const shackleConsumed = consumeMarkStacks(target, 'player-2', shackleConsume, 100, target.currentAttrs.max_qixue);
+  const shackleAddon = buildMarkConsumeAddon(shackleConsume, shackleConsumed);
+  assert.equal(shackleAddon.drainLingqi, 18);
 });

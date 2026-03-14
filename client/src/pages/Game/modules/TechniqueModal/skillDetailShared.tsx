@@ -83,8 +83,14 @@ const getTargetTypeLabel = (value: string | undefined): string => {
 };
 
 const pickSummaryItems = (items: SkillDetailItem[]): SkillDetailItem[] => {
-  const summaries = items.filter((item) => item.label === '描述' || item.isEffect);
-  if (summaries.length > 0) return summaries.slice(0, 3);
+  const descriptionItem = items.find((item) => item.label === '描述');
+  const effectItems = items.filter((item) => item.isEffect);
+  if (descriptionItem || effectItems.length > 0) {
+    return [
+      ...(descriptionItem ? [descriptionItem] : []),
+      ...effectItems,
+    ];
+  }
 
   return items.slice(0, 2);
 };
@@ -189,7 +195,7 @@ export const getSkillInlineDetailItems = (skill: TechniqueSkillDetailLike): Skil
   }, []);
   const effectItems = allItems.filter((item) => item.isEffect);
 
-  return [...inlineItems, ...effectItems].slice(0, 7);
+  return [...inlineItems, ...effectItems];
 };
 
 export const getSkillInlineSummary = (skill: TechniqueSkillDetailLike): string => {

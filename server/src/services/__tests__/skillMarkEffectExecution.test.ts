@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { executeSkill } from '../../battle/modules/skill.js';
-import { VOID_EROSION_MARK_ID } from '../../battle/modules/mark.js';
+import {
+  EMBER_BRAND_MARK_ID,
+  MOON_ECHO_MARK_ID,
+  SOUL_SHACKLE_MARK_ID,
+  VOID_EROSION_MARK_ID,
+} from '../../battle/modules/mark.js';
 import type { BattleSkill } from '../../battle/types.js';
 import { asActionLog, createState, createUnit } from './battleTestUtils.js';
 
@@ -113,4 +118,160 @@ test('技能 mark:consume 在群体目标应按各目标独立结算并写入消
   assert.ok((targetResultB?.damage ?? 0) > 0);
   assert.equal(targetA.marks?.length, 0);
   assert.equal(targetB.marks?.length, 0);
+});
+
+test('技能消耗灼痕后应为目标附加灼烧 DOT 与余烬潜爆', () => {
+  const caster = createUnit({ id: 'player-3', name: '火修' });
+  const target = createUnit({ id: 'monster-4', name: '木桩妖', type: 'monster' });
+  target.marks = [
+    {
+      id: EMBER_BRAND_MARK_ID,
+      sourceUnitId: caster.id,
+      stacks: 2,
+      maxStacks: 5,
+      remainingDuration: 2,
+    },
+  ];
+  const state = createState({ attacker: [caster], defender: [target] });
+
+  const skill: BattleSkill = {
+    id: 'skill-ember-consume',
+    name: '焚痕引爆',
+    source: 'technique',
+    sourceId: 'tech-test',
+    cost: {},
+    cooldown: 0,
+    targetType: 'single_enemy',
+    targetCount: 1,
+    damageType: 'magic',
+    element: 'huo',
+    effects: [
+      {
+        type: 'mark',
+        markId: EMBER_BRAND_MARK_ID,
+        operation: 'consume',
+        consumeMode: 'all',
+        perStackRate: 1,
+        resultType: 'damage',
+        valueType: 'flat',
+        value: 100,
+      },
+    ],
+    triggerType: 'active',
+    aiPriority: 86,
+  };
+
+  const result = executeSkill(state, caster, skill, [target.id]);
+  assert.equal(result.success, true);
+  assert.equal(target.buffs.length, 2);
+  assert.equal(target.buffs[0]?.dot?.damage, 50);
+  assert.equal(target.buffs[0]?.dot?.element, 'huo');
+  assert.equal(target.buffs[0]?.remainingDuration, 2);
+  assert.equal(target.buffs[1]?.delayedBurst?.damage, 70);
+  assert.equal(target.buffs[1]?.delayedBurst?.remainingRounds, 1);
+});
+
+test('技能消耗蚀心锁后应抽取目标灵气给施法者', () => {
+  const caster = createUnit({ id: 'player-4', name: '锁脉修士' });
+  const target = createUnit({ id: 'monster-5', name: '木桩妖', type: 'monster' });
+  caster.lingqi = 10;
+  target.lingqi = 20;
+  target.marks = [
+    {
+      id: SOUL_SHACKLE_MARK_ID,
+      sourceUnitId: caster.id,
+      stacks: 3,
+      maxStacks: 5,
+      remainingDuration: 2,
+    },
+  ];
+  const state = createState({ attacker: [caster], defender: [target] });
+
+  const skill: BattleSkill = {
+    id: 'skill-shackle-consume',
+    name: '锁脉夺灵',
+    source: 'technique',
+    sourceId: 'tech-test',
+    cost: {},
+    cooldown: 0,
+    targetType: 'single_enemy',
+    targetCount: 1,
+    damageType: 'magic',
+    element: 'shui',
+    effects: [
+      {
+        type: 'mark',
+        markId: SOUL_SHACKLE_MARK_ID,
+        operation: 'consume',
+        consumeMode: 'all',
+        perStackRate: 1,
+        resultType: 'damage',
+        valueType: 'flat',
+        value: 100,
+      },
+    ],
+    triggerType: 'active',
+    aiPriority: 83,
+  };
+
+  const result = executeSkill(state, caster, skill, [target.id]);
+  assert.equal(result.success, true);
+  assert.equal(caster.lingqi, 28);
+  assert.equal(target.lingqi, 2);
+
+  const actionLog = asActionLog(result.log);
+  assert.deepEqual(actionLog.targets[0]?.resources, [{ type: 'lingqi', amount: 18 }]);
+});
+
+test('技能消耗月痕印记后应返还施法者灵气并强化下一次技能', () => {
+  const caster = createUnit({ id: 'player-4', name: '身法修士' });
+  const target = createUnit({ id: 'monster-6', name: '木桩妖', type: 'monster' });
+  caster.lingqi = 10;
+  target.marks = [
+    {
+      id: MOON_ECHO_MARK_ID,
+      sourceUnitId: caster.id,
+      stacks: 2,
+      maxStacks: 3,
+      remainingDuration: 2,
+    },
+  ];
+  const state = createState({ attacker: [caster], defender: [target] });
+
+  const skill: BattleSkill = {
+    id: 'skill-moon-consume',
+    name: '折月归身',
+    source: 'technique',
+    sourceId: 'tech-test',
+    cost: {},
+    cooldown: 0,
+    targetType: 'single_enemy',
+    targetCount: 1,
+    damageType: 'physical',
+    element: 'mu',
+    effects: [
+      {
+        type: 'mark',
+        markId: MOON_ECHO_MARK_ID,
+        operation: 'consume',
+        consumeMode: 'all',
+        perStackRate: 1,
+        resultType: 'damage',
+        valueType: 'flat',
+        value: 100,
+      },
+    ],
+    triggerType: 'active',
+    aiPriority: 82,
+  };
+
+  const result = executeSkill(state, caster, skill, [target.id]);
+  assert.equal(result.success, true);
+  assert.equal(caster.lingqi, 26);
+  assert.equal(caster.buffs.length, 1);
+  assert.equal(caster.buffs[0]?.nextSkillBonus?.rate, 0.24);
+  assert.equal(caster.buffs[0]?.nextSkillBonus?.bonusType, 'damage');
+
+  const actionLog = asActionLog(result.log);
+  assert.deepEqual(actionLog.targets[0]?.resources, [{ type: 'lingqi', amount: 16 }]);
 });

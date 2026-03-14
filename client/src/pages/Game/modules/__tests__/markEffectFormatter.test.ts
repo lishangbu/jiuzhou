@@ -15,7 +15,7 @@ describe('mark 文案格式化', () => {
     ]);
 
     expect(lines).toEqual([
-      '施加虚蚀印记（每次+1层，上限5层，持续2回合）',
+      '施加虚蚀印记（每次+1层，上限5层，持续2回合；同源层数额外提升伤害）',
     ]);
   });
 
@@ -34,6 +34,82 @@ describe('mark 文案格式化', () => {
 
     expect(lines).toEqual([
       '消耗虚蚀印记（固定2层，每层系数92%），转化为自身护盾',
+    ]);
+  });
+
+  it('技能入口应将 moon_echo 统一展示为月痕印记', () => {
+    const lines = formatSkillEffectLines([
+      {
+        type: 'mark',
+        operation: 'apply',
+        markId: 'moon_echo',
+        maxStacks: 3,
+        duration: 2,
+      },
+    ]);
+
+    expect(lines).toEqual([
+      '施加月痕印记（每次+1层，上限3层，持续2回合；被消耗时返还灵气并强化下一次技能）',
+    ]);
+  });
+
+  it('技能入口应为灼痕与蚀心锁展示各自语义', () => {
+    const lines = formatSkillEffectLines([
+      {
+        type: 'mark',
+        operation: 'apply',
+        markId: 'ember_brand',
+        maxStacks: 4,
+        duration: 2,
+      },
+      {
+        type: 'mark',
+        operation: 'apply',
+        markId: 'soul_shackle',
+        maxStacks: 5,
+        duration: 2,
+      },
+    ]);
+
+    expect(lines).toEqual([
+      '施加灼痕（每次+1层，上限4层，持续2回合；被消耗时附加灼烧与余烬潜爆）',
+      '施加蚀心锁（每次+1层，上限5层，持续2回合；压低受疗与回灵效率，消耗时抽取灵气）',
+    ]);
+  });
+
+  it('技能入口应为各印记 consume 文案展示新增联动', () => {
+    const lines = formatSkillEffectLines([
+      {
+        type: 'mark',
+        operation: 'consume',
+        markId: 'ember_brand',
+        consumeMode: 'all',
+        perStackRate: 1.1,
+        resultType: 'damage',
+      },
+      {
+        type: 'mark',
+        operation: 'consume',
+        markId: 'soul_shackle',
+        consumeMode: 'fixed',
+        consumeStacks: 2,
+        perStackRate: 0.8,
+        resultType: 'damage',
+      },
+      {
+        type: 'mark',
+        operation: 'consume',
+        markId: 'moon_echo',
+        consumeMode: 'all',
+        perStackRate: 1,
+        resultType: 'damage',
+      },
+    ]);
+
+    expect(lines).toEqual([
+      '消耗灼痕（全部层数，每层系数110%），转化为伤害，并附加灼烧与余烬潜爆',
+      '消耗蚀心锁（固定2层，每层系数80%），转化为伤害，并抽取灵气',
+      '消耗月痕印记（全部层数，每层系数100%），转化为伤害，并返还灵气、强化下一次技能',
     ]);
   });
 

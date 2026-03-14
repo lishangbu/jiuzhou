@@ -185,6 +185,9 @@ export interface ActiveBuff {
   dot?: DotEffect;
   hot?: HotEffect;
   reflectDamage?: ReflectDamageEffect;
+  delayedBurst?: DelayedBurstEffect;
+  nextSkillBonus?: NextSkillBonusEffect;
+  healForbidden?: boolean;
   control?: string;
   
   tags: string[];
@@ -210,6 +213,18 @@ export interface HotEffect {
 
 export interface ReflectDamageEffect {
   rate: number;
+}
+
+export interface DelayedBurstEffect {
+  damage: number;
+  damageType: 'physical' | 'magic' | 'true';
+  element?: string;
+  remainingRounds: number;
+}
+
+export interface NextSkillBonusEffect {
+  rate: number;
+  bonusType: 'damage' | 'heal' | 'shield' | 'resource' | 'all';
 }
 
 // ============================================
@@ -261,14 +276,16 @@ export interface SkillEffect {
     | 'lifesteal'
     | 'control'
     | 'mark'
-    | 'momentum';
+    | 'momentum'
+    | 'delayed_burst'
+    | 'fate_swap';
   value?: number;
   valueType?: 'flat' | 'percent' | 'scale' | 'combined';
   baseValue?: number;  // 固定基础值（用于 combined 模式）
   scaleAttr?: string;
   scaleRate?: number;
   buffKey?: string;  // Buff唯一键（用于刷新/去重）
-  buffKind?: string; // 扩展型 Buff 类别（attr/dot/hot/dodge_next/reflect_damage/...）
+  buffKind?: string; // 扩展型 Buff 类别（attr/dot/hot/dodge_next/reflect_damage/heal_forbid/next_skill_bonus/...）
   attrKey?: string;  // buffKind=attr 时的属性键
   applyType?: 'flat' | 'percent'; // buffKind=attr 时的叠加模式
   duration?: number;
@@ -293,6 +310,7 @@ export interface SkillEffect {
   momentumId?: string;
   gainStacks?: number;
   bonusType?: 'damage' | 'heal' | 'shield' | 'resource' | 'all';
+  swapMode?: 'debuff_to_target' | 'buff_to_self' | 'shield_steal';
 }
 
 interface SkillConditions {
