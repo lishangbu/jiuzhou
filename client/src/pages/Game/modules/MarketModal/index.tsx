@@ -34,6 +34,7 @@ import { getItemQualityClassName, getItemQualityTagClassName, normalizeItemQuali
 import InventoryItemCell from '../../shared/InventoryItemCell';
 import { ITEM_CATEGORY_ALL_OPTION, ITEM_CATEGORY_LABELS, ITEM_CATEGORY_OPTIONS } from '../../shared/itemTaxonomy';
 import { useGameItemTaxonomy } from '../../shared/useGameItemTaxonomy';
+import { useDebouncedValue } from '../../shared/useDebouncedValue';
 import { getLearnableTechniqueId } from '../../shared/learnableTechnique';
 import {
   formatPartnerAttrValue,
@@ -82,6 +83,8 @@ type MarketCategory = string;
 type MarketSort = 'timeDesc' | 'priceAsc' | 'priceDesc' | 'qtyDesc';
 type MarketTooltipPlacement = 'rightTop' | 'right' | 'rightBottom';
 type MobileListingPreviewSource = 'market' | 'my';
+
+const MARKET_SEARCH_DEBOUNCE_MS = 450;
 
 type MobileListingPreview = {
   source: MobileListingPreviewSource;
@@ -610,6 +613,8 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
   const [partnerSort, setPartnerSort] = useState<'timeDesc' | 'priceAsc' | 'priceDesc' | 'levelDesc'>('timeDesc');
   const [partnerQuality, setPartnerQuality] = useState<'all' | '黄' | '玄' | '地' | '天'>('all');
   const [partnerElement, setPartnerElement] = useState<'all' | 'none' | 'jin' | 'mu' | 'shui' | 'huo' | 'tu' | 'an'>('all');
+  const debouncedQuery = useDebouncedValue(query, MARKET_SEARCH_DEBOUNCE_MS);
+  const debouncedPartnerQuery = useDebouncedValue(partnerQuery, MARKET_SEARCH_DEBOUNCE_MS);
 
   const pageSize = 8;
   const [marketPage, setMarketPage] = useState(1);
@@ -697,9 +702,8 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
   const handleQueryChange = useCallback(
     (value: string) => {
       setQuery(value);
-      resetMarketPage();
     },
-    [resetMarketPage],
+    [],
   );
 
   const handleMinPriceChange = useCallback(
@@ -729,9 +733,8 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
   const handlePartnerQueryChange = useCallback(
     (value: string) => {
       setPartnerQuery(value);
-      resetMarketPage();
     },
-    [resetMarketPage],
+    [],
   );
 
   const handlePartnerQualityChange = useCallback(
@@ -794,7 +797,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
         const res = await getMarketListings({
           category,
           quality,
-          query: query.trim(),
+          query: debouncedQuery.trim(),
           sort,
           minPrice: toNonNegativeIntegerOrUndefined(minPrice),
           maxPrice: toNonNegativeIntegerOrUndefined(maxPrice),
@@ -812,7 +815,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
         setMarketLoading(false);
       }
     },
-    [category, maxPrice, minPrice, pageSize, quality, query, sort, messageRef],
+    [category, debouncedQuery, maxPrice, minPrice, pageSize, quality, sort, messageRef],
   );
 
   const refreshMy = useCallback(
@@ -860,7 +863,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
         const res = await getPartnerMarketListings({
           quality: partnerQuality,
           element: partnerElement,
-          query: partnerQuery.trim(),
+          query: debouncedPartnerQuery.trim(),
           sort: partnerSort,
           page,
           pageSize,
@@ -876,7 +879,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
         setPartnerMarketLoading(false);
       }
     },
-    [pageSize, partnerElement, partnerQuality, partnerQuery, partnerSort],
+    [debouncedPartnerQuery, pageSize, partnerElement, partnerQuality, partnerSort],
   );
 
   const refreshMyPartnerListings = useCallback(
@@ -1033,13 +1036,13 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
     if (!open || assetType !== 'item') return;
     setMarketPage(1);
     void refreshMarket(1);
-  }, [assetType, category, maxPrice, minPrice, open, quality, query, refreshMarket, sort]);
+  }, [assetType, category, debouncedQuery, maxPrice, minPrice, open, quality, refreshMarket, sort]);
 
   useEffect(() => {
     if (!open || assetType !== 'partner') return;
     setMarketPage(1);
     void refreshPartnerMarket(1);
-  }, [assetType, open, partnerElement, partnerQuality, partnerQuery, partnerSort, refreshPartnerMarket]);
+  }, [assetType, debouncedPartnerQuery, open, partnerElement, partnerQuality, partnerSort, refreshPartnerMarket]);
 
   useEffect(() => {
     if (!open) return;

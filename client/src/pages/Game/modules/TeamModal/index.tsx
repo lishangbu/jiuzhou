@@ -26,6 +26,7 @@ import {
 } from '../../../../services/teamApi';
 import { useIsMobile } from '../../shared/responsive';
 import { REALM_ORDER } from '../../shared/realm';
+import { useDebouncedValue } from '../../shared/useDebouncedValue';
 import { useRealtimeMemberPresence } from '../../shared/useRealtimeMemberPresence';
 import PlayerName from '../../shared/PlayerName';
 import './index.scss';
@@ -48,6 +49,7 @@ const TeamModal: React.FC<TeamModalProps> = ({ open, onClose, playerName = '我'
   const [panel, setPanel] = useState<TeamPanelKey>('my');
   const isMobile = useIsMobile();
   const [lobbyQuery, setLobbyQuery] = useState('');
+  const debouncedLobbyQuery = useDebouncedValue(lobbyQuery, LOBBY_SEARCH_DEBOUNCE_MS);
   const lobbyQueryRef = useRef('');
 
   const [character, setCharacter] = useState<CharacterData | null>(gameSocket.getCharacter());
@@ -122,8 +124,8 @@ const TeamModal: React.FC<TeamModalProps> = ({ open, onClose, playerName = '我'
   }, []);
 
   useEffect(() => {
-    lobbyQueryRef.current = lobbyQuery.trim();
-  }, [lobbyQuery]);
+    lobbyQueryRef.current = debouncedLobbyQuery.trim();
+  }, [debouncedLobbyQuery]);
 
   const menuItems = useMemo(() => {
     const applyLabel =
@@ -294,12 +296,9 @@ const TeamModal: React.FC<TeamModalProps> = ({ open, onClose, playerName = '我'
 
   useEffect(() => {
     if (!open || !characterId) return;
-    const keyword = lobbyQuery.trim();
-    const timer = window.setTimeout(() => {
-      void refreshLobbyTeams(characterId, keyword || undefined);
-    }, LOBBY_SEARCH_DEBOUNCE_MS);
-    return () => window.clearTimeout(timer);
-  }, [open, characterId, lobbyQuery, refreshLobbyTeams]);
+    const keyword = debouncedLobbyQuery.trim();
+    void refreshLobbyTeams(characterId, keyword || undefined);
+  }, [open, characterId, debouncedLobbyQuery, refreshLobbyTeams]);
 
   useEffect(() => {
     if (!open) return;
