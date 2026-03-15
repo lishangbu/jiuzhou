@@ -9,6 +9,7 @@ import {
 import CaptchaChallengeInput from '../../shared/CaptchaChallengeInput';
 import { useCaptchaChallenge } from '../../shared/useCaptchaChallenge';
 import { invalidatePhoneBindingStatus } from './usePhoneBindingStatus';
+import './PhoneBindingDialog.scss';
 
 /**
  * 手机号绑定弹窗
@@ -164,74 +165,93 @@ const PhoneBindingDialog: React.FC<PhoneBindingDialogProps> = ({
   return (
     <Modal
       open={open}
-      title={title}
       onCancel={onClose}
-      onOk={() => {
-        void handleBindPhoneNumber();
-      }}
-      okText="确认绑定"
-      cancelText="取消"
-      okButtonProps={{
-        loading: binding,
-        disabled: confirmDisabled,
-      }}
-      cancelButtonProps={{
-        disabled: binding || sendingCode,
-      }}
+      footer={null}
+      title={null}
+      closable
       destroyOnHidden
       centered
       width={420}
+      className="phone-binding-dialog"
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{ color: 'var(--text-secondary)' }}>{description}</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-color)' }}>手机号</div>
-          <Input
-            value={phoneNumber}
-            onChange={(event) => setPhoneNumber(event.target.value)}
-            placeholder="请输入大陆手机号"
-            inputMode="numeric"
-            maxLength={20}
-            disabled={binding}
-          />
+      <div className="phone-binding">
+        <div className="phone-binding__header">
+          <h3 className="phone-binding__title">{title}</h3>
+          <div className="phone-binding__hint">{description}</div>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-color)' }}>图片验证码</div>
-          <CaptchaChallengeInput
-            value={captchaCode}
-            captcha={captcha}
-            loading={captchaLoading}
-            disabled={binding || sendingCode}
-            inputPlaceholder="请输入图片验证码"
-            imageAlt="手机号绑定图片验证码"
-            refreshAriaLabel="刷新手机号绑定图片验证码"
-            onChange={setCaptchaCode}
-            onRefresh={() => {
-              void refreshCaptcha();
-            }}
-          />
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-color)' }}>验证码</div>
-          <div style={{ display: 'flex', gap: 8 }}>
+
+        <div className="phone-binding__form">
+          <div className="phone-binding__field">
+            <span className="phone-binding__label">手机号</span>
             <Input
-              value={verificationCode}
-              onChange={(event) => setVerificationCode(event.target.value)}
-              placeholder="请输入 6 位验证码"
+              value={phoneNumber}
+              onChange={(event) => setPhoneNumber(event.target.value)}
+              placeholder="请输入大陆手机号"
               inputMode="numeric"
-              maxLength={6}
+              maxLength={20}
               disabled={binding}
             />
-            <Button
-              onClick={() => {
-                void handleSendCode();
-              }}
-              loading={sendingCode}
-              disabled={sendCodeDisabled}
-            >
-              {countdown > 0 ? `${countdown}s` : '发送验证码'}
-            </Button>
           </div>
+
+          <div className="phone-binding__field">
+            <span className="phone-binding__label">图片验证码</span>
+            <CaptchaChallengeInput
+              value={captchaCode}
+              captcha={captcha}
+              loading={captchaLoading}
+              disabled={binding || sendingCode}
+              inputPlaceholder="请输入图片验证码"
+              imageAlt="手机号绑定图片验证码"
+              refreshAriaLabel="刷新手机号绑定图片验证码"
+              onChange={setCaptchaCode}
+              onRefresh={() => {
+                void refreshCaptcha();
+              }}
+            />
+          </div>
+
+          <div className="phone-binding__field">
+            <span className="phone-binding__label">短信验证码</span>
+            <div className="phone-binding__code-row">
+              <Input
+                value={verificationCode}
+                onChange={(event) => setVerificationCode(event.target.value)}
+                placeholder="请输入 6 位验证码"
+                inputMode="numeric"
+                maxLength={6}
+                disabled={binding}
+              />
+              <Button
+                className="phone-binding__send-btn"
+                onClick={() => {
+                  void handleSendCode();
+                }}
+                loading={sendingCode}
+                disabled={sendCodeDisabled}
+              >
+                {countdown > 0 ? `${countdown}s` : '发送验证码'}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="phone-binding__actions">
+          <Button
+            disabled={binding || sendingCode}
+            onClick={onClose}
+          >
+            取消
+          </Button>
+          <Button
+            type="primary"
+            loading={binding}
+            disabled={confirmDisabled}
+            onClick={() => {
+              void handleBindPhoneNumber();
+            }}
+          >
+            确认绑定
+          </Button>
         </div>
       </div>
     </Modal>
