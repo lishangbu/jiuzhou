@@ -95,10 +95,9 @@ const IdleHistoryList: React.FC<IdleHistoryListProps> = ({
 }) => {
   return (
     <div className="idle-history-list">
-      {/* 标题栏 */}
-      <div className="idle-history-header">
-        <span className="idle-history-title">挂机历史</span>
-        {onRefresh && (
+      {/* 操作栏 */}
+      {onRefresh && (
+        <div className="idle-history-header">
           <Button
             type="text"
             size="small"
@@ -106,22 +105,26 @@ const IdleHistoryList: React.FC<IdleHistoryListProps> = ({
             onClick={onRefresh}
             disabled={isLoading}
             aria-label="刷新历史记录"
-          />
-        )}
-      </div>
+            className="idle-history-refresh-btn"
+          >
+            刷新记录
+          </Button>
+        </div>
+      )}
 
       {/* 列表主体 */}
-      <Spin spinning={isLoading}>
-        {history.length === 0 ? (
-          <Empty
-            description="暂无挂机记录"
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            className="idle-history-empty"
-          />
-        ) : (
-          <div className="idle-history-items">
-            {history.map((session) => (
-              <div
+      <div className="idle-history-body">
+        <Spin spinning={isLoading}>
+          {history.length === 0 ? (
+            <Empty
+              description="暂无挂机记录"
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              className="idle-history-empty"
+            />
+          ) : (
+            <div className="idle-history-items">
+              {history.map((session) => (
+                <div
                 key={session.id}
                 className={`idle-history-item${session.viewedAt === null ? ' is-unviewed' : ''}`}
                 role="button"
@@ -174,6 +177,7 @@ const IdleHistoryList: React.FC<IdleHistoryListProps> = ({
           </div>
         )}
       </Spin>
+      </div>
     </div>
   );
 };
