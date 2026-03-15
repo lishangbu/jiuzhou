@@ -20,7 +20,6 @@
  */
 import { App, Form, Input } from 'antd';
 import { SafetyCertificateOutlined } from '@ant-design/icons';
-import clsx from 'clsx';
 
 import {
   getCaptcha,
@@ -38,8 +37,6 @@ export default function AuthCaptchaField({
   refreshNonce,
 }: AuthCaptchaFieldProps) {
   const { message } = App.useApp();
-  const form = Form.useFormInstance();
-  const captchaCode = Form.useWatch('captchaCode', form);
   const { captcha, loading, refreshCaptcha } = useCaptchaChallenge({
     enabled: true,
     refreshNonce,
@@ -70,14 +67,19 @@ export default function AuthCaptchaField({
 
       <div className="auth-captcha__row">
         <Form.Item
-          className={clsx('auth-captcha__input', {
-            'auth-captcha__input--hide-error-copy':
-              captchaCode && captchaCode.length > 0 && captchaCode.length !== 4,
-          })}
+          className="auth-captcha__input"
           name="captchaCode"
           rules={[
             { required: true, message: '请输入图片验证码' },
-            { len: 4, message: '图片验证码为4位' },
+            {
+              validator: (_rule, value: string | undefined) => {
+                if (!value || value.length === 4) {
+                  return Promise.resolve();
+                }
+
+                return Promise.reject(new Error(''));
+              },
+            },
           ]}
         >
           <Input

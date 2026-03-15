@@ -148,10 +148,8 @@
 .auth-captcha__input {
   flex: 1;
   margin-bottom: 0;
-}
-
-.auth-captcha__input--hide-error-copy {
-  .ant-form-item-explain-error {
+  
+  .ant-form-item-explain-error:empty {
     display: none;
   }
 }
