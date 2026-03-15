@@ -240,7 +240,7 @@ export const nextDungeonInstance = async (
   const user = await getUserAndCharacter(userId);
   if (!user.ok) return { success: false, message: user.message };
 
-  const instRes = await query(`SELECT * FROM dungeon_instance WHERE id = $1 LIMIT 1`, [instanceId]);
+  const instRes = await query(`SELECT * FROM dungeon_instance WHERE id = $1 LIMIT 1 FOR UPDATE`, [instanceId]);
   if (instRes.rows.length === 0) return { success: false, message: '秘境实例不存在' };
   const inst = instRes.rows[0] as DungeonInstanceRow;
 

@@ -275,6 +275,17 @@ const isTransientBattleActionError = (msg: unknown): boolean => {
   return text.includes('目标不是有效的') || text.includes('行动回合') || text.includes('冷却中');
 };
 
+const canAdoptIncomingStartedBattle = (
+  currentBattleId: string | null,
+  currentBattleState: BattleStateDto | null,
+  incomingBattleId: string,
+): boolean => {
+  if (!incomingBattleId) return false;
+  if (!currentBattleId) return true;
+  if (incomingBattleId === currentBattleId) return true;
+  return currentBattleState?.phase === 'finished';
+};
+
 const BattleArea: React.FC<BattleAreaProps> = ({
   enemies,
   allowLocalStart,
@@ -341,6 +352,42 @@ const BattleArea: React.FC<BattleAreaProps> = ({
       autoNextTimerRef.current = null;
     }
   }, []);
+
+  /**
+   * 统一重置战斗展示层的瞬时状态。
+   *
+   * 作用：
+   * - 把“切到新战斗前必须清空的展示状态”收口到单一入口；
+   * - 避免外部 battleId 切换、socket 收到新 battle_started、主动开战三处各自复制同一套 reset 逻辑。
+   *
+   * 输入/输出：
+   * - 输入：无。
+   * - 输出：无，直接重置本组件的展示态。
+   *
+   * 数据流/状态流：
+   * - 新战斗开始前 -> resetBattlePresentationState -> applyBattleStateSnapshot / setBattleId。
+   *
+   * 关键边界条件与坑点：
+   * 1) 这里只重置展示态，不负责清掉服务端 battle，也不负责切换 externalBattleId。
+   * 2) 必须同步清空日志游标与公告去重标记，否则跨波次会出现旧日志串到新战斗的问题。
+   */
+  const resetBattlePresentationState = useCallback(() => {
+    clearAutoNextTimer();
+    clearFloatTimers();
+    setWaitingForCooldown(false);
+    setFloats([]);
+    floatDxIndexRef.current = 0;
+    lastLogIndexRef.current = 0;
+    lastChatLogIndexRef.current = 0;
+    announcedBattleIdRef.current = null;
+    announcedBattleEndIdRef.current = null;
+    announcedBattleDropsIdRef.current = null;
+    announcedAutoNextBattleIdRef.current = null;
+    setSelectedEnemyId(null);
+    setSelectedAllyId(null);
+    setIsTeamBattle(false);
+    setTeamMemberCount(1);
+  }, [clearAutoNextTimer, clearFloatTimers]);
 
   const getRemainingBattleCooldownMs = useCallback((): number => {
     const nextAvailableAt = nextBattleAvailableAtRef.current;
@@ -628,21 +675,8 @@ const BattleArea: React.FC<BattleAreaProps> = ({
 
       if (startingBattleRef.current) return;
       startingBattleRef.current = true;
-      clearAutoNextTimer();
+      resetBattlePresentationState();
       setWaitingForCooldown(false);
-
-      setSelectedEnemyId(null);
-      clearFloatTimers();
-      setFloats([]);
-      floatDxIndexRef.current = 0;
-      lastLogIndexRef.current = 0;
-      lastChatLogIndexRef.current = 0;
-      announcedBattleIdRef.current = null;
-      announcedBattleEndIdRef.current = null;
-      announcedBattleDropsIdRef.current = null;
-      announcedAutoNextBattleIdRef.current = null;
-      setIsTeamBattle(false);
-      setTeamMemberCount(1);
       // 先清空旧战斗状态，防止 auto-next useEffect 在 await 期间
       // 看到旧的 finished state + 已清空的 announcedAutoNextBattleIdRef 而误弹提示
       setBattleState(null);
@@ -712,13 +746,12 @@ const BattleArea: React.FC<BattleAreaProps> = ({
       }
     },
     [
-      clearAutoNextTimer,
-      clearFloatTimers,
       applyStartedBattleState,
       getRemainingBattleCooldownMs,
       message,
       onEscape,
       pushBattleLines,
+      resetBattlePresentationState,
       scheduleBattleStartAfterCooldown,
       syncBattleCooldownMeta,
     ],
@@ -798,19 +831,7 @@ const BattleArea: React.FC<BattleAreaProps> = ({
   useEffect(() => {
     if (!resolvedExternalBattleId) return;
     if (battleIdRef.current === resolvedExternalBattleId) return;
-    clearAutoNextTimer();
-    clearFloatTimers();
-    setFloats([]);
-    floatDxIndexRef.current = 0;
-    lastLogIndexRef.current = 0;
-    lastChatLogIndexRef.current = 0;
-    announcedBattleIdRef.current = null;
-    announcedBattleEndIdRef.current = null;
-    announcedBattleDropsIdRef.current = null;
-    announcedAutoNextBattleIdRef.current = null;
-    setSelectedEnemyId(null);
-    setIsTeamBattle(false);
-    setTeamMemberCount(1);
+    resetBattlePresentationState();
     setStartupStatus('preparing');
     setBattleId(resolvedExternalBattleId);
     setBattleState(null);
@@ -827,9 +848,8 @@ const BattleArea: React.FC<BattleAreaProps> = ({
       });
     })();
   }, [
-    clearAutoNextTimer,
-    clearFloatTimers,
     applyBattleStateSnapshot,
+    resetBattlePresentationState,
     resolvedExternalBattleId,
   ]);
 
@@ -962,17 +982,19 @@ const BattleArea: React.FC<BattleAreaProps> = ({
       const incomingBattleId = String(data?.battleId || '');
       const currentId = battleIdRef.current;
       if (!incomingBattleId) return;
-      if (currentId && incomingBattleId !== currentId) return;
+      if (kind !== 'battle_started' && currentId && incomingBattleId !== currentId) return;
       lastSocketBattleUpdateAtRef.current = Date.now();
 
       if (kind === 'battle_started') {
-        // 重连场景：如果已有 battleId 且与推送的不同，忽略
-        if (currentId && incomingBattleId !== currentId) return;
+        if (!canAdoptIncomingStartedBattle(currentId, battleStateRef.current, incomingBattleId)) return;
+        if (incomingBattleId !== currentId) {
+          resetBattlePresentationState();
+        }
 
         const nextState = data?.state as BattleStateDto | undefined;
         if (nextState) {
           const current = battleStateRef.current;
-          if (current && !isNewerBattleState(nextState, current)) return;
+          if (incomingBattleId === currentId && current && !isNewerBattleState(nextState, current)) return;
           applyStartedBattleState(incomingBattleId, nextState);
         }
         return;
@@ -1028,6 +1050,7 @@ const BattleArea: React.FC<BattleAreaProps> = ({
     applyStartedBattleState,
     ensureBattleDropsAnnounced,
     pushBattleLines,
+    resetBattlePresentationState,
     syncBattleCooldownMeta,
   ]);
 
@@ -1112,14 +1135,17 @@ const BattleArea: React.FC<BattleAreaProps> = ({
 
   const handleNext = useCallback(async () => {
     if (!onNext) return;
-    if (nexting) return;
+    if (nextingRef.current) return;
+    clearAutoNextTimer();
+    nextingRef.current = true;
     setNexting(true);
     try {
       await onNext();
     } finally {
+      nextingRef.current = false;
       setNexting(false);
     }
-  }, [nexting, onNext]);
+  }, [clearAutoNextTimer, onNext]);
 
   const castSkill = useCallback(
     async (skillId: string, targetType?: string): Promise<boolean> => {
