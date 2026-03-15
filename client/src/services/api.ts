@@ -1,5 +1,5 @@
 export { default } from './api/core';
-export * from './api/core';
+export * from './runtimeUrls';
 export * from './api/auth-character';
 export * from './api/rank-sect';
 export * from './api/welfare';

@@ -1,5 +1,6 @@
 import type { AxiosRequestConfig } from 'axios';
-import api, { API_BASE } from './core';
+import api from './core';
+import { API_BASE } from '../runtimeUrls';
 
 export interface CaptchaChallenge {
   captchaId: string;
