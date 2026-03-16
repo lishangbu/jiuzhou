@@ -48,6 +48,7 @@ import { setCharacterPartnerActivation } from './shared/partnerActivation.js';
 import {
   attachPartnerTradeState,
   buildEffectivePartnerTechniqueEntries,
+  buildPartnerEffectiveSkillEntries,
   buildPartnerDisplay,
   buildPartnerDetails,
   buildPartnerTechniqueDto,
@@ -71,6 +72,14 @@ import {
   type PartnerTechniqueSkillDto,
 } from './shared/partnerView.js';
 import { loadPartnerMarketTradeStateMap, loadActivePartnerMarketListing } from './shared/partnerMarketState.js';
+import {
+  buildPartnerBattleSkillPolicy,
+  buildPartnerSkillPolicyDto,
+  loadPartnerSkillPolicyRows,
+  normalizePartnerSkillPolicySlotsForSave,
+  type PartnerSkillPolicyDto,
+  type PartnerSkillPolicySlotDto,
+} from './shared/partnerSkillPolicy.js';
 import { resolveTechniqueBookLearning } from './shared/techniqueBookRules.js';
 import {
   getItemMetaMap,
@@ -88,6 +97,10 @@ export type {
   PartnerTechniqueDto,
   PartnerTechniqueSkillDto,
 } from './shared/partnerView.js';
+export type {
+  PartnerSkillPolicyDto,
+  PartnerSkillPolicySlotDto,
+} from './shared/partnerSkillPolicy.js';
 
 const STARTER_PARTNER_DEF_ID = 'partner-qingmu-xiaoou';
 
@@ -170,6 +183,7 @@ export interface PartnerResult<T = undefined> {
 export interface PartnerBattleMember {
   data: CharacterData;
   skills: SkillData[];
+  skillPolicy: { slots: PartnerSkillPolicySlotDto[] };
 }
 
 const randomIntInclusive = (min: number, max: number): number => {
@@ -292,6 +306,26 @@ const buildTechniqueStateList = (
     techniqueId: entry.techniqueId,
     isInnate: entry.isInnate,
   }));
+};
+
+const loadPartnerSkillPolicyState = async (params: {
+  partnerId: number;
+  definition: PartnerDefConfig;
+  techniqueRows: PartnerTechniqueRow[];
+  forUpdate: boolean;
+}) => {
+  const availableSkills = buildPartnerEffectiveSkillEntries(
+    params.definition,
+    params.techniqueRows,
+  );
+  const persistedRows = await loadPartnerSkillPolicyRows(
+    params.partnerId,
+    params.forUpdate,
+  );
+  return {
+    availableSkills,
+    persistedRows,
+  };
 };
 
 const assertPartnerSystemUnlocked = async (
@@ -490,6 +524,136 @@ class PartnerService {
     } catch (error) {
       const reason = error instanceof Error ? error.message : '未知错误';
       return { success: false, message: `伙伴总览读取失败：${reason}` };
+    }
+  }
+
+  async getSkillPolicy(
+    characterId: number,
+    partnerId: number,
+  ): Promise<PartnerResult<PartnerSkillPolicyDto>> {
+    try {
+      const unlockState = await assertPartnerSystemUnlocked(characterId);
+      if (!unlockState.success) {
+        return { success: false, message: unlockState.message };
+      }
+
+      const character = await loadCharacterPartnerContext(characterId, false);
+      if (!character) return { success: false, message: '角色不存在' };
+
+      const partnerRow = await loadSinglePartnerRow(characterId, partnerId, false);
+      if (!partnerRow) return { success: false, message: '伙伴不存在' };
+      const partnerDef = getPartnerDefinitionById(partnerRow.partner_def_id);
+      if (!partnerDef) {
+        throw new Error(`伙伴模板不存在: ${partnerRow.partner_def_id}`);
+      }
+
+      const techniqueMap = await loadPartnerTechniqueRows([partnerId], false);
+      const techniqueRows = techniqueMap.get(partnerId) ?? [];
+      const skillPolicyState = await loadPartnerSkillPolicyState({
+        partnerId,
+        definition: partnerDef,
+        techniqueRows,
+        forUpdate: false,
+      });
+
+      return {
+        success: true,
+        message: 'ok',
+        data: buildPartnerSkillPolicyDto({
+          partnerId,
+          availableSkills: skillPolicyState.availableSkills,
+          persistedRows: skillPolicyState.persistedRows,
+        }),
+      };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : '未知错误';
+      return { success: false, message: `伙伴技能策略读取失败：${reason}` };
+    }
+  }
+
+  @Transactional
+  async updateSkillPolicy(
+    characterId: number,
+    partnerId: number,
+    slots: PartnerSkillPolicySlotDto[],
+  ): Promise<PartnerResult<PartnerSkillPolicyDto>> {
+    try {
+      const unlockState = await assertPartnerSystemUnlocked(characterId);
+      if (!unlockState.success) {
+        return { success: false, message: unlockState.message };
+      }
+
+      const character = await loadCharacterPartnerContext(characterId, true);
+      if (!character) return { success: false, message: '角色不存在' };
+
+      const partnerRow = await loadSinglePartnerRow(characterId, partnerId, true);
+      if (!partnerRow) return { success: false, message: '伙伴不存在' };
+      const partnerDef = getPartnerDefinitionById(partnerRow.partner_def_id);
+      if (!partnerDef) {
+        throw new Error(`伙伴模板不存在: ${partnerRow.partner_def_id}`);
+      }
+
+      const techniqueMap = await loadPartnerTechniqueRows([partnerId], true);
+      const techniqueRows = techniqueMap.get(partnerId) ?? [];
+      const skillPolicyState = await loadPartnerSkillPolicyState({
+        partnerId,
+        definition: partnerDef,
+        techniqueRows,
+        forUpdate: true,
+      });
+      const normalizedSlotsResult = normalizePartnerSkillPolicySlotsForSave({
+        availableSkills: skillPolicyState.availableSkills,
+        slots,
+      });
+      if (!normalizedSlotsResult.success) {
+        return { success: false, message: normalizedSlotsResult.message };
+      }
+
+      await query(
+        `
+          DELETE FROM character_partner_skill_policy
+          WHERE partner_id = $1
+        `,
+        [partnerId],
+      );
+
+      for (const slot of normalizedSlotsResult.value) {
+        await query(
+          `
+            INSERT INTO character_partner_skill_policy (
+              partner_id,
+              skill_id,
+              priority,
+              enabled,
+              created_at,
+              updated_at
+            )
+            VALUES ($1, $2, $3, $4, NOW(), NOW())
+          `,
+          [partnerId, slot.skillId, slot.priority, slot.enabled],
+        );
+      }
+
+      return {
+        success: true,
+        message: '伙伴技能策略已保存',
+        data: buildPartnerSkillPolicyDto({
+          partnerId,
+          availableSkills: skillPolicyState.availableSkills,
+          persistedRows: normalizedSlotsResult.value.map((slot, index) => ({
+            id: index + 1,
+            partner_id: partnerId,
+            skill_id: slot.skillId,
+            priority: slot.priority,
+            enabled: slot.enabled,
+            created_at: new Date(),
+            updated_at: new Date(),
+          })),
+        }),
+      };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : '未知错误';
+      return { success: false, message: `伙伴技能策略保存失败：${reason}` };
     }
   }
 
@@ -1089,10 +1253,17 @@ class PartnerService {
     }
 
     const techniqueMap = await loadPartnerTechniqueRows([partnerRow.id], false);
+    const techniqueRows = techniqueMap.get(partnerRow.id) ?? [];
     const partnerDisplay = buildPartnerDisplay({
       row: partnerRow,
       definition: partnerDef,
-      techniqueRows: techniqueMap.get(partnerRow.id) ?? [],
+      techniqueRows,
+    });
+    const skillPolicyState = await loadPartnerSkillPolicyState({
+      partnerId: partnerRow.id,
+      definition: partnerDef,
+      techniqueRows,
+      forUpdate: false,
     });
 
     const skillDefinitionMap = new Map(
@@ -1100,13 +1271,8 @@ class PartnerService {
         .filter((entry) => entry.enabled !== false)
         .map((entry) => [entry.id, entry] as const),
     );
-    const skillIds = [
-      ...new Set(
-        partnerDisplay.techniques.flatMap((entry) => entry.skillIds).filter((entry) => entry.length > 0),
-      ),
-    ];
-    const skills = skillIds
-      .map((skillId) => skillDefinitionMap.get(skillId))
+    const skills = skillPolicyState.availableSkills
+      .map((entry) => skillDefinitionMap.get(entry.skillId))
       .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
       .map((entry) => toBattleSkillData(entry));
 
@@ -1150,7 +1316,14 @@ class PartnerService {
       setBonusEffects: [],
     };
 
-    return { data, skills };
+    return {
+      data,
+      skills,
+      skillPolicy: buildPartnerBattleSkillPolicy({
+        availableSkills: skillPolicyState.availableSkills,
+        persistedRows: skillPolicyState.persistedRows,
+      }),
+    };
   }
 
   /**

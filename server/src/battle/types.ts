@@ -3,6 +3,7 @@
  */
 
 import type { SkillCostValue } from '../shared/skillCost.js';
+import type { PartnerSkillPolicySlotDto } from '../services/shared/partnerSkillPolicy.js';
 
 // ============================================
 // 怪物AI配置
@@ -67,6 +68,7 @@ export interface BattleUnit {
   skills: BattleSkill[];
   skillCooldowns: Record<string, number>;
   skillCooldownDiscountBank: Record<string, number>;
+  partnerSkillPolicy?: { slots: PartnerSkillPolicySlotDto[] };
 
   // 套装战斗效果（仅战斗期触发型效果）
   setBonusEffects: BattleSetBonusEffect[];

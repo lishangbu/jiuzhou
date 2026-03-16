@@ -2,7 +2,7 @@
  * 伙伴弹窗共享常量与纯函数。
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：集中维护伙伴面板枚举、属性展示顺序、技能结果文案，供总览/升级/功法三个面板复用。
+ * 1. 做什么：集中维护伙伴面板枚举、属性展示顺序、技能结果文案与技能策略重排规则，供总览/升级/功法/技能策略面板复用。
  * 2. 做什么：把高频变化的展示规则从组件 JSX 中抽离，减少重复 map/label 判断。
  * 3. 不做什么：不发请求、不持有状态，也不处理弹窗生命周期。
  *
@@ -11,11 +11,11 @@
  * - 输出：可直接渲染的标签、文案和图标地址。
  *
  * 数据流/状态流：
- * partner api DTO -> 本文件格式化/映射 -> PartnerModal UI。
+ * partner api DTO -> 本文件格式化/映射/重排 -> PartnerModal UI。
  *
  * 关键边界条件与坑点：
  * 1. 百分比属性与数值属性的格式化规则必须集中，否则总览和功法面板容易出现显示不一致。
- * 2. 空槽位数量依赖 `slotCount - techniques.length`，需要统一计算，避免不同面板出现不同结果。
+ * 2. 技能策略的“顺序即优先级”必须只在这里重排一次，避免前端多个入口各自改 priority 导致提交口径漂移。
  */
 
 import type {
@@ -23,6 +23,8 @@ import type {
   PartnerDetailDto,
   PartnerOverviewDto,
   PartnerPassiveAttrsDto,
+  PartnerSkillPolicyEntryDto,
+  PartnerSkillPolicySlotDto,
   PartnerTechniqueDto,
   PartnerTechniqueUpgradeCostDto,
 } from '../../../../services/api';
@@ -39,13 +41,14 @@ export {
   resolvePartnerAvatar,
 } from '../../shared/partnerDisplay';
 
-export type PartnerPanelKey = 'partners' | 'overview' | 'upgrade' | 'technique' | 'recruit';
+export type PartnerPanelKey = 'partners' | 'overview' | 'upgrade' | 'technique' | 'skill_policy' | 'recruit';
 
 export const PARTNER_PANEL_OPTIONS: Array<{ value: PartnerPanelKey; label: string }> = [
   { value: 'partners', label: '伙伴列表' },
   { value: 'overview', label: '总览' },
   { value: 'upgrade', label: '升级' },
   { value: 'technique', label: '功法' },
+  { value: 'skill_policy', label: '技能策略' },
   { value: 'recruit', label: '招募' },
 ];
 
@@ -129,4 +132,91 @@ export const formatPartnerLearnResult = (
 
 export const resolvePartnerBookLabel = (book: PartnerBookDto): string => {
   return book.name;
+};
+
+export const groupPartnerSkillPolicyEntries = (
+  entries: PartnerSkillPolicyEntryDto[],
+): {
+  enabledEntries: PartnerSkillPolicyEntryDto[];
+  disabledEntries: PartnerSkillPolicyEntryDto[];
+} => {
+  const enabledEntries = entries.filter((entry) => entry.enabled);
+  const disabledEntries = entries.filter((entry) => !entry.enabled);
+  return {
+    enabledEntries,
+    disabledEntries,
+  };
+};
+
+const rebuildPartnerSkillPolicyEntries = (
+  enabledEntries: PartnerSkillPolicyEntryDto[],
+  disabledEntries: PartnerSkillPolicyEntryDto[],
+): PartnerSkillPolicyEntryDto[] => {
+  return [
+    ...enabledEntries.map((entry, index) => ({
+      ...entry,
+      enabled: true,
+      priority: index + 1,
+    })),
+    ...disabledEntries.map((entry, index) => ({
+      ...entry,
+      enabled: false,
+      priority: enabledEntries.length + index + 1,
+    })),
+  ];
+};
+
+export const movePartnerSkillPolicyEntry = (
+  entries: PartnerSkillPolicyEntryDto[],
+  skillId: string,
+  direction: 'up' | 'down',
+): PartnerSkillPolicyEntryDto[] => {
+  const { enabledEntries, disabledEntries } = groupPartnerSkillPolicyEntries(entries);
+  const currentIndex = enabledEntries.findIndex((entry) => entry.skillId === skillId);
+  if (currentIndex < 0) return entries;
+
+  const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+  if (targetIndex < 0 || targetIndex >= enabledEntries.length) return entries;
+
+  const nextEnabledEntries = [...enabledEntries];
+  const currentEntry = nextEnabledEntries[currentIndex];
+  const targetEntry = nextEnabledEntries[targetIndex];
+  nextEnabledEntries[currentIndex] = targetEntry;
+  nextEnabledEntries[targetIndex] = currentEntry;
+  return rebuildPartnerSkillPolicyEntries(nextEnabledEntries, disabledEntries);
+};
+
+export const togglePartnerSkillPolicyEntry = (
+  entries: PartnerSkillPolicyEntryDto[],
+  skillId: string,
+): PartnerSkillPolicyEntryDto[] => {
+  const { enabledEntries, disabledEntries } = groupPartnerSkillPolicyEntries(entries);
+  const enabledIndex = enabledEntries.findIndex((entry) => entry.skillId === skillId);
+  if (enabledIndex >= 0) {
+    const nextEnabledEntries = enabledEntries.filter((entry) => entry.skillId !== skillId);
+    const toggledEntry = enabledEntries[enabledIndex];
+    return rebuildPartnerSkillPolicyEntries(nextEnabledEntries, [
+      ...disabledEntries,
+      { ...toggledEntry, enabled: false },
+    ]);
+  }
+
+  const disabledIndex = disabledEntries.findIndex((entry) => entry.skillId === skillId);
+  if (disabledIndex < 0) return entries;
+  const toggledEntry = disabledEntries[disabledIndex];
+  const nextDisabledEntries = disabledEntries.filter((entry) => entry.skillId !== skillId);
+  return rebuildPartnerSkillPolicyEntries([
+    ...enabledEntries,
+    { ...toggledEntry, enabled: true },
+  ], nextDisabledEntries);
+};
+
+export const buildPartnerSkillPolicySlots = (
+  entries: PartnerSkillPolicyEntryDto[],
+): PartnerSkillPolicySlotDto[] => {
+  return entries.map((entry) => ({
+    skillId: entry.skillId,
+    priority: entry.priority,
+    enabled: entry.enabled,
+  }));
 };

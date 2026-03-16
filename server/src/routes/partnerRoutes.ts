@@ -45,9 +45,61 @@ const parseNonEmptyText = (value: unknown): string | null => {
   return normalized.length > 0 ? normalized : null;
 };
 
+const parsePartnerSkillPolicySlots = (
+  value: Array<{ skillId?: string; priority?: number; enabled?: boolean }> | undefined,
+): Array<{ skillId: string; priority: number; enabled: boolean }> | null => {
+  if (!Array.isArray(value)) return null;
+  const slots: Array<{ skillId: string; priority: number; enabled: boolean }> = [];
+  for (const rawSlot of value) {
+    if (!rawSlot || typeof rawSlot !== 'object' || Array.isArray(rawSlot)) {
+      return null;
+    }
+    const skillId = parseNonEmptyText(rawSlot.skillId);
+    const priority = parsePositiveInt(rawSlot.priority);
+    if (!skillId || !priority || typeof rawSlot.enabled !== 'boolean') {
+      return null;
+    }
+    slots.push({
+      skillId,
+      priority,
+      enabled: rawSlot.enabled,
+    });
+  }
+  return slots;
+};
+
 router.get('/overview', asyncHandler(async (req, res) => {
   const characterId = req.characterId!;
   const result = await partnerService.getOverview(characterId);
+  return sendResult(res, result);
+}));
+
+router.get('/skill-policy', asyncHandler(async (req, res) => {
+  const characterId = req.characterId!;
+  const partnerId = parsePositiveInt(req.query?.partnerId);
+  if (!partnerId) {
+    sendResult(res, { success: false, message: 'partnerId 参数无效' });
+    return;
+  }
+
+  const result = await partnerService.getSkillPolicy(characterId, partnerId);
+  return sendResult(res, result);
+}));
+
+router.put('/skill-policy', asyncHandler(async (req, res) => {
+  const characterId = req.characterId!;
+  const partnerId = parsePositiveInt(req.body?.partnerId);
+  const slots = parsePartnerSkillPolicySlots(req.body?.slots);
+  if (!partnerId) {
+    sendResult(res, { success: false, message: 'partnerId 参数无效' });
+    return;
+  }
+  if (!slots) {
+    sendResult(res, { success: false, message: 'slots 参数无效' });
+    return;
+  }
+
+  const result = await partnerService.updateSkillPolicy(characterId, partnerId, slots);
   return sendResult(res, result);
 }));
 

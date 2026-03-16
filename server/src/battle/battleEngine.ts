@@ -18,7 +18,7 @@ import { BATTLE_CONSTANTS } from './types.js';
 import { validateBattleState, validateSkillUse, validatePlayerAction } from './utils/validation.js';
 import { addBuff, processRoundStartEffects, processRoundEndBuffs } from './modules/buff.js';
 import { executeSkill, getNormalAttack } from './modules/skill.js';
-import { makeAIDecision, selectTargets } from './modules/ai.js';
+import { makeAIDecision, makePartnerSkillPolicyDecision, selectTargets } from './modules/ai.js';
 import { isFeared, isStunned } from './modules/control.js';
 import { triggerSetBonusEffects } from './modules/setBonus.js';
 import { decayUnitMarksAtRoundStart } from './modules/mark.js';
@@ -307,6 +307,17 @@ export class BattleEngine {
       const skill = playerSkillSelector(currentUnit);
       const targetIds = selectTargets(this.state, currentUnit, skill);
       executeSkill(this.state, currentUnit, skill, targetIds);
+      this.advanceAction();
+      return;
+    }
+
+    if (currentUnit.type === 'partner' && currentUnit.partnerSkillPolicy) {
+      const decision = makePartnerSkillPolicyDecision(
+        this.state,
+        currentUnit,
+        currentUnit.partnerSkillPolicy.slots,
+      );
+      executeSkill(this.state, currentUnit, decision.skill, decision.targetIds);
       this.advanceAction();
       return;
     }

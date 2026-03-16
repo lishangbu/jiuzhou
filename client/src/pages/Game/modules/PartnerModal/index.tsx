@@ -1,4 +1,5 @@
-import { App, Button, Drawer, Empty, InputNumber, Modal, Progress, Segmented, Skeleton, Tag } from 'antd';
+import { ArrowDownOutlined, ArrowUpOutlined, CheckCircleOutlined, StopOutlined } from '@ant-design/icons';
+import { App, Button, Drawer, Empty, InputNumber, Modal, Progress, Segmented, Skeleton, Tag, Tooltip } from 'antd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   activatePartner,
@@ -8,6 +9,7 @@ import {
   generatePartnerRecruitDraft,
   getPartnerOverview,
   getPartnerRecruitStatus,
+  getPartnerSkillPolicy,
   getPartnerTechniqueUpgradeCost,
   injectPartnerExp,
   learnPartnerTechnique,
@@ -17,8 +19,11 @@ import {
   type PartnerOverviewDto,
   type PartnerRecruitPreviewDto,
   type PartnerRecruitStatusDto,
+  type PartnerSkillPolicyDto,
+  type PartnerSkillPolicyEntryDto,
   type PartnerTechniqueDto,
   type PartnerTechniqueUpgradeCostDto,
+  updatePartnerSkillPolicy,
   upgradePartnerTechnique,
 } from '../../../../services/api';
 import { gameSocket } from '../../../../services/gameSocket';
@@ -26,9 +31,10 @@ import { getUnifiedApiErrorMessage } from '../../../../services/api';
 import { DEFAULT_ICON as partnerIcon } from '../../shared/resolveIcon';
 import { dispatchPartnerChangedEvent, PARTNER_CHANGED_EVENT } from '../../shared/partnerTradeEvents';
 import { useIsMobile } from '../../shared/responsive';
-import { getSkillCardSections } from '../TechniqueModal/skillDetailShared';
+import { getSkillCardSections, renderSkillTooltip } from '../TechniqueModal/skillDetailShared';
 import {
   buildPartnerCombatAttrRows,
+  buildPartnerSkillPolicySlots,
   formatPartnerElementLabel,
   formatPartnerAttrValue,
   formatPartnerTechniqueLayerLabel,
@@ -39,11 +45,14 @@ import {
   getPartnerAttrLabel,
   getPartnerEmptySlotCount,
   getPartnerVisibleBaseAttrs,
+  groupPartnerSkillPolicyEntries,
+  movePartnerSkillPolicyEntry,
   PARTNER_PANEL_OPTIONS,
   resolvePartnerActionLabel,
   resolvePartnerAvatar,
   resolvePartnerBookLabel,
   resolvePartnerNextSelectedId,
+  togglePartnerSkillPolicyEntry,
   type PartnerPanelKey,
 } from './partnerShared';
 import { getElementTextClassName, getElementToneClassName } from '../../shared/elementTheme';
@@ -63,6 +72,11 @@ interface PartnerModalProps {
 }
 
 type RecruitStatusRefreshMode = 'initial' | 'background';
+
+const PARTNER_SKILL_TOOLTIP_CLASS_NAMES = {
+  root: 'skill-tooltip-overlay game-tooltip-surface-root',
+  container: 'skill-tooltip-overlay-container game-tooltip-surface-container',
+} as const;
 
 /**
  * 伙伴系统主弹窗。
@@ -91,6 +105,9 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
   const [panel, setPanel] = useState<PartnerPanelKey>('overview');
   const [overview, setOverview] = useState<PartnerOverviewDto | null>(null);
   const [recruitStatus, setRecruitStatus] = useState<PartnerRecruitStatusDto | null>(null);
+  const [skillPolicy, setSkillPolicy] = useState<PartnerSkillPolicyDto | null>(null);
+  const [skillPolicyDraftEntries, setSkillPolicyDraftEntries] = useState<PartnerSkillPolicyEntryDto[]>([]);
+  const [skillPolicyLoading, setSkillPolicyLoading] = useState(false);
   const [selectedPartnerId, setSelectedPartnerId] = useState<number | null>(null);
   const [injectExpValue, setInjectExpValue] = useState<number | null>(null);
   const [techniqueResultText, setTechniqueResultText] = useState('');
@@ -133,11 +150,32 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
     }
   }, [applyRecruitStatus, open]);
 
+  const refreshSkillPolicy = useCallback(async (partnerId: number) => {
+    if (!open) return;
+    setSkillPolicyLoading(true);
+    try {
+      const res = await getPartnerSkillPolicy(partnerId);
+      if (!res.success || !res.data) {
+        throw new Error(getUnifiedApiErrorMessage(res, '获取伙伴技能策略失败'));
+      }
+      setSkillPolicy(res.data);
+      setSkillPolicyDraftEntries(res.data.entries);
+    } catch {
+      setSkillPolicy(null);
+      setSkillPolicyDraftEntries([]);
+    } finally {
+      setSkillPolicyLoading(false);
+    }
+  }, [open]);
+
   useEffect(() => {
     if (!open) {
       setPanel('overview');
       setOverview(null);
       setRecruitStatus(null);
+      setSkillPolicy(null);
+      setSkillPolicyDraftEntries([]);
+      setSkillPolicyLoading(false);
       setSelectedPartnerId(null);
       setInjectExpValue(null);
       setTechniqueResultText('');
@@ -160,6 +198,8 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
     setTechniqueResultText('');
     setTechniqueUpgradeCosts({});
     setExpandedTechniqueSkills({});
+    setSkillPolicy(null);
+    setSkillPolicyDraftEntries([]);
   }, [selectedPartnerId]);
 
   useEffect(() => {
@@ -176,6 +216,27 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
     return overview.partners.find((partner) => partner.id === selectedPartnerId) ?? null;
   }, [overview, selectedPartnerId]);
   const selectedPartnerListed = selectedPartner?.tradeStatus === 'market_listed';
+  const skillPolicyChanged = useMemo(() => {
+    if (!skillPolicy) return false;
+    const baseEntries = skillPolicy.entries;
+    if (baseEntries.length !== skillPolicyDraftEntries.length) return true;
+    return baseEntries.some((entry, index) => {
+      const draftEntry = skillPolicyDraftEntries[index];
+      if (!draftEntry) return true;
+      return (
+        entry.skillId !== draftEntry.skillId
+        || entry.priority !== draftEntry.priority
+        || entry.enabled !== draftEntry.enabled
+      );
+    });
+  }, [skillPolicy, skillPolicyDraftEntries]);
+
+  useEffect(() => {
+    if (!open || panel !== 'skill_policy' || !selectedPartner) {
+      return;
+    }
+    void refreshSkillPolicy(selectedPartner.id);
+  }, [open, panel, refreshSkillPolicy, selectedPartner]);
 
   const recruitIndicator = useMemo(() => buildPartnerRecruitIndicator(recruitStatus), [recruitStatus]);
   const recruitPanelView = useMemo(() => resolvePartnerRecruitPanelView(recruitStatus), [recruitStatus]);
@@ -376,6 +437,38 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
       setActionKey('');
     }
   }, [message, refreshOverview, selectedPartner]);
+
+  const handleMoveSkillPolicyEntry = useCallback((
+    skillId: string,
+    direction: 'up' | 'down',
+  ) => {
+    setSkillPolicyDraftEntries((currentEntries) => movePartnerSkillPolicyEntry(currentEntries, skillId, direction));
+  }, []);
+
+  const handleToggleSkillPolicy = useCallback((skillId: string) => {
+    setSkillPolicyDraftEntries((currentEntries) => togglePartnerSkillPolicyEntry(currentEntries, skillId));
+  }, []);
+
+  const handleSaveSkillPolicy = useCallback(async () => {
+    if (!selectedPartner) return;
+    setActionKey(`skill-policy-${selectedPartner.id}`);
+    try {
+      const res = await updatePartnerSkillPolicy(
+        selectedPartner.id,
+        buildPartnerSkillPolicySlots(skillPolicyDraftEntries),
+      );
+      if (!res.success || !res.data) {
+        throw new Error(getUnifiedApiErrorMessage(res, '保存伙伴技能策略失败'));
+      }
+      setSkillPolicy(res.data);
+      setSkillPolicyDraftEntries(res.data.entries);
+      message.success(res.message || '伙伴技能策略已保存');
+    } catch {
+      void 0;
+    } finally {
+      setActionKey('');
+    }
+  }, [message, selectedPartner, skillPolicyDraftEntries]);
 
   const handleGenerateRecruit = useCallback(async () => {
     if (!recruitActionState.canGenerate) return;
@@ -1022,6 +1115,164 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
     );
   };
 
+  const renderSkillPolicyPanel = () => {
+    if (!selectedPartner) return <div className="partner-empty">暂无伙伴数据</div>;
+
+    const { enabledEntries, disabledEntries } = groupPartnerSkillPolicyEntries(skillPolicyDraftEntries);
+    const renderSkillPolicyIconButton = (
+      key: string,
+      title: string,
+      icon: React.ReactNode,
+      onClick: () => void,
+      disabled: boolean,
+      danger = false,
+    ) => {
+      return (
+        <Tooltip key={key} title={title}>
+          <span className="partner-skill-policy-action-wrap">
+            <Button
+              type="text"
+              danger={danger}
+              aria-label={title}
+              icon={icon}
+              disabled={disabled}
+              className="partner-skill-policy-action-btn"
+              onClick={onClick}
+            />
+          </span>
+        </Tooltip>
+      );
+    };
+
+    const renderSkillPolicyGroup = (
+      title: string,
+      entries: PartnerSkillPolicyEntryDto[],
+      allowMove: boolean,
+    ) => {
+      return (
+        <div className="partner-skill-policy-group">
+          <div className="partner-section-title">{title}</div>
+          {entries.length > 0 ? (
+            <div className="partner-skill-policy-list">
+              {entries.map((entry, index) => (
+                <div
+                  key={entry.skillId}
+                  className={`partner-skill-policy-item${entry.enabled ? '' : ' is-disabled'}`}
+                >
+                  {entry.enabled ? (
+                    <span className="partner-skill-policy-priority-badge">
+                      {index + 1}
+                    </span>
+                  ) : null}
+                  <div className="partner-skill-policy-main">
+                    <Tooltip
+                      title={renderSkillTooltip({
+                        id: entry.skillId,
+                        name: entry.skillName,
+                        icon: entry.skillIcon,
+                        description: entry.skillDescription,
+                        cost_lingqi: entry.cost_lingqi,
+                        cost_lingqi_rate: entry.cost_lingqi_rate,
+                        cost_qixue: entry.cost_qixue,
+                        cost_qixue_rate: entry.cost_qixue_rate,
+                        cooldown: entry.cooldown,
+                        target_type: entry.target_type,
+                        target_count: entry.target_count,
+                        damage_type: entry.damage_type,
+                        element: entry.element,
+                        effects: entry.effects,
+                      })}
+                      placement="top"
+                      classNames={PARTNER_SKILL_TOOLTIP_CLASS_NAMES}
+                    >
+                      <div className="partner-skill-policy-head">
+                        <div className="partner-skill-policy-icon-wrap">
+                          <img
+                            className="partner-technique-icon"
+                            src={resolvePartnerAvatar(entry.skillIcon)}
+                            alt={entry.skillName}
+                          />
+                        </div>
+                        <div className="partner-card-main">
+                          <div className="partner-technique-name">{entry.skillName}</div>
+                          {!entry.enabled ? (
+                            <div className="partner-skill-policy-status">
+                              <Tag color="default">已禁用</Tag>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </Tooltip>
+                  </div>
+                  <div className="partner-skill-policy-actions">
+                    {allowMove ? (
+                      <>
+                        {renderSkillPolicyIconButton(
+                          `${entry.skillId}-up`,
+                          '上移',
+                          <ArrowUpOutlined />,
+                          () => handleMoveSkillPolicyEntry(entry.skillId, 'up'),
+                          selectedPartnerListed || index <= 0,
+                        )}
+                        {renderSkillPolicyIconButton(
+                          `${entry.skillId}-down`,
+                          '下移',
+                          <ArrowDownOutlined />,
+                          () => handleMoveSkillPolicyEntry(entry.skillId, 'down'),
+                          selectedPartnerListed || index >= entries.length - 1,
+                        )}
+                      </>
+                    ) : null}
+                    {renderSkillPolicyIconButton(
+                      `${entry.skillId}-toggle`,
+                      entry.enabled ? '禁用自动释放' : '重新启用',
+                      entry.enabled ? <StopOutlined /> : <CheckCircleOutlined />,
+                      () => handleToggleSkillPolicy(entry.skillId),
+                      selectedPartnerListed,
+                      entry.enabled,
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="partner-empty-text">当前分组暂无技能</div>
+          )}
+        </div>
+      );
+    };
+
+    return (
+      <div className="partner-pane-card">
+        {renderPartnerSummaryCard('partner-inline-summary')}
+        <div className="partner-section-title">技能策略</div>
+        <div className="partner-skill-policy-note">
+          以下顺序会影响伙伴在所有战斗中的自动施法尝试顺序，越靠前越优先；关闭后该技能不会自动释放。
+        </div>
+        {skillPolicyLoading ? (
+          <Skeleton active paragraph={{ rows: 6 }} />
+        ) : (
+          <div className="partner-skill-policy-layout">
+            {renderSkillPolicyGroup('启用中', enabledEntries, true)}
+            {renderSkillPolicyGroup('已禁用', disabledEntries, false)}
+          </div>
+        )}
+        <div className="partner-action-row">
+          <Button
+            type="primary"
+            loading={actionKey === `skill-policy-${selectedPartner.id}`}
+            disabled={!skillPolicyChanged || skillPolicyLoading || selectedPartnerListed}
+            onClick={() => {
+              void handleSaveSkillPolicy();
+            }}
+          >
+            保存策略
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
   const renderBody = () => {
     const panelOptions = PARTNER_PANEL_OPTIONS;
     const renderPanelMenuLabel = (item: { value: PartnerPanelKey; label: string }) => {
@@ -1043,6 +1294,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
       if (panel === 'overview') return renderOverviewPanel();
       if (panel === 'upgrade') return renderUpgradePanel();
       if (panel === 'technique') return renderTechniquePanel();
+      if (panel === 'skill_policy') return renderSkillPolicyPanel();
       return renderRecruitPanel();
     })();
 

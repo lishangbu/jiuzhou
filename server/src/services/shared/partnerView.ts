@@ -143,6 +143,26 @@ export interface PartnerTechniqueDto {
   passiveAttrs: PartnerPassiveAttrsDto;
 }
 
+export interface PartnerEffectiveSkillEntry {
+  skillId: string;
+  skillName: string;
+  skillIcon: string;
+  skillDescription?: string;
+  cost_lingqi?: number;
+  cost_lingqi_rate?: number;
+  cost_qixue?: number;
+  cost_qixue_rate?: number;
+  cooldown?: number;
+  target_type?: string;
+  target_count?: number;
+  damage_type?: string | null;
+  element?: string;
+  effects?: object[];
+  sourceTechniqueId: string;
+  sourceTechniqueName: string;
+  sourceTechniqueQuality: string;
+}
+
 export interface PartnerDisplayDto {
   id: number;
   partnerDefId: string;
@@ -375,6 +395,41 @@ const toPartnerPassiveAttrsDto = (
   return merged;
 };
 
+const getEnabledSkillDefinitionMap = () => {
+  return new Map(
+    getSkillDefinitions()
+      .filter((skillDef) => skillDef.enabled !== false)
+      .map((skillDef) => [skillDef.id, skillDef] as const),
+  );
+};
+
+const buildPartnerTechniqueSkills = (
+  meta: PartnerTechniqueStaticMeta,
+): PartnerTechniqueSkillDto[] => {
+  const skillDefinitionMap = getEnabledSkillDefinitionMap();
+  return meta.skillIds
+    .map((skillId) => skillDefinitionMap.get(skillId))
+    .filter((skillDef): skillDef is NonNullable<typeof skillDef> => Boolean(skillDef))
+    .map((skillDef) => ({
+      id: skillDef.id,
+      name: normalizeText(skillDef.name) || skillDef.id,
+      icon: normalizeText(skillDef.icon) || '',
+      description: normalizeText(skillDef.description) || undefined,
+      cost_lingqi: typeof skillDef.cost_lingqi === 'number' ? skillDef.cost_lingqi : undefined,
+      cost_lingqi_rate: typeof skillDef.cost_lingqi_rate === 'number' ? skillDef.cost_lingqi_rate : undefined,
+      cost_qixue: typeof skillDef.cost_qixue === 'number' ? skillDef.cost_qixue : undefined,
+      cost_qixue_rate: typeof skillDef.cost_qixue_rate === 'number' ? skillDef.cost_qixue_rate : undefined,
+      cooldown: typeof skillDef.cooldown === 'number' ? skillDef.cooldown : undefined,
+      target_type: normalizeText(skillDef.target_type) || undefined,
+      target_count: typeof skillDef.target_count === 'number' ? skillDef.target_count : undefined,
+      damage_type: normalizeText(skillDef.damage_type) || null,
+      element: normalizeText(skillDef.element) || undefined,
+      effects: Array.isArray(skillDef.effects)
+        ? skillDef.effects.filter((effect): effect is object => typeof effect === 'object' && effect !== null)
+        : undefined,
+    }));
+};
+
 export const toPartnerComputedAttrsDto = (
   finalAttrs: Record<string, number | string | undefined>,
 ): PartnerComputedAttrsDto => {
@@ -451,33 +506,6 @@ export const buildPartnerTechniqueDto = (
   entry: EffectivePartnerTechniqueEntry,
   meta: PartnerTechniqueStaticMeta,
 ): PartnerTechniqueDto => {
-  const skillDefinitionMap = new Map(
-    getSkillDefinitions()
-      .filter((skillDef) => skillDef.enabled !== false)
-      .map((skillDef) => [skillDef.id, skillDef] as const),
-  );
-  const skills = meta.skillIds
-    .map((skillId) => skillDefinitionMap.get(skillId))
-    .filter((skillDef): skillDef is NonNullable<typeof skillDef> => Boolean(skillDef))
-    .map((skillDef) => ({
-      id: skillDef.id,
-      name: normalizeText(skillDef.name) || skillDef.id,
-      icon: normalizeText(skillDef.icon) || '',
-      description: normalizeText(skillDef.description) || undefined,
-      cost_lingqi: typeof skillDef.cost_lingqi === 'number' ? skillDef.cost_lingqi : undefined,
-      cost_lingqi_rate: typeof skillDef.cost_lingqi_rate === 'number' ? skillDef.cost_lingqi_rate : undefined,
-      cost_qixue: typeof skillDef.cost_qixue === 'number' ? skillDef.cost_qixue : undefined,
-      cost_qixue_rate: typeof skillDef.cost_qixue_rate === 'number' ? skillDef.cost_qixue_rate : undefined,
-      cooldown: typeof skillDef.cooldown === 'number' ? skillDef.cooldown : undefined,
-      target_type: normalizeText(skillDef.target_type) || undefined,
-      target_count: typeof skillDef.target_count === 'number' ? skillDef.target_count : undefined,
-      damage_type: normalizeText(skillDef.damage_type) || null,
-      element: normalizeText(skillDef.element) || undefined,
-      effects: Array.isArray(skillDef.effects)
-        ? skillDef.effects.filter((effect): effect is object => typeof effect === 'object' && effect !== null)
-        : undefined,
-    }));
-
   return {
     techniqueId: entry.techniqueId,
     name: normalizeText(meta.definition.name) || meta.definition.id,
@@ -488,7 +516,7 @@ export const buildPartnerTechniqueDto = (
     maxLayer: meta.maxLayer,
     isInnate: entry.isInnate,
     skillIds: meta.skillIds,
-    skills,
+    skills: buildPartnerTechniqueSkills(meta),
     passiveAttrs: toPartnerPassiveAttrsDto(meta.passiveAttrs),
   };
 };
@@ -549,6 +577,57 @@ export const findEffectivePartnerTechniqueEntry = (
   if (!techniqueId) return null;
   return buildEffectivePartnerTechniqueEntries(definition, techniqueRows)
     .find((entry) => entry.techniqueId === techniqueId) ?? null;
+};
+
+export const buildPartnerEffectiveSkillEntries = (
+  definition: PartnerDefConfig,
+  techniqueRows: PartnerTechniqueRow[],
+): PartnerEffectiveSkillEntry[] => {
+  const effectiveTechniqueEntries = buildEffectivePartnerTechniqueEntries(
+    definition,
+    techniqueRows,
+  );
+  const skills: PartnerEffectiveSkillEntry[] = [];
+  const seenSkillIds = new Set<string>();
+
+  for (const entry of effectiveTechniqueEntries) {
+    const meta = getPartnerTechniqueStaticMeta(
+      entry.techniqueId,
+      entry.currentLayer,
+    );
+    if (!meta) {
+      throw new Error(`伙伴功法不存在: ${entry.techniqueId}`);
+    }
+    const sourceTechniqueId = entry.techniqueId;
+    const sourceTechniqueName = normalizeText(meta.definition.name) || meta.definition.id;
+    const sourceTechniqueQuality = normalizeText(meta.definition.quality) || '黄';
+
+    for (const skill of buildPartnerTechniqueSkills(meta)) {
+      if (seenSkillIds.has(skill.id)) continue;
+      seenSkillIds.add(skill.id);
+      skills.push({
+        skillId: skill.id,
+        skillName: skill.name,
+        skillIcon: skill.icon,
+        skillDescription: skill.description,
+        cost_lingqi: skill.cost_lingqi,
+        cost_lingqi_rate: skill.cost_lingqi_rate,
+        cost_qixue: skill.cost_qixue,
+        cost_qixue_rate: skill.cost_qixue_rate,
+        cooldown: skill.cooldown,
+        target_type: skill.target_type,
+        target_count: skill.target_count,
+        damage_type: skill.damage_type,
+        element: skill.element,
+        effects: skill.effects,
+        sourceTechniqueId,
+        sourceTechniqueName,
+        sourceTechniqueQuality,
+      });
+    }
+  }
+
+  return skills;
 };
 
 export const buildPartnerDisplay = (params: {

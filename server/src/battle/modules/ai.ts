@@ -7,6 +7,7 @@
  */
 
 import type { BattleState, BattleUnit, BattleSkill } from '../types.js';
+import type { PartnerSkillPolicySlotDto } from '../../services/shared/partnerSkillPolicy.js';
 import { getNextRandom, getRandomInt } from '../utils/random.js';
 import { resolveSingleAllyTargetId } from '../utils/allyTargeting.js';
 import { getAvailableSkills, getNormalAttack } from './skill.js';
@@ -23,7 +24,8 @@ type AIDecision = {
  */
 export function makeAIDecision(
   state: BattleState,
-  unit: BattleUnit
+  unit: BattleUnit,
+  allowedSkillIds?: ReadonlySet<string>,
 ): AIDecision {
   // 被眩晕/冻结无法行动，直接保底普攻
   if (isStunned(unit)) {
@@ -37,14 +39,14 @@ export function makeAIDecision(
 
   // 玩家AI逻辑保持原有“明确技能优先”行为
   if (unit.type === 'player') {
-    const availableSkills = getAvailableSkills(unit);
+    const availableSkills = getFilteredAvailableSkills(unit, allowedSkillIds);
     const selectedSkill = availableSkills.find((s) => s.id !== 'skill-normal-attack') ?? getNormalAttack(unit);
     const targetIds = selectTargets(state, unit, selectedSkill);
     return { skill: selectedSkill, targetIds };
   }
 
   // 怪物采用统一策略：优先按权重随机，权重缺失时等权随机
-  const availableSkills = getAvailableSkills(unit);
+  const availableSkills = getFilteredAvailableSkills(unit, allowedSkillIds);
   if (availableSkills.length === 0) {
     const fallbackSkill = getNormalAttack(unit);
     return {
@@ -56,6 +58,43 @@ export function makeAIDecision(
   const selectedSkill = selectMonsterSkill(state, unit, availableSkills);
   const targetIds = selectTargets(state, unit, selectedSkill);
   return { skill: selectedSkill, targetIds };
+}
+
+function getFilteredAvailableSkills(
+  unit: BattleUnit,
+  allowedSkillIds?: ReadonlySet<string>,
+): BattleSkill[] {
+  const availableSkills = getAvailableSkills(unit);
+  if (!allowedSkillIds || allowedSkillIds.size <= 0) {
+    return availableSkills;
+  }
+  return availableSkills.filter((skill) => allowedSkillIds.has(skill.id));
+}
+
+export function makePartnerSkillPolicyDecision(
+  state: BattleState,
+  unit: BattleUnit,
+  slots: PartnerSkillPolicySlotDto[],
+): AIDecision {
+  const enabledSlots = slots.filter((slot) => slot.enabled);
+  const enabledSkillIds = new Set(enabledSlots.map((slot) => slot.skillId));
+  const availableSkillMap = new Map(
+    getFilteredAvailableSkills(unit, enabledSkillIds).map((skill) => [skill.id, skill] as const),
+  );
+
+  const orderedEnabledSlots = [...enabledSlots].sort(
+    (left, right) => left.priority - right.priority,
+  );
+  for (const slot of orderedEnabledSlots) {
+    const skill = availableSkillMap.get(slot.skillId);
+    if (!skill) continue;
+    return {
+      skill,
+      targetIds: selectTargets(state, unit, skill),
+    };
+  }
+
+  return makeAIDecision(state, unit, enabledSkillIds);
 }
 
 function makeFearDecision(state: BattleState, unit: BattleUnit): AIDecision {

@@ -25,6 +25,7 @@ import type {
   CharacterData,
   SkillData,
 } from '../../battle/battleFactory.js';
+import type { PartnerSkillPolicySlotDto } from '../shared/partnerSkillPolicy.js';
 
 // 复用现有战斗类型，不重复定义
 export type {
@@ -100,6 +101,7 @@ export interface SessionSnapshot {
   partnerBattleMember: {
     data: CharacterData;
     skills: SkillData[];
+    skillPolicy: { slots: PartnerSkillPolicySlotDto[] };
   } | null;
 }
 

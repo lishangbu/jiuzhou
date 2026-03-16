@@ -16,6 +16,7 @@ import type {
 import { generateBattleSeed, getNextRandom } from './utils/random.js';
 import { getNormalAttack } from './modules/skill.js';
 import { normalizeRealmKeepingUnknown } from '../services/shared/realmRules.js';
+import type { PartnerSkillPolicySlotDto } from '../services/shared/partnerSkillPolicy.js';
 
 // 角色数据接口（来自数据库）
 export interface CharacterData {
@@ -230,7 +231,11 @@ export function createPVEBattle(
   monsterSkillsMap: Record<string, SkillData[]>,
   options?: {
     teamMembers?: Array<{ data: CharacterData; skills: SkillData[] }>;
-    partnerMember?: { data: CharacterData; skills: SkillData[] };
+    partnerMember?: {
+      data: CharacterData;
+      skills: SkillData[];
+      skillPolicy: { slots: PartnerSkillPolicySlotDto[] };
+    };
   },
 ): BattleState {
   const randomSeed = generateBattleSeed();
@@ -245,6 +250,7 @@ export function createPVEBattle(
     const partnerUnit = createPartnerUnit(
       options.partnerMember.data,
       options.partnerMember.skills,
+      options.partnerMember.skillPolicy,
     );
     playerUnits.push(partnerUnit);
   }
@@ -344,15 +350,24 @@ function createPlayerUnit(data: CharacterData, skills: SkillData[]): BattleUnit 
   return createCharacterUnit(data, skills, 'player');
 }
 
-function createPartnerUnit(data: CharacterData, skills: SkillData[]): BattleUnit {
-  return createCharacterUnit(data, skills, 'partner');
+function createPartnerUnit(
+  data: CharacterData,
+  skills: SkillData[],
+  skillPolicy: { slots: PartnerSkillPolicySlotDto[] },
+): BattleUnit {
+  return createCharacterUnit(data, skills, 'partner', skillPolicy);
 }
 
 function createNpcUnit(data: CharacterData, skills: SkillData[]): BattleUnit {
   return createCharacterUnit(data, skills, 'npc');
 }
 
-function createCharacterUnit(data: CharacterData, skills: SkillData[], type: 'player' | 'partner' | 'npc'): BattleUnit {
+function createCharacterUnit(
+  data: CharacterData,
+  skills: SkillData[],
+  type: 'player' | 'partner' | 'npc',
+  partnerSkillPolicy?: { slots: PartnerSkillPolicySlotDto[] },
+): BattleUnit {
   const attrs = extractAttrs(data);
   if (type === 'partner') {
     attrs.realm = undefined;
@@ -385,6 +400,7 @@ function createCharacterUnit(data: CharacterData, skills: SkillData[], type: 'pl
     skills: battleSkills,
     skillCooldowns: {},
     skillCooldownDiscountBank: {},
+    partnerSkillPolicy,
     controlDiminishing: {},
     isAlive: true,
     canAct: true,

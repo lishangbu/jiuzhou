@@ -204,6 +204,39 @@ export type PartnerOverviewDto = {
   books: PartnerBookDto[];
 };
 
+export type PartnerSkillPolicySlotDto = {
+  skillId: string;
+  priority: number;
+  enabled: boolean;
+};
+
+export type PartnerSkillPolicyEntryDto = {
+  skillId: string;
+  skillName: string;
+  skillIcon: string;
+  skillDescription?: string;
+  cost_lingqi?: number;
+  cost_lingqi_rate?: number;
+  cost_qixue?: number;
+  cost_qixue_rate?: number;
+  cooldown?: number;
+  target_type?: string;
+  target_count?: number;
+  damage_type?: string | null;
+  element?: string;
+  effects?: unknown[];
+  sourceTechniqueId: string;
+  sourceTechniqueName: string;
+  sourceTechniqueQuality: string;
+  priority: number;
+  enabled: boolean;
+};
+
+export type PartnerSkillPolicyDto = {
+  partnerId: number;
+  entries: PartnerSkillPolicyEntryDto[];
+};
+
 export interface PartnerOverviewResponse {
   success: boolean;
   message: string;
@@ -301,6 +334,18 @@ export interface PartnerRecruitViewedResponse {
   };
 }
 
+export interface PartnerSkillPolicyResponse {
+  success: boolean;
+  message: string;
+  data?: PartnerSkillPolicyDto;
+}
+
+export interface UpdatePartnerSkillPolicyResponse {
+  success: boolean;
+  message: string;
+  data?: PartnerSkillPolicyDto;
+}
+
 export const getPartnerOverview = (): Promise<PartnerOverviewResponse> => {
   return api.get('/partner/overview');
 };
@@ -341,6 +386,21 @@ export const upgradePartnerTechnique = (
   techniqueId: string,
 ): Promise<PartnerUpgradeTechniqueResponse> => {
   return api.post('/partner/upgrade-technique', { partnerId, techniqueId });
+};
+
+export const getPartnerSkillPolicy = (
+  partnerId: number,
+): Promise<PartnerSkillPolicyResponse> => {
+  return api.get('/partner/skill-policy', {
+    params: { partnerId },
+  });
+};
+
+export const updatePartnerSkillPolicy = (
+  partnerId: number,
+  slots: PartnerSkillPolicySlotDto[],
+): Promise<UpdatePartnerSkillPolicyResponse> => {
+  return api.put('/partner/skill-policy', { partnerId, slots });
 };
 
 export const getPartnerRecruitStatus = (): Promise<PartnerRecruitStatusResponse> => {
