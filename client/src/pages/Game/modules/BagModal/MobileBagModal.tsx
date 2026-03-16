@@ -1103,7 +1103,27 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
               </div>
 
               <div className="mbag-sheet-section">
-                <div className="mbag-sheet-section-title">消耗</div>
+                <div className="mbag-sheet-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>消耗</span>
+                  <a
+                    href="#"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      if (!item.locked) {
+                        handleOpenPoolPreview();
+                      }
+                    }}
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 'normal',
+                      color: item.locked ? 'var(--text-tertiary)' : 'var(--primary-color)',
+                      cursor: item.locked ? 'not-allowed' : 'pointer',
+                      textDecoration: 'none'
+                    }}
+                  >
+                    查看词条池
+                  </a>
+                </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   <CostChip label="洗炼符" cost={rerollState.rerollScrollQty} owned={rerollState.rerollScrollOwned} />
                   <CostChip label="灵石" cost={rerollState.spiritStoneCost} owned={playerSpiritStones} />
@@ -1144,17 +1164,6 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
                     );
                   })}
                 </div>
-              </div>
-
-              <div style={{ padding: '0 4px' }}>
-                <button
-                  type="button"
-                  className="mbag-reroll-pool-preview-btn"
-                  onClick={() => void handleOpenPoolPreview()}
-                  disabled={item.locked}
-                >
-                  查看词条池
-                </button>
               </div>
             </>
           ) : null}

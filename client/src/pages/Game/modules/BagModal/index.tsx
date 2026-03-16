@@ -1675,7 +1675,28 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
             rerollState.affixes.length > 0 ? (
               <>
                 <div className="bag-growth-cost-card">
-                  <div className="bag-growth-cost-title">消耗</div>
+                  <div className="bag-growth-cost-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>消耗</span>
+                    <a
+                      href="#"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        if (!activeItem?.locked) {
+                          handleOpenPoolPreview();
+                        }
+                      }}
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 'normal',
+                        color: activeItem?.locked ? 'var(--text-tertiary)' : 'var(--primary-color)',
+                        cursor: activeItem?.locked ? 'not-allowed' : 'pointer',
+                        textDecoration: 'none'
+                      }}
+                    >
+                      <SearchOutlined style={{ marginRight: 4 }} />
+                      查看词条池
+                    </a>
+                  </div>
                   <div className="bag-growth-cost-list">
                     <div className={'bag-growth-cost-chip' + (rerollState.rerollScrollOwned < rerollState.rerollScrollQty ? ' is-insufficient' : '')}>
                       <span className="bag-growth-cost-name">洗炼符</span>
@@ -1727,15 +1748,6 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
                     );
                   })}
                 </div>
-
-                <button
-                  type="button"
-                  className="bag-reroll-pool-preview-btn"
-                  onClick={() => void handleOpenPoolPreview()}
-                  disabled={!!activeItem?.locked}
-                >
-                  查看词条池
-                </button>
 
                 <Button
                   block
