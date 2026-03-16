@@ -33,6 +33,7 @@ import type { MailDto } from "../../../../services/api";
 import { useIsMobile } from "../../shared/responsive";
 import { formatGrantedRewardTexts } from "../../shared/grantedRewardText";
 import { formatDateTimeToMinute } from "../../shared/time";
+import { runMailBatchClaim } from "./mailBatchClaim";
 import "./index.scss";
 
 interface MailModalProps {
@@ -55,15 +56,15 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
   const [activeId, setActiveId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [claiming, setClaiming] = useState(false);
-  // 逐封领取进度：null 表示未在批量领取中
   const [claimProgress, setClaimProgress] = useState<{
     total: number;
     current: number;
+    claimedCount: number;
   } | null>(null);
-  const stopClaimRef = useRef(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [unclaimedCount, setUnclaimedCount] = useState(0);
   const [showMobileDetail, setShowMobileDetail] = useState(false);
+  const claimAbortControllerRef = useRef<AbortController | null>(null);
   const isMobile = useIsMobile();
 
   // 加载邮件列表
@@ -104,6 +105,13 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
       void loadMails({ resetActive: true });
     }
   }, [open, loadMails]);
+
+  useEffect(() => {
+    return () => {
+      claimAbortControllerRef.current?.abort();
+      claimAbortControllerRef.current = null;
+    };
+  }, []);
 
   const safeActiveId = useMemo(() => {
     if (activeId && mails.some((m) => m.id === activeId)) return activeId;
@@ -187,99 +195,63 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
     }
   };
 
-  // 停止逐封领取
-  const stopClaimAll = () => {
-    stopClaimRef.current = true;
-  };
-
-  // 逐封领取：前端遍历未领取邮件，逐封调用 claimMailAttachments。
-  // 关键约束：
-  // 1) 支持手动停止；
-  // 2) 任意一封领取失败（接口返回失败或请求异常）时立即中断，不再继续后续邮件。
   const claimAll = async () => {
-    const unclaimedMails = mails.filter(hasUnclaimedAttachments);
-    if (unclaimedMails.length === 0) {
+    if (unclaimedCount === 0) {
       message.info("没有可领取的附件");
       return;
     }
 
-    stopClaimRef.current = false;
-    const total = unclaimedMails.length;
-    setClaimProgress({ total, current: 0 });
+    const controller = new AbortController();
+    claimAbortControllerRef.current = controller;
+    setClaimProgress({ total: unclaimedCount, current: 0, claimedCount: 0 });
     setClaiming(true);
+    try {
+      const result = await runMailBatchClaim({
+        initialUnclaimedCount: unclaimedCount,
+        signal: controller.signal,
+        onProgress: (progress) => {
+          setClaimProgress(progress);
+        },
+      });
+      await loadMails();
 
-    let claimedCount = 0;
-    let claimErrorMessage = "";
-    const claimedRewards: MailDto["attachRewards"] = [];
-
-    for (let i = 0; i < unclaimedMails.length; i++) {
-      if (stopClaimRef.current) break;
-
-      const mail = unclaimedMails[i];
-      setClaimProgress({ total, current: i + 1 });
-
-      try {
-        const res = await claimMailAttachments(mail.id);
-        if (res.success) {
-          claimedCount += 1;
-
-          // 实时更新该邮件的已领取状态
-          setMails((prev) =>
-            prev.map((m) =>
-              m.id === mail.id
-                ? {
-                    ...m,
-                    claimedAt: new Date().toISOString(),
-                    readAt: m.readAt ?? new Date().toISOString(),
-                  }
-                : m,
-            ),
-          );
-          setUnclaimedCount((c) => Math.max(0, c - 1));
-          if (Array.isArray(res.rewards)) {
-            claimedRewards.push(...res.rewards);
-          }
-        } else {
-          claimErrorMessage = res.message;
-          break;
+      if (result.status === "completed") {
+        if (result.claimedCount === 0) {
+          message.info("没有可领取的附件");
+          return;
         }
-      } catch (error) {
-        claimErrorMessage =
-          error instanceof Error && error.message
-            ? error.message
-            : "领取失败";
-        break;
-      }
-    }
-
-    setClaimProgress(null);
-    setClaiming(false);
-
-    if (claimErrorMessage) {
-      if (claimedCount === 0) {
-        message.error(`领取失败：${claimErrorMessage}`);
+        message.success(`已领取 ${result.claimedCount} 封邮件附件`);
         return;
       }
 
-      const rewards = formatGrantedRewardTexts(claimedRewards);
+      if (result.status === "stopped") {
+        if (result.claimedCount === 0) {
+          message.info("已停止，未领取任何附件");
+          return;
+        }
+        message.success(`已停止，已领取 ${result.claimedCount} 封邮件附件`);
+        return;
+      }
+
+      if (result.claimedCount === 0) {
+        message.error(`领取失败：${result.errorMessage}`);
+        return;
+      }
+
       message.error(
-        `领取到第 ${claimedCount} 封后中断：${claimErrorMessage}${rewards.length > 0 ? `（已获得：${rewards.join("，")}）` : ""}`,
+        `领取到第 ${result.claimedCount} 封后中断：${result.errorMessage}`,
       );
-      return;
+    } catch {
+      void 0;
+    } finally {
+      setClaimProgress(null);
+      setClaiming(false);
+      claimAbortControllerRef.current = null;
     }
+  };
 
-    // 汇总提示
-    const stopped = stopClaimRef.current;
-    if (claimedCount === 0) {
-      message.info(stopped ? "已停止，未领取任何附件" : "没有可领取的附件");
-      return;
-    }
-
-    const rewards = formatGrantedRewardTexts(claimedRewards);
-    const stoppedTip = stopped ? "（已手动停止）" : "";
-    message.success(
-      `已领取 ${claimedCount} 封邮件附件${rewards.length > 0 ? "：" + rewards.join("，") : ""}${stoppedTip}`,
-    );
+  const stopClaimAll = () => {
+    claimAbortControllerRef.current?.abort();
   };
 
   // 一键已读
@@ -421,7 +393,7 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
                     停止
                   </Button>
                 ) : (
-                  <Tooltip title="一键领取">
+                  <Tooltip title="跨页一键领取">
                     <Button
                       size="small"
                       type="text"
@@ -456,9 +428,13 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
             {claimProgress && (
               <div className="mail-claim-progress">
                 <Progress
-                  percent={Math.round(
-                    (claimProgress.current / claimProgress.total) * 100,
-                  )}
+                  percent={
+                    claimProgress.total > 0
+                      ? Math.round(
+                          (claimProgress.current / claimProgress.total) * 100,
+                        )
+                      : 0
+                  }
                   size="small"
                   format={() =>
                     `${claimProgress.current}/${claimProgress.total}`

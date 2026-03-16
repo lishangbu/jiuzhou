@@ -285,8 +285,15 @@ export interface MailClaimAllResponse {
 }
 
 // 获取邮件列表
-export const getMailList = (page: number = 1, pageSize: number = 50): Promise<MailListResponse> => {
-  return api.get('/mail/list', { params: { page, pageSize } });
+export const getMailList = (
+  page: number = 1,
+  pageSize: number = 50,
+  requestConfig?: AxiosRequestConfig,
+): Promise<MailListResponse> => {
+  return api.get('/mail/list', {
+    ...requestConfig,
+    params: { page, pageSize },
+  });
 };
 
 // 获取未读数量
@@ -300,8 +307,11 @@ export const readMail = (mailId: number): Promise<{ success: boolean; message: s
 };
 
 // 领取附件
-export const claimMailAttachments = (mailId: number): Promise<MailClaimResponse> => {
-  return api.post('/mail/claim', { mailId });
+export const claimMailAttachments = (
+  mailId: number,
+  requestConfig?: AxiosRequestConfig,
+): Promise<MailClaimResponse> => {
+  return api.post('/mail/claim', { mailId }, requestConfig);
 };
 
 // 一键领取所有附件
