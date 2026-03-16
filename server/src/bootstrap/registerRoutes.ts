@@ -32,6 +32,8 @@ import idleRoutes from '../routes/idleRoutes.js';
 import insightRoutes from '../routes/insightRoutes.js';
 import partnerRoutes from '../routes/partnerRoutes.js';
 import captchaRoutes from '../routes/captchaRoutes.js';
+import afdianRoutes from '../routes/afdianRoutes.js';
+import redeemCodeRoutes from '../routes/redeemCodeRoutes.js';
 
 /**
  * 统一注册 HTTP 路由。
@@ -70,6 +72,8 @@ export const registerRoutes = (app: Express): void => {
   app.use('/api/insight', insightRoutes);
   app.use('/api/partner', partnerRoutes);
   app.use('/api/captcha', captchaRoutes);
+  app.use('/api/afdian', afdianRoutes);
+  app.use('/api/redeem-code', redeemCodeRoutes);
 
   app.get('/', (_req: Request, res: Response) => {
     res.json({

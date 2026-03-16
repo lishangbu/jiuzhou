@@ -18,3 +18,4 @@ export * from './api/partner';
 export * from './api/gemSynthesis';
 export * from './api/error';
 export * from './api/captchaConfig';
+export * from './api/redeemCode';

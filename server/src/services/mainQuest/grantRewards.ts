@@ -65,7 +65,7 @@ export const grantSectionRewards = async (
     const itemMeta = resolveRewardItemDisplayMeta(itemDefId);
     const result = await itemService.createItem(userId, characterId, itemDefId, quantity, {
       location: 'bag',
-      obtainedFrom: 'main_quest',
+      obtainedFrom,
     });
     assertServiceSuccess(result);
     results.push({

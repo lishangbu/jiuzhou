@@ -1003,6 +1003,59 @@ model month_card_ownership {
   @@index([expire_at], map: "idx_month_card_ownership_expire")
 }
 
+model afdian_order {
+  id                 BigInt    @id @default(autoincrement())
+  out_trade_no       String    @unique @db.VarChar(64)
+  custom_order_id    String?   @db.VarChar(128)
+  sponsor_user_id    String    @db.VarChar(64)
+  sponsor_private_id String?   @db.VarChar(128)
+  plan_id            String?   @db.VarChar(64)
+  month_count        Int       @default(1)
+  total_amount       String    @db.VarChar(32)
+  status             Int
+  payload            Json
+  redeem_code_id     BigInt?
+  processed_at       DateTime? @db.Timestamptz(6)
+  created_at         DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([plan_id], map: "idx_afdian_order_plan_id")
+  @@index([sponsor_user_id, created_at(sort: Desc)], map: "idx_afdian_order_sponsor_time")
+}
+
+model redeem_code {
+  id                      BigInt    @id @default(autoincrement())
+  code                    String    @unique @db.VarChar(32)
+  source_type             String    @db.VarChar(32)
+  source_ref_id           String    @db.VarChar(64)
+  reward_payload          Json
+  status                  String    @default("created") @db.VarChar(16)
+  redeemed_by_user_id     Int?
+  redeemed_by_character_id Int?
+  redeemed_at             DateTime? @db.Timestamptz(6)
+  created_at              DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@unique([source_type, source_ref_id], map: "uniq_redeem_code_source")
+  @@index([status, created_at(sort: Desc)], map: "idx_redeem_code_status_time")
+}
+
+model afdian_message_delivery {
+  id                BigInt    @id @default(autoincrement())
+  order_id          BigInt    @unique
+  recipient_user_id String    @db.VarChar(64)
+  content           String
+  status            String    @default("pending") @db.VarChar(16)
+  attempt_count     Int       @default(0)
+  next_retry_at     DateTime? @default(now()) @db.Timestamptz(6)
+  last_error        String?
+  sent_at           DateTime? @db.Timestamptz(6)
+  created_at        DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([status, next_retry_at, id], map: "idx_afdian_message_delivery_retry")
+}
+
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model partner_recruit_job {
   id                     String                 @id @db.VarChar(64)

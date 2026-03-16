@@ -1,5 +1,5 @@
 import api from './api/core';
-import type { CharacterFeatureCode } from './feature';
+import type { GrantedRewardResultDto, ChapterGrantedRewardResultDto } from './reward';
 
 // 对话节点类型
 export type DialogueNodeType = 'narration' | 'npc' | 'player' | 'choice' | 'system' | 'action';
@@ -68,14 +68,7 @@ export interface SectionRewardTechniqueDetail {
   icon?: string | null;
 }
 
-export type MainQuestRewardResultDto =
-  | { type: 'exp'; amount: number }
-  | { type: 'silver'; amount: number }
-  | { type: 'spirit_stones'; amount: number }
-  | { type: 'item'; itemDefId: string; quantity: number; itemName?: string; itemIcon?: string | null }
-  | { type: 'technique'; techniqueId: string; techniqueName?: string; techniqueIcon?: string | null }
-  | { type: 'feature_unlock'; featureCode: CharacterFeatureCode }
-  | { type: 'partner'; partnerId: number; partnerDefId: string; partnerName: string; partnerAvatar?: string | null };
+export type MainQuestRewardResultDto = GrantedRewardResultDto | ChapterGrantedRewardResultDto;
 
 export interface SectionReward {
   exp?: number;

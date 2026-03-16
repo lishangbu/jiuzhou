@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   changePassword,
   getCharacterInfo,
+  redeemGiftCode,
   updateCharacterAutoDisassemble,
   updateCharacterDungeonNoStaminaCost,
   type AutoDisassembleRuleDto,
@@ -59,7 +60,6 @@ interface ChangePasswordFormValues {
   confirmPassword: string;
 }
 
-const CDK_STORAGE_KEY = 'cdk_redeemed_v1';
 const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
 
 const createDefaultAutoDisassembleRuleDraftContent = (): AutoDisassembleRuleDraftContent => {
@@ -87,22 +87,6 @@ const createAutoDisassembleRuleDraft = (
     excludeNameKeywordsText: safeContent.excludeNameKeywordsText,
     maxQualityRank: safeContent.maxQualityRank,
   };
-};
-
-const loadRedeemedCdks = () => {
-  const raw = localStorage.getItem(CDK_STORAGE_KEY);
-  if (!raw) return new Set<string>();
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return new Set<string>();
-    return new Set(parsed.filter((x) => typeof x === 'string'));
-  } catch {
-    return new Set<string>();
-  }
-};
-
-const saveRedeemedCdks = (set: Set<string>) => {
-  localStorage.setItem(CDK_STORAGE_KEY, JSON.stringify(Array.from(set)));
 };
 
 const clampQualityRank = (value: unknown): number => {
@@ -222,6 +206,7 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
   const [autoDisassembleLoading, setAutoDisassembleLoading] = useState(false);
   const [changePasswordSaving, setChangePasswordSaving] = useState(false);
   const [cdk, setCdk] = useState('');
+  const [cdkRedeeming, setCdkRedeeming] = useState(false);
   const isMobile = useIsMobile();
 
   const menuItems = useMemo(
@@ -229,26 +214,29 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
       { key: 'base', label: '基础设置' },
       { key: 'security', label: '账号安全' },
       { key: 'disassemble', label: '自动分解' },
-      { key: 'cdk', label: 'CDK兑换' },
+      { key: 'cdk', label: '兑换码' },
     ],
     []
   );
 
-  const redeemCdk = () => {
+  const redeemCdk = async () => {
     const code = cdk.trim();
     if (!code) {
-      message.warning('请输入CDK');
+      message.warning('请输入兑换码');
       return;
     }
-    const redeemed = loadRedeemedCdks();
-    if (redeemed.has(code)) {
-      message.info('该CDK已兑换过');
-      return;
+    if (cdkRedeeming) return;
+
+    setCdkRedeeming(true);
+    try {
+      const result = await redeemGiftCode(code);
+      setCdk('');
+      message.success(result.message || '兑换成功');
+    } catch (error) {
+      message.error(getUnifiedApiErrorMessage(error, '兑换失败'));
+    } finally {
+      setCdkRedeeming(false);
     }
-    redeemed.add(code);
-    saveRedeemedCdks(redeemed);
-    setCdk('');
-    message.success('兑换成功');
   };
 
   const toggleDarkTheme = (enabled: boolean) => {
@@ -701,19 +689,29 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
           {activeKey === 'cdk' ? (
             <Space orientation="vertical" size={12} style={{ width: '100%' }}>
               <Typography.Title level={5} style={{ margin: 0 }}>
-                CDK兑换
+                兑换码
               </Typography.Title>
               {isMobile ? (
                 <Space direction="vertical" size={8} className="setting-cdk-mobile">
-                  <Input value={cdk} onChange={(e) => setCdk(e.target.value)} placeholder="请输入CDK" />
-                  <Button type="primary" onClick={redeemCdk} block>
+                  <Input
+                    value={cdk}
+                    onChange={(e) => setCdk(e.target.value)}
+                    placeholder="请输入兑换码"
+                    disabled={cdkRedeeming}
+                  />
+                  <Button type="primary" onClick={() => void redeemCdk()} block loading={cdkRedeeming} disabled={cdkRedeeming}>
                     兑换
                   </Button>
                 </Space>
               ) : (
                 <Space.Compact style={{ width: '100%' }}>
-                  <Input value={cdk} onChange={(e) => setCdk(e.target.value)} placeholder="请输入CDK" />
-                  <Button type="primary" onClick={redeemCdk}>
+                  <Input
+                    value={cdk}
+                    onChange={(e) => setCdk(e.target.value)}
+                    placeholder="请输入兑换码"
+                    disabled={cdkRedeeming}
+                  />
+                  <Button type="primary" onClick={() => void redeemCdk()} loading={cdkRedeeming} disabled={cdkRedeeming}>
                     兑换
                   </Button>
                 </Space.Compact>

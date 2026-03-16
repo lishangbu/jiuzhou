@@ -41,6 +41,10 @@ import {
   shutdownPartnerRecruitJobRunner,
 } from "../services/partnerRecruitJobRunner.js";
 import { getGameServer } from "../game/gameServer.js";
+import {
+  initializeAfdianMessageRetryService,
+  stopAfdianMessageRetryService,
+} from "../services/afdianMessageRetryService.js";
 
 export interface StartServerOptions {
   httpServer: HttpServer;
@@ -90,6 +94,8 @@ export const startServerWithPipeline = async (
   console.log("✓ 洞府研修 worker 协调器已就绪\n");
   await initializePartnerRecruitJobRunner();
   console.log("✓ AI 伙伴招募 worker 协调器已就绪\n");
+  await initializeAfdianMessageRetryService();
+  console.log("✓ 爱发电私信重试调度器已就绪\n");
 
   await initGameTimeService();
   await initArenaWeeklySettlementService();
@@ -160,6 +166,9 @@ export const registerGracefulShutdown = (httpServer: HttpServer): void => {
 
       await shutdownPartnerRecruitJobRunner();
       console.log("✓ AI 伙伴招募 worker 协调器已关闭");
+
+      stopAfdianMessageRetryService();
+      console.log("✓ 爱发电私信重试调度器已关闭");
 
       await shutdownWorkerPool();
       console.log("✓ Worker 池已关闭");
