@@ -60,6 +60,23 @@ export const collectDungeonSeedFileNames = (): string[] => {
     .sort();
 };
 
+export const collectDungeonBossMonsterIds = (): string[] => {
+  const bossMonsterIds = new Set<string>();
+
+  for (const fileName of collectDungeonSeedFileNames()) {
+    const dungeonSeed = loadSeed(fileName);
+    const raw = JSON.stringify(dungeonSeed);
+    const monsterDefIdMatches = raw.matchAll(/"monster_def_id"\s*:\s*"([^"]+)"/g);
+    for (const match of monsterDefIdMatches) {
+      const monsterDefId = match[1]?.trim();
+      if (!monsterDefId?.startsWith('monster-boss-')) continue;
+      bossMonsterIds.add(monsterDefId);
+    }
+  }
+
+  return Array.from(bossMonsterIds).sort();
+};
+
 export const buildObjectMap = (values: JsonValue[] | undefined, key: string): Map<string, JsonObject> => {
   const objectMap = new Map<string, JsonObject>();
   for (const value of values ?? []) {
@@ -76,25 +93,32 @@ export const collectMergedPoolItemIds = (
   dropPoolById: Map<string, JsonObject>,
   commonPoolById: Map<string, JsonObject>,
 ): Set<string> => {
+  const mergedEntries = collectMergedPoolEntries(poolId, dropPoolById, commonPoolById);
   const mergedItemIds = new Set<string>();
+  for (const entry of mergedEntries) {
+    const itemDefId = asText(asObject(entry)?.item_def_id);
+    if (itemDefId) mergedItemIds.add(itemDefId);
+  }
+  return mergedItemIds;
+};
+
+export const collectMergedPoolEntries = (
+  poolId: string,
+  dropPoolById: Map<string, JsonObject>,
+  commonPoolById: Map<string, JsonObject>,
+): JsonValue[] => {
   const pool = dropPoolById.get(poolId);
   assert.ok(pool, `缺少掉落池: ${poolId}`);
 
+  const mergedEntries: JsonValue[] = [];
   for (const commonPoolIdValue of asArray(pool.common_pool_ids)) {
     const commonPoolId = asText(commonPoolIdValue);
     if (!commonPoolId) continue;
     const commonPool = commonPoolById.get(commonPoolId);
     assert.ok(commonPool, `缺少公共掉落池: ${commonPoolId}`);
-    for (const entry of asArray(commonPool.entries)) {
-      const itemDefId = asText(asObject(entry)?.item_def_id);
-      if (itemDefId) mergedItemIds.add(itemDefId);
-    }
+    mergedEntries.push(...asArray(commonPool.entries));
   }
 
-  for (const entry of asArray(pool.entries)) {
-    const itemDefId = asText(asObject(entry)?.item_def_id);
-    if (itemDefId) mergedItemIds.add(itemDefId);
-  }
-
-  return mergedItemIds;
+  mergedEntries.push(...asArray(pool.entries));
+  return mergedEntries;
 };

@@ -10,12 +10,13 @@ import {
 import { getCharacterComputedByUserId, invalidateCharacterComputedCache } from './characterComputedService.js';
 import { withUnlockedFeatures } from './featureUnlockService.js';
 import { createInventoryForCharacter } from './shared/inventoryPersistence.js';
-import { getCharacterIdByUserIdForUpdate, primeCharacterIdByUserIdCache } from './shared/characterId.js';
+import { primeCharacterIdByUserIdCache } from './shared/characterId.js';
 import {
   normalizeCharacterNicknameInput,
   validateCharacterNickname,
 } from './shared/characterNameRules.js';
 import { isCharacterRenameCardItemDefinition } from './shared/characterRenameCard.js';
+import { broadcastWorldSystemMessage } from './shared/worldChatBroadcast.js';
 import { getItemDefinitionById } from './staticConfigLoader.js';
 
 export interface Character {
@@ -91,6 +92,7 @@ export interface CharacterResult {
 
 export const characterServiceSideEffects = {
   invalidateCharacterComputedCacheByCharacterId: invalidateCharacterComputedCache,
+  broadcastWorldSystemMessage,
 };
 
 // 检查用户是否有角色
@@ -188,17 +190,30 @@ export const renameCharacterWithCard = async (
   itemInstanceId: number,
   nickname: string,
 ): Promise<{ success: boolean; message: string }> => {
-  return withTransaction(async () => {
-    const characterId = await getCharacterIdByUserIdForUpdate(userId);
-    if (!characterId) {
-      return { success: false, message: '角色不存在' };
+  const result = await withTransaction(async (): Promise<{
+    success: boolean;
+    message: string;
+    broadcastContent: string | null;
+  }> => {
+    const characterResult = await query(
+      'SELECT id, nickname FROM characters WHERE user_id = $1 LIMIT 1 FOR UPDATE',
+      [userId],
+    );
+    if (characterResult.rows.length === 0) {
+      return { success: false, message: '角色不存在', broadcastContent: null };
     }
+    const characterRow = characterResult.rows[0] as { id?: number; nickname?: string | null };
+    const characterId = Number(characterRow.id);
+    if (!Number.isInteger(characterId) || characterId <= 0) {
+      return { success: false, message: '角色不存在', broadcastContent: null };
+    }
+    const previousNickname = String(characterRow.nickname || '').trim();
 
     const nicknameValidation = await validateCharacterNickname(nickname, {
       excludeCharacterId: characterId,
     });
     if (!nicknameValidation.success) {
-      return { success: false, message: nicknameValidation.message };
+      return { success: false, message: nicknameValidation.message, broadcastContent: null };
     }
 
     const itemResult = await query(
@@ -211,19 +226,19 @@ export const renameCharacterWithCard = async (
       [itemInstanceId, characterId],
     );
     if (itemResult.rows.length === 0) {
-      return { success: false, message: '易名符不存在' };
+      return { success: false, message: '易名符不存在', broadcastContent: null };
     }
 
     const itemRow = itemResult.rows[0] as { id?: number; qty?: number; item_def_id?: string };
     const itemDefId = String(itemRow.item_def_id || '').trim();
     const itemDef = getItemDefinitionById(itemDefId);
     if (!isCharacterRenameCardItemDefinition(itemDef)) {
-      return { success: false, message: '该物品不能用于改名' };
+      return { success: false, message: '该物品不能用于改名', broadcastContent: null };
     }
 
     const itemQty = Math.max(0, Math.floor(Number(itemRow.qty) || 0));
     if (itemQty <= 0) {
-      return { success: false, message: '易名符数量不足' };
+      return { success: false, message: '易名符数量不足', broadcastContent: null };
     }
 
     await query(
@@ -250,8 +265,20 @@ export const renameCharacterWithCard = async (
     return {
       success: true,
       message: '改名成功',
+      broadcastContent: `【易名符】『${previousNickname}』改名为『${nicknameValidation.nickname}』，仙名重铸，声传九州！`,
     };
   });
+  if (result.success && result.broadcastContent) {
+    characterServiceSideEffects.broadcastWorldSystemMessage({
+      senderTitle: '天机传音',
+      content: result.broadcastContent,
+    });
+  }
+
+  return {
+    success: result.success,
+    message: result.message,
+  };
 };
 
 // 获取角色信息

@@ -825,12 +825,19 @@
     },
     {
       "id": "dp-common-dungeon-boss-unbind",
-      "name": "秘境BOSS解绑道具通用掉落池",
+      "name": "秘境BOSS功能道具通用掉落池",
       "mode": "prob",
       "entries": [
         {
           "item_def_id": "scroll-jie-fu-fu",
           "chance": 0.01,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "cons-rename-001",
+          "chance": 0.001,
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true

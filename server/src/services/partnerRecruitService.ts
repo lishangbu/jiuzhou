@@ -528,7 +528,7 @@ class PartnerRecruitService {
 
     broadcastWorldSystemMessage({
       senderTitle: '天机传音',
-      content: `【伙伴招募】${nickname}招募到天级伙伴【${partnerName}】，灵契共鸣，声传九州！`,
+      content: `【伙伴招募】『${nickname}』招募到天级伙伴【${partnerName}】，灵契共鸣，声传九州！`,
     });
   }
 
