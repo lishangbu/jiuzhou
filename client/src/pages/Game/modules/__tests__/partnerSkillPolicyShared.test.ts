@@ -24,6 +24,7 @@ import {
   buildPartnerSkillPolicySlots,
   groupPartnerSkillPolicyEntries,
   movePartnerSkillPolicyEntry,
+  reorderPartnerSkillPolicyEntry,
   togglePartnerSkillPolicyEntry,
 } from '../PartnerModal/partnerShared';
 
@@ -74,6 +75,48 @@ describe('movePartnerSkillPolicyEntry', () => {
     expect(result.map((entry) => [entry.skillId, entry.priority, entry.enabled])).toEqual([
       ['skill-b', 1, true],
       ['skill-a', 2, true],
+      ['skill-c', 3, false],
+    ]);
+  });
+});
+
+describe('reorderPartnerSkillPolicyEntry', () => {
+  it('拖拽换位后应按目标位置重排启用区优先级', () => {
+    const result = reorderPartnerSkillPolicyEntry(createEntries(), 'skill-b', 'skill-a');
+    expect(result.map((entry) => [entry.skillId, entry.priority, entry.enabled])).toEqual([
+      ['skill-b', 1, true],
+      ['skill-a', 2, true],
+      ['skill-c', 3, false],
+    ]);
+  });
+
+  it('拖到后面的技能上时应落到目标后面', () => {
+    const result = reorderPartnerSkillPolicyEntry([
+      ...createEntries(),
+      {
+        skillId: 'skill-d',
+        skillName: '飞花步',
+        skillIcon: '/d.png',
+        sourceTechniqueId: 'tech-b',
+        sourceTechniqueName: '藤灵诀',
+        sourceTechniqueQuality: '玄',
+        priority: 4,
+        enabled: true,
+      },
+    ], 'skill-a', 'skill-d');
+    expect(result.map((entry) => [entry.skillId, entry.priority, entry.enabled])).toEqual([
+      ['skill-b', 1, true],
+      ['skill-d', 2, true],
+      ['skill-a', 3, true],
+      ['skill-c', 4, false],
+    ]);
+  });
+
+  it('拖拽到自身时应保持原顺序', () => {
+    const result = reorderPartnerSkillPolicyEntry(createEntries(), 'skill-a', 'skill-a');
+    expect(result.map((entry) => [entry.skillId, entry.priority, entry.enabled])).toEqual([
+      ['skill-a', 1, true],
+      ['skill-b', 2, true],
       ['skill-c', 3, false],
     ]);
   });

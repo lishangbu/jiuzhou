@@ -163,3 +163,48 @@ test('normalizePartnerSkillPolicySlotsForSave: 应重排优先级并保留启用
     { skillId: 'skill-a', priority: 3, enabled: false },
   ]);
 });
+
+test('buildPartnerSkillPolicyDto: 保存后的自定义启用顺序不应被自然顺序覆盖', () => {
+  const result = buildPartnerSkillPolicyDto({
+    partnerId: 9,
+    availableSkills: createAvailableSkills(),
+    persistedRows: [
+      {
+        id: 1,
+        partner_id: 9,
+        skill_id: 'skill-b',
+        priority: 1,
+        enabled: true,
+        created_at: new Date(),
+        updated_at: new Date(),
+      },
+      {
+        id: 2,
+        partner_id: 9,
+        skill_id: 'skill-a',
+        priority: 2,
+        enabled: true,
+        created_at: new Date(),
+        updated_at: new Date(),
+      },
+      {
+        id: 3,
+        partner_id: 9,
+        skill_id: 'skill-c',
+        priority: 3,
+        enabled: true,
+        created_at: new Date(),
+        updated_at: new Date(),
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    result.entries.map((entry) => [entry.skillId, entry.priority, entry.enabled]),
+    [
+      ['skill-b', 1, true],
+      ['skill-a', 2, true],
+      ['skill-c', 3, true],
+    ],
+  );
+});

@@ -1,6 +1,6 @@
 import { ArrowDownOutlined, ArrowUpOutlined, CheckCircleOutlined, StopOutlined } from '@ant-design/icons';
 import { App, Button, Drawer, Empty, InputNumber, Modal, Progress, Segmented, Skeleton, Tag, Tooltip } from 'antd';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import {
   activatePartner,
   confirmPartnerRecruitDraft,
@@ -48,6 +48,7 @@ import {
   groupPartnerSkillPolicyEntries,
   movePartnerSkillPolicyEntry,
   PARTNER_PANEL_OPTIONS,
+  reorderPartnerSkillPolicyEntry,
   resolvePartnerActionLabel,
   resolvePartnerAvatar,
   resolvePartnerBookLabel,
@@ -109,6 +110,8 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
   const [skillPolicyDraftEntries, setSkillPolicyDraftEntries] = useState<PartnerSkillPolicyEntryDto[]>([]);
   const [skillPolicyLoading, setSkillPolicyLoading] = useState(false);
   const [selectedPartnerId, setSelectedPartnerId] = useState<number | null>(null);
+  const [draggingSkillId, setDraggingSkillId] = useState<string | null>(null);
+  const [dragOverSkillId, setDragOverSkillId] = useState<string | null>(null);
   const [injectExpValue, setInjectExpValue] = useState<number | null>(null);
   const [techniqueResultText, setTechniqueResultText] = useState('');
   const [techniqueUpgradeCosts, setTechniqueUpgradeCosts] = useState<Record<string, PartnerTechniqueUpgradeCostDto | null>>({});
@@ -177,6 +180,8 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
       setSkillPolicyDraftEntries([]);
       setSkillPolicyLoading(false);
       setSelectedPartnerId(null);
+      setDraggingSkillId(null);
+      setDragOverSkillId(null);
       setInjectExpValue(null);
       setTechniqueResultText('');
       setTechniqueUpgradeCosts({});
@@ -200,6 +205,8 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
     setExpandedTechniqueSkills({});
     setSkillPolicy(null);
     setSkillPolicyDraftEntries([]);
+    setDraggingSkillId(null);
+    setDragOverSkillId(null);
   }, [selectedPartnerId]);
 
   useEffect(() => {
@@ -448,6 +455,47 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
   const handleToggleSkillPolicy = useCallback((skillId: string) => {
     setSkillPolicyDraftEntries((currentEntries) => togglePartnerSkillPolicyEntry(currentEntries, skillId));
   }, []);
+
+  const clearSkillPolicyDragState = useCallback(() => {
+    setDraggingSkillId(null);
+    setDragOverSkillId(null);
+  }, []);
+
+  const handleReorderSkillPolicyEntry = useCallback((sourceSkillId: string, targetSkillId: string) => {
+    setSkillPolicyDraftEntries((currentEntries) =>
+      reorderPartnerSkillPolicyEntry(currentEntries, sourceSkillId, targetSkillId));
+  }, []);
+
+  const handleSkillPolicyDragStart = useCallback((event: DragEvent<HTMLDivElement>, skillId: string) => {
+    setDraggingSkillId(skillId);
+    setDragOverSkillId(null);
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', skillId);
+  }, []);
+
+  const handleSkillPolicyDragOver = useCallback((
+    event: DragEvent<HTMLDivElement>,
+    targetSkillId: string,
+  ) => {
+    if (!draggingSkillId || draggingSkillId === targetSkillId) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    setDragOverSkillId(targetSkillId);
+  }, [draggingSkillId]);
+
+  const handleSkillPolicyDrop = useCallback((
+    event: DragEvent<HTMLDivElement>,
+    targetSkillId: string,
+  ) => {
+    event.preventDefault();
+    const sourceSkillId = event.dataTransfer.getData('text/plain') || draggingSkillId;
+    if (!sourceSkillId || sourceSkillId === targetSkillId) {
+      clearSkillPolicyDragState();
+      return;
+    }
+    handleReorderSkillPolicyEntry(sourceSkillId, targetSkillId);
+    clearSkillPolicyDragState();
+  }, [clearSkillPolicyDragState, draggingSkillId, handleReorderSkillPolicyEntry]);
 
   const handleSaveSkillPolicy = useCallback(async () => {
     if (!selectedPartner) return;
@@ -1128,7 +1176,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
       danger = false,
     ) => {
       return (
-        <Tooltip key={key} title={title}>
+        <Tooltip key={key} title={title} open={draggingSkillId ? false : undefined}>
           <span className="partner-skill-policy-action-wrap">
             <Button
               type="text"
@@ -1157,7 +1205,12 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
               {entries.map((entry, index) => (
                 <div
                   key={entry.skillId}
-                  className={`partner-skill-policy-item${entry.enabled ? '' : ' is-disabled'}`}
+                  className={`partner-skill-policy-item${entry.enabled ? '' : ' is-disabled'}${allowMove && !selectedPartnerListed && !isMobile ? ' is-sortable' : ''}${draggingSkillId === entry.skillId ? ' is-dragging' : ''}${dragOverSkillId === entry.skillId ? ' is-drag-over' : ''}`}
+                  draggable={allowMove && !selectedPartnerListed && !isMobile}
+                  onDragStart={(event) => handleSkillPolicyDragStart(event, entry.skillId)}
+                  onDragOver={(event) => handleSkillPolicyDragOver(event, entry.skillId)}
+                  onDrop={(event) => handleSkillPolicyDrop(event, entry.skillId)}
+                  onDragEnd={clearSkillPolicyDragState}
                 >
                   {entry.enabled ? (
                     <span className="partner-skill-policy-priority-badge">
@@ -1184,6 +1237,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
                       })}
                       placement="top"
                       classNames={PARTNER_SKILL_TOOLTIP_CLASS_NAMES}
+                      open={draggingSkillId ? false : undefined}
                     >
                       <div className="partner-skill-policy-head">
                         <div className="partner-skill-policy-icon-wrap">

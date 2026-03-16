@@ -113,6 +113,7 @@ const buildMergedEntries = (params: {
 
   params.availableSkills.forEach((skill, naturalOrder) => {
     const persistedRow = persistedRowMap.get(skill.skillId) ?? null;
+    const persistedPriority = persistedRow ? normalizeInteger(persistedRow.priority, 1) : naturalOrder + 1;
     const baseEntry = {
       skillId: skill.skillId,
       skillName: skill.skillName,
@@ -131,7 +132,7 @@ const buildMergedEntries = (params: {
       sourceTechniqueId: skill.sourceTechniqueId,
       sourceTechniqueName: skill.sourceTechniqueName,
       sourceTechniqueQuality: skill.sourceTechniqueQuality,
-      priority: persistedRow ? normalizeInteger(persistedRow.priority, naturalOrder + 1) : naturalOrder + 1,
+      priority: persistedPriority,
       enabled: persistedRow ? Boolean(persistedRow.enabled) : true,
       naturalOrder,
     };

@@ -186,6 +186,24 @@ export const movePartnerSkillPolicyEntry = (
   return rebuildPartnerSkillPolicyEntries(nextEnabledEntries, disabledEntries);
 };
 
+export const reorderPartnerSkillPolicyEntry = (
+  entries: PartnerSkillPolicyEntryDto[],
+  sourceSkillId: string,
+  targetSkillId: string,
+): PartnerSkillPolicyEntryDto[] => {
+  if (sourceSkillId === targetSkillId) return entries;
+  const { enabledEntries, disabledEntries } = groupPartnerSkillPolicyEntries(entries);
+  const sourceIndex = enabledEntries.findIndex((entry) => entry.skillId === sourceSkillId);
+  const targetIndex = enabledEntries.findIndex((entry) => entry.skillId === targetSkillId);
+  if (sourceIndex < 0 || targetIndex < 0) return entries;
+
+  const nextEnabledEntries = [...enabledEntries];
+  const [sourceEntry] = nextEnabledEntries.splice(sourceIndex, 1);
+  if (!sourceEntry) return entries;
+  nextEnabledEntries.splice(targetIndex, 0, sourceEntry);
+  return rebuildPartnerSkillPolicyEntries(nextEnabledEntries, disabledEntries);
+};
+
 export const togglePartnerSkillPolicyEntry = (
   entries: PartnerSkillPolicyEntryDto[],
   skillId: string,
