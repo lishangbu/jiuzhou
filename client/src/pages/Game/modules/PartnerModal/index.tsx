@@ -1257,9 +1257,10 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
             {renderSkillPolicyGroup('已禁用', disabledEntries, false)}
           </div>
         )}
-        <div className="partner-action-row">
+        <div className="partner-action-row partner-skill-policy-save-row">
           <Button
             type="primary"
+            className="partner-skill-policy-save-btn"
             loading={actionKey === `skill-policy-${selectedPartner.id}`}
             disabled={!skillPolicyChanged || skillPolicyLoading || selectedPartnerListed}
             onClick={() => {

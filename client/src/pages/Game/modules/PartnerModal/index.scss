@@ -765,6 +765,17 @@
   background: color-mix(in srgb, var(--panel-bg) 92%, var(--panel-bg-soft) 8%);
 }
 
+.partner-skill-policy-save-row {
+  width: 100%;
+  padding-top: 4px;
+}
+
+.partner-skill-policy-save-btn.ant-btn {
+  width: 100%;
+  min-width: 0;
+  padding-inline: 18px;
+}
+
 .partner-result-tip {
   padding: 10px 12px;
   border-radius: 12px;
