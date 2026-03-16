@@ -384,7 +384,7 @@
       "bind_type": "pickup",
       "tradeable": false,
       "disassemblable": false,
-      "icon": "/assets/items/icon_bygj.png",
+      "icon": "/assets/items/yi_ming_fu.webp",
       "description": "使用后可立即修改一次角色道号",
       "long_desc": "背包中使用后可直接输入新的角色道号。改名成功时消耗 1 张，若新道号不合法则不会消耗。",
       "tags": [
