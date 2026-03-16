@@ -1,8 +1,7 @@
 import { App, Button, Input, Modal, Segmented, Tag } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { resolveIconUrl, DEFAULT_ICON as coin01 } from '../../shared/resolveIcon';
-import { IMG_LINGSHI as lingshiIcon, IMG_TONGQIAN as tongqianIcon } from '../../shared/imageAssets';
+import { DEFAULT_ICON as coin01 } from '../../shared/resolveIcon';
 import {
   claimTaskReward,
   getBountyTaskOverview,
@@ -16,34 +15,24 @@ import { useIsMobile } from '../../shared/responsive';
 import { getRealmRankFromLiteral as getRealmRank } from '../../shared/realm';
 import { formatTaskRewardsToText } from '../../shared/taskRewardText';
 import MainQuestPanel from './MainQuestPanel';
+import {
+  TASK_CATEGORY_KEYS,
+  TASK_CATEGORY_LABELS,
+  TASK_CATEGORY_SHORT_LABELS,
+  TASK_STATUS_COLOR,
+  TASK_STATUS_TEXT,
+  createEmptyTaskLoadedState,
+  createEmptyTaskRowsByCategory,
+  isTaskListCategory,
+  mapBountyTaskOverviewRows,
+  mapTaskOverviewRows,
+  type TaskCategory,
+  type TaskItem,
+  type TaskListCategory,
+  type TaskStatus,
+} from './taskModalShared';
 import './index.scss';
 import './MainQuestPanel.scss';
-
-type TaskCategory = 'main' | 'side' | 'daily' | 'event' | 'bounty';
-
-type TaskStatus = 'ongoing' | 'turnin' | 'claimable' | 'completed';
-
-type TaskReward = { id: string; name: string; icon: string; amount: number; amountMax?: number };
-
-type TaskObjective = { text: string; done: number; total: number; mapName?: string | null; mapNameType?: 'map' | 'dungeon' | null };
-
-type TaskItem = {
-  id: string;
-  category: TaskCategory;
-  title: string;
-  realm: string;
-  giverNpcId?: string | null;
-  status: TaskStatus;
-  tracked: boolean;
-  desc: string;
-  objectives: TaskObjective[];
-  rewards: TaskReward[];
-  expiresAt?: string | null;
-  sourceType?: 'daily' | 'player';
-  remainingSeconds?: number | null;
-};
-
-const resolveRewardIcon = resolveIconUrl;
 
 const formatRewardAmount = (amount: number, amountMax?: number): string => {
   const min = Math.max(0, Math.floor(Number(amount) || 0));
@@ -51,36 +40,6 @@ const formatRewardAmount = (amount: number, amountMax?: number): string => {
   const hasRange = Number.isFinite(maxRaw) && maxRaw > min;
   if (!hasRange) return `×${min.toLocaleString()}`;
   return `×${min.toLocaleString()}~${Math.floor(maxRaw).toLocaleString()}`;
-};
-
-const categoryLabels: Record<TaskCategory, string> = {
-  main: '主线任务',
-  side: '支线任务',
-  daily: '日常任务',
-  event: '活动任务',
-  bounty: '悬赏任务',
-};
-
-const categoryShortLabels: Record<TaskCategory, string> = {
-  main: '主线',
-  side: '支线',
-  daily: '日常',
-  event: '活动',
-  bounty: '悬赏',
-};
-
-const statusText: Record<TaskStatus, string> = {
-  ongoing: '进行中',
-  turnin: '可提交',
-  claimable: '可领取',
-  completed: '已完成',
-};
-
-const statusColor: Record<TaskStatus, string> = {
-  ongoing: 'blue',
-  turnin: 'purple',
-  claimable: 'gold',
-  completed: 'default',
 };
 
 interface TaskModalProps {
@@ -91,9 +50,9 @@ interface TaskModalProps {
 
 const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange }) => {
   const { message } = App.useApp();
-  const taskCategoryKeys = useMemo(() => Object.keys(categoryLabels) as TaskCategory[], []);
+  const taskCategoryKeys = useMemo(() => TASK_CATEGORY_KEYS, []);
   const taskCategoryOptions = useMemo(
-    () => taskCategoryKeys.map((k) => ({ label: categoryShortLabels[k], value: k })),
+    () => taskCategoryKeys.map((k) => ({ label: TASK_CATEGORY_SHORT_LABELS[k], value: k })),
     [taskCategoryKeys],
   );
   const isMobile = useIsMobile();
@@ -101,12 +60,21 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
   const [category, setCategory] = useState<TaskCategory>('main');
   const [query, setQuery] = useState('');
   const [activeId, setActiveId] = useState<string>('');
-  const [loading, setLoading] = useState(false);
+  const [loadingByCategory, setLoadingByCategory] = useState<Record<TaskCategory, boolean>>(() => createEmptyTaskLoadedState());
   const [submittingTaskId, setSubmittingTaskId] = useState<string>('');
-  const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [taskRowsByCategory, setTaskRowsByCategory] = useState<Record<TaskListCategory, TaskItem[]>>(() => createEmptyTaskRowsByCategory());
+  const [bountyTasks, setBountyTasks] = useState<TaskItem[]>([]);
   const [mainQuestProgress, setMainQuestProgress] = useState<MainQuestProgressDto | null>(null);
   const [nowTs, setNowTs] = useState<number>(() => Date.now());
   const lastExpireRefreshAtRef = useRef<number>(0);
+  const loadedByCategoryRef = useRef<Record<TaskCategory, boolean>>(createEmptyTaskLoadedState());
+  const inflightRequestsRef = useRef<Record<TaskCategory, Promise<void> | null>>({
+    main: null,
+    side: null,
+    daily: null,
+    event: null,
+    bounty: null,
+  });
 
   const appendSystemChat = useCallback((content: string) => {
     const text = String(content || '').trim();
@@ -145,146 +113,135 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   }, []);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [res, bountyRes, mainQuestRes] = await Promise.all([
-        getTaskOverview(),
-        getBountyTaskOverview(),
-        getMainQuestProgress(),
-      ]);
-      if (!res.data) throw new Error('加载任务失败');
+  const setCategoryLoading = useCallback((targetCategory: TaskCategory, nextLoading: boolean) => {
+    setLoadingByCategory((prev) => (
+      prev[targetCategory] === nextLoading ? prev : { ...prev, [targetCategory]: nextLoading }
+    ));
+  }, []);
 
-      // 更新主线进度
-      if (mainQuestRes?.success && mainQuestRes.data) {
-        setMainQuestProgress(mainQuestRes.data);
+  const setCategoryLoaded = useCallback((targetCategory: TaskCategory, nextLoaded: boolean) => {
+    loadedByCategoryRef.current[targetCategory] = nextLoaded;
+  }, []);
+
+  const runCategoryRequest = useCallback(async (targetCategory: TaskCategory, requestFactory: () => Promise<void>): Promise<void> => {
+    const inflightRequest = inflightRequestsRef.current[targetCategory];
+    if (inflightRequest) return inflightRequest;
+
+    const request = requestFactory().finally(() => {
+      inflightRequestsRef.current[targetCategory] = null;
+    });
+    inflightRequestsRef.current[targetCategory] = request;
+    return request;
+  }, []);
+
+  const loadMainQuestProgress = useCallback(async (forceRefresh: boolean): Promise<void> => {
+    if (!forceRefresh && loadedByCategoryRef.current.main) return;
+
+    await runCategoryRequest('main', async () => {
+      setCategoryLoading('main', true);
+      setCategoryLoaded('main', false);
+      try {
+        const response = await getMainQuestProgress();
+        if (!response.success || !response.data) return;
+        setMainQuestProgress(response.data);
+        setCategoryLoaded('main', true);
+      } finally {
+        setCategoryLoading('main', false);
       }
+    });
+  }, [runCategoryRequest, setCategoryLoaded, setCategoryLoading]);
 
-      const mapped: TaskItem[] = (res.data.tasks || [])
-        .map((t) => {
-          const rewards: TaskReward[] = (t.rewards || []).map((r) => {
-            if (r.type === 'item') {
-              const amount = Number.isFinite(Number(r.amount)) ? Number(r.amount) : 1;
-              const amountMaxRaw = Number((r as { amountMax?: unknown }).amountMax);
-              const amountMax = Number.isFinite(amountMaxRaw) && amountMaxRaw > amount ? amountMaxRaw : undefined;
-              return {
-                id: r.itemDefId,
-                name: r.name || r.itemDefId,
-                icon: resolveRewardIcon(r.icon),
-                amount,
-                ...(amountMax ? { amountMax } : {}),
-              };
-            }
-            return {
-              id: `${t.id}:${r.type}`,
-              name: r.name || (r.type === 'silver' ? '银两' : '灵石'),
-              icon: r.type === 'silver' ? tongqianIcon : lingshiIcon,
-              amount: Number.isFinite(Number(r.amount)) ? Number(r.amount) : 0,
-            };
-          });
+  const loadTaskCategory = useCallback(async (targetCategory: TaskListCategory, forceRefresh: boolean): Promise<void> => {
+    if (!forceRefresh && loadedByCategoryRef.current[targetCategory]) return;
 
-          const objectives: TaskObjective[] = (t.objectives || [])
-            .map((o) => ({
-              text: String(o.text || ''),
-              done: Number.isFinite(Number(o.done)) ? Number(o.done) : 0,
-              total: Number.isFinite(Number(o.target)) ? Number(o.target) : 1,
-              mapName: typeof o.mapName === 'string' && o.mapName.trim() ? o.mapName.trim() : null,
-              mapNameType: o.mapNameType === 'map' || o.mapNameType === 'dungeon' ? o.mapNameType : null,
-            }))
-            .filter((o) => o.text);
+    await runCategoryRequest(targetCategory, async () => {
+      setCategoryLoading(targetCategory, true);
+      setCategoryLoaded(targetCategory, false);
+      try {
+        const response = await getTaskOverview(targetCategory);
+        if (!response.success || !response.data) return;
+        const nextRows = mapTaskOverviewRows(response.data.tasks || []);
+        setTaskRowsByCategory((prev) => ({ ...prev, [targetCategory]: nextRows }));
+        setCategoryLoaded(targetCategory, true);
+      } finally {
+        setCategoryLoading(targetCategory, false);
+      }
+    });
+  }, [runCategoryRequest, setCategoryLoaded, setCategoryLoading]);
 
-          return {
-            id: String(t.id || ''),
-            category: (t.category || 'main') as TaskCategory,
-            title: String(t.title || ''),
-            realm: typeof t.realm === 'string' && t.realm.trim() ? t.realm.trim() : '凡人',
-            giverNpcId: typeof t.giverNpcId === 'string' && t.giverNpcId.trim() ? t.giverNpcId.trim() : null,
-            status: (t.status || 'ongoing') as TaskStatus,
-            tracked: Boolean(t.tracked),
-            desc: String(t.description || ''),
-            objectives,
-            rewards,
-          };
-        })
-        .filter((x) => x.id);
+  const loadBountyTaskOverview = useCallback(async (forceRefresh: boolean): Promise<void> => {
+    if (!forceRefresh && loadedByCategoryRef.current.bounty) return;
 
-      const mappedBounty: TaskItem[] = (bountyRes?.success && bountyRes.data ? bountyRes.data.tasks || [] : [])
-        .map((t): TaskItem => {
-          const rawRemaining = Number((t as { remainingSeconds?: unknown })?.remainingSeconds);
-          const remainingSeconds = Number.isFinite(rawRemaining) ? Math.max(0, Math.floor(rawRemaining)) : null;
-          const rawExpiresAt = typeof (t as { expiresAt?: unknown })?.expiresAt === 'string' ? String((t as { expiresAt?: unknown }).expiresAt) : null;
-          const expiresAt = rawExpiresAt || (remainingSeconds !== null ? new Date(Date.now() + remainingSeconds * 1000).toISOString() : null);
-          const sourceTypeRaw = String((t as { sourceType?: unknown })?.sourceType ?? '').trim();
-          const sourceType = sourceTypeRaw === 'player' ? 'player' : 'daily';
+    await runCategoryRequest('bounty', async () => {
+      setCategoryLoading('bounty', true);
+      setCategoryLoaded('bounty', false);
+      try {
+        const response = await getBountyTaskOverview();
+        if (!response.success || !response.data) return;
+        setBountyTasks(mapBountyTaskOverviewRows(response.data.tasks || []));
+        setCategoryLoaded('bounty', true);
+      } finally {
+        setCategoryLoading('bounty', false);
+      }
+    });
+  }, [runCategoryRequest, setCategoryLoaded, setCategoryLoading]);
 
-          const rewards: TaskReward[] = (t.rewards || []).map((r) => {
-            if (r.type === 'item') {
-              const amount = Number.isFinite(Number(r.amount)) ? Number(r.amount) : 1;
-              const amountMaxRaw = Number((r as { amountMax?: unknown }).amountMax);
-              const amountMax = Number.isFinite(amountMaxRaw) && amountMaxRaw > amount ? amountMaxRaw : undefined;
-              return {
-                id: r.itemDefId,
-                name: r.name || r.itemDefId,
-                icon: resolveRewardIcon(r.icon),
-                amount,
-                ...(amountMax ? { amountMax } : {}),
-              };
-            }
-            return {
-              id: `${t.id}:${r.type}`,
-              name: r.name || (r.type === 'silver' ? '银两' : '灵石'),
-              icon: r.type === 'silver' ? tongqianIcon : lingshiIcon,
-              amount: Number.isFinite(Number(r.amount)) ? Number(r.amount) : 0,
-            };
-          });
-
-          const objectives: TaskObjective[] = (t.objectives || [])
-            .map((o) => ({
-              text: String(o.text || ''),
-              done: Number.isFinite(Number(o.done)) ? Number(o.done) : 0,
-              total: Number.isFinite(Number(o.target)) ? Number(o.target) : 1,
-              mapName: typeof o.mapName === 'string' && o.mapName.trim() ? o.mapName.trim() : null,
-              mapNameType: o.mapNameType === 'map' || o.mapNameType === 'dungeon' ? o.mapNameType : null,
-            }))
-            .filter((o) => o.text);
-
-          return {
-            id: String(t.id || ''),
-            category: 'bounty',
-            title: String(t.title || ''),
-            realm: typeof t.realm === 'string' && t.realm.trim() ? t.realm.trim() : '凡人',
-            giverNpcId: typeof t.giverNpcId === 'string' && t.giverNpcId.trim() ? t.giverNpcId.trim() : null,
-            status: (t.status || 'ongoing') as TaskStatus,
-            tracked: Boolean(t.tracked),
-            desc: String(t.description || ''),
-            objectives,
-            rewards,
-            expiresAt,
-            sourceType,
-            remainingSeconds,
-          };
-        })
-        .filter((x) => x.id);
-
-      const bountyTaskIds = new Set(mappedBounty.map((x) => x.id));
-      const mappedNoOverlap = mapped.filter((t) => !bountyTaskIds.has(t.id));
-      setTasks([...mappedNoOverlap, ...mappedBounty]);
-    } catch (e: unknown) {
-      void 0;
-      setTasks([]);
-    } finally {
-      setLoading(false);
+  const ensureCategoryLoaded = useCallback(async (targetCategory: TaskCategory): Promise<void> => {
+    if (targetCategory === 'main') {
+      await loadMainQuestProgress(false);
+      return;
     }
-  }, [message]);
+    if (targetCategory === 'bounty') {
+      await loadBountyTaskOverview(false);
+      return;
+    }
+    await loadTaskCategory(targetCategory, false);
+  }, [loadBountyTaskOverview, loadMainQuestProgress, loadTaskCategory]);
+
+  const refreshCategory = useCallback(async (targetCategory: TaskCategory): Promise<void> => {
+    if (targetCategory === 'main') {
+      await loadMainQuestProgress(true);
+      return;
+    }
+    if (targetCategory === 'bounty') {
+      await loadBountyTaskOverview(true);
+      return;
+    }
+    await loadTaskCategory(targetCategory, true);
+  }, [loadBountyTaskOverview, loadMainQuestProgress, loadTaskCategory]);
+
+  const markCategoriesStale = useCallback((categories: TaskCategory[]) => {
+    for (const targetCategory of categories) {
+      loadedByCategoryRef.current[targetCategory] = false;
+    }
+  }, []);
+
+  const updateTaskInCategory = useCallback((targetCategory: TaskCategory, taskId: string, updater: (task: TaskItem) => TaskItem) => {
+    if (targetCategory === 'bounty') {
+      setBountyTasks((prev) => prev.map((task) => (task.id === taskId ? updater(task) : task)));
+      return;
+    }
+    if (!isTaskListCategory(targetCategory)) return;
+    setTaskRowsByCategory((prev) => ({
+      ...prev,
+      [targetCategory]: prev[targetCategory].map((task) => (task.id === taskId ? updater(task) : task)),
+    }));
+  }, []);
 
   useEffect(() => {
     if (!open) return;
+    markCategoriesStale(TASK_CATEGORY_KEYS);
     setCategory('main');
     setQuery('');
     setActiveId('');
     setMobilePane('list');
-    void refresh();
-  }, [open, refresh]);
+    void refreshCategory('main');
+  }, [markCategoriesStale, open, refreshCategory]);
+
+  useEffect(() => {
+    if (!open) return;
+    void ensureCategoryLoaded(category);
+  }, [category, ensureCategoryLoaded, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -297,10 +254,9 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
   useEffect(() => {
     if (!open) return;
     if (category !== 'bounty') return;
-    if (loading) return;
+    if (loadingByCategory.bounty) return;
 
-    const hasExpiredDaily = tasks.some((t) => {
-      if (t.category !== 'bounty') return false;
+    const hasExpiredDaily = bountyTasks.some((t) => {
       if (t.sourceType !== 'daily') return false;
       if (!t.expiresAt) return false;
       return (getRemainingSeconds(t.expiresAt) ?? 0) <= 0;
@@ -310,13 +266,19 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
     const now = Date.now();
     if (now - lastExpireRefreshAtRef.current < 5000) return;
     lastExpireRefreshAtRef.current = now;
-    void refresh();
-  }, [category, getRemainingSeconds, loading, open, refresh, tasks]);
+    void refreshCategory('bounty');
+  }, [bountyTasks, category, getRemainingSeconds, loadingByCategory.bounty, open, refreshCategory]);
+
+  const loading = loadingByCategory[category];
+  const currentTasks = useMemo(() => {
+    if (category === 'bounty') return bountyTasks;
+    if (!isTaskListCategory(category)) return [];
+    return taskRowsByCategory[category];
+  }, [bountyTasks, category, taskRowsByCategory]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = tasks
-      .filter((t) => t.category === category)
+    const list = currentTasks
       .filter((t) => {
         if (category !== 'bounty') return true;
         if (t.sourceType !== 'daily') return true;
@@ -328,7 +290,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
     return [...searched].sort(
       (a, b) => rank[a.status] - rank[b.status] || getRealmRank(a.realm) - getRealmRank(b.realm) || a.id.localeCompare(b.id),
     );
-  }, [category, getRemainingSeconds, query, tasks]);
+  }, [category, currentTasks, getRemainingSeconds, query]);
 
   const safeActiveId = useMemo(() => {
     if (activeId && filtered.some((t) => t.id === activeId)) return activeId;
@@ -348,13 +310,13 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
     const nextTracked = !activeTask.tracked;
     try {
       await setTaskTracked(activeTask.id, nextTracked);
-      setTasks((prev) => prev.map((t) => (t.id === activeTask.id ? { ...t, tracked: nextTracked } : t)));
+      updateTaskInCategory(activeTask.category, activeTask.id, (task) => ({ ...task, tracked: nextTracked }));
       message.success(nextTracked ? '已追踪' : '已取消追踪');
       onTrackedChange?.();
-    } catch (e: unknown) {
+    } catch {
       void 0;
     }
-  }, [activeTask?.id, activeTask?.tracked, message, onTrackedChange]);
+  }, [activeTask, message, onTrackedChange, updateTaskInCategory]);
 
   const claimReward = useCallback(async (task: TaskItem | null) => {
     if (!task?.id) return;
@@ -363,11 +325,11 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
       message.success('领取成功');
       const rewardText = formatTaskRewardsToText(res.data?.rewards);
       appendSystemChat(`【任务】领取奖励：${task.title}${rewardText ? `（${rewardText}）` : ''}`);
-      await refresh();
-    } catch (e: unknown) {
+      await refreshCategory(task.category);
+    } catch {
       void 0;
     }
-  }, [appendSystemChat, message, refresh]);
+  }, [appendSystemChat, message, refreshCategory]);
 
   const completeTask = useCallback(async (task: TaskItem | null) => {
     if (!task?.id) return;
@@ -388,17 +350,17 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
         const rewardText = formatTaskRewardsToText(rewardRes.data?.rewards);
         message.success('完成成功');
         appendSystemChat(`【任务】已完成并领取奖励：${task.title}${rewardText ? `（${rewardText}）` : ''}`);
-        await refresh();
+        await refreshCategory(task.category);
         return;
       }
 
       message.success('完成成功');
       appendSystemChat(`【任务】已完成：${task.title}`);
-      await refresh();
-    } catch (e: unknown) {
+      await refreshCategory(task.category);
+    } catch {
       void 0;
     }
-  }, [appendSystemChat, message, refresh]);
+  }, [appendSystemChat, message, refreshCategory]);
 
   const submitMaterials = useCallback(
     async (task: TaskItem | null) => {
@@ -408,15 +370,20 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
         await submitBountyMaterials(task.id);
         message.success('提交成功');
         appendSystemChat(`【悬赏】已提交材料：${task.title}`);
-        await refresh();
-      } catch (e: unknown) {
+        await refreshCategory('bounty');
+      } catch {
         void 0;
       } finally {
         setSubmittingTaskId('');
       }
     },
-    [appendSystemChat, message, refresh],
+    [appendSystemChat, message, refreshCategory],
   );
+
+  const refreshMainQuestProgress = useCallback(async () => {
+    await refreshCategory('main');
+    markCategoriesStale(['side', 'daily', 'event']);
+  }, [markCategoriesStale, refreshCategory]);
 
   return (
     <Modal
@@ -458,7 +425,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
                   className="task-left-item"
                   onClick={() => handleCategoryChange(k)}
                 >
-                  {categoryLabels[k]}
+                  {TASK_CATEGORY_LABELS[k]}
                 </Button>
               ))}
             </div>
@@ -472,7 +439,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
                 onClose={onClose}
                 progress={mainQuestProgress}
                 onProgressChange={setMainQuestProgress}
-                onRefresh={refresh}
+                onRefresh={refreshMainQuestProgress}
                 onTrackChange={onTrackedChange}
               />
             </div>
@@ -528,7 +495,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
                     >
                       <div className="task-item-top">
                         <div className="task-item-title">{t.title}</div>
-                        <Tag color={statusColor[t.status]}>{statusText[t.status]}</Tag>
+                        <Tag color={TASK_STATUS_COLOR[t.status]}>{TASK_STATUS_TEXT[t.status]}</Tag>
                       </div>
                       <div className="task-item-meta">
                         <span>推荐境界 {t.realm}</span>
@@ -554,7 +521,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ open, onClose, onTrackedChange })
                       <div className="task-detail-header">
                         <div className="task-detail-title">{activeTask.title}</div>
                         <div className="task-detail-tags">
-                          <Tag color={statusColor[activeTask.status]}>{statusText[activeTask.status]}</Tag>
+                          <Tag color={TASK_STATUS_COLOR[activeTask.status]}>{TASK_STATUS_TEXT[activeTask.status]}</Tag>
                           <Tag color="default">推荐境界 {activeTask.realm}</Tag>
                           {activeTask.category === 'bounty' && activeTask.sourceType === 'daily' && activeTask.expiresAt ? (
                             <Tag color="volcano">剩余 {formatCountdown(getRemainingSeconds(activeTask.expiresAt) ?? 0)}</Tag>

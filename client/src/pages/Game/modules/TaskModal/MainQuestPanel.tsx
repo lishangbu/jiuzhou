@@ -20,8 +20,8 @@ import './MainQuestPanel.scss';
  * MainQuestPanel — 主线任务面板
  *
  * 作用：展示主线进度、章节列表、任务节列表，支持追踪/完成操作。
- *       不负责初始数据加载——由父组件 TaskModal 在 refresh() 中与其他两个接口并行拉取，
- *       通过 props.progress 传入，消除重复请求。
+ *       不负责初始数据加载——由父组件 TaskModal 按当前页签懒加载主线进度后，
+ *       通过 props.progress 传入，避免打开弹窗就把普通任务/悬赏也一起拉取。
  *
  * Props：
  *   progress         — 父组件传入的主线进度（null 表示尚未加载）
@@ -30,14 +30,14 @@ import './MainQuestPanel.scss';
  *   onTrackChange    — 追踪状态变更后通知父组件刷新地图标记（可选）
  *
  * 数据流：
- *   TaskModal.refresh() 并行拉取 → props.progress 传入 → 本组件只读展示
- *   completeSection() → onProgressChange(newProgress) → TaskModal 更新 state → 重新传入
+ *   TaskModal 只在主线页签请求 `/main-quest/progress` → props.progress 传入 → 本组件只读展示
+ *   completeSection() → onRefresh() 只刷新主线并标记其它任务页签为脏数据 → 用户切换时再按需拉取
  *   章节/任务节列表由用户主动点击触发，仍在本组件内部管理（不影响父组件）
  *
  * 边界条件：
  *   1. progress 为 null 时展示"暂无主线进度"，不发任何请求
- *   2. handleCompleteSection 完成后不再自己调 getMainQuestProgress，
- *      而是通过 onProgressChange 通知父组件，保证数据源唯一、不重复请求
+ *   2. handleCompleteSection 完成后不直接自己补拉多个任务接口，
+ *      而是交给父组件只刷新主线数据，避免重新打满整组任务请求
  */
 
 interface MainQuestPanelProps {
@@ -45,7 +45,7 @@ interface MainQuestPanelProps {
   progress: MainQuestProgressDto | null;
   /** 追踪状态乐观更新：直接修改父组件 state，无需重新请求 */
   onProgressChange: (progress: MainQuestProgressDto) => void;
-  /** 完成任务节后触发父组件完整 refresh（三接口并行），保证数据源唯一 */
+  /** 完成任务节后只刷新主线进度，并由父组件标记其它任务分类为待刷新 */
   onRefresh: () => Promise<void>;
   onClose?: () => void;
   onTrackChange?: () => void;
