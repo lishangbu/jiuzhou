@@ -31,6 +31,7 @@ import {
 } from "../../../../services/api";
 import type { MailDto } from "../../../../services/api";
 import { useIsMobile } from "../../shared/responsive";
+import { formatGrantedRewardTexts } from "../../shared/grantedRewardText";
 import { formatDateTimeToMinute } from "../../shared/time";
 import "./index.scss";
 
@@ -43,9 +44,7 @@ interface MailModalProps {
 const isMailRead = (mail: MailDto): boolean => !!mail.readAt;
 
 const hasAttachments = (mail: MailDto): boolean =>
-  mail.attachSilver > 0 ||
-  mail.attachSpiritStones > 0 ||
-  (mail.attachItems && mail.attachItems.length > 0);
+  mail.attachRewards.length > 0;
 
 const hasUnclaimedAttachments = (mail: MailDto): boolean =>
   !mail.claimedAt && hasAttachments(mail);
@@ -174,12 +173,7 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
         setUnclaimedCount((c) => Math.max(0, c - 1));
 
         // 显示奖励
-        const rewards: string[] = [];
-        if (res.rewards?.silver) rewards.push(`银两 +${res.rewards.silver}`);
-        if (res.rewards?.spiritStones)
-          rewards.push(`灵石 +${res.rewards.spiritStones}`);
-        if (res.rewards?.itemIds?.length)
-          rewards.push(`物品 x${res.rewards.itemIds.length}`);
+        const rewards = formatGrantedRewardTexts(res.rewards);
         message.success(
           `领取成功${rewards.length > 0 ? "：" + rewards.join("，") : ""}`,
         );
@@ -216,9 +210,7 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
 
     let claimedCount = 0;
     let claimErrorMessage = "";
-    let totalSilver = 0;
-    let totalSpiritStones = 0;
-    let totalItemCount = 0;
+    const claimedRewards: MailDto["attachRewards"] = [];
 
     for (let i = 0; i < unclaimedMails.length; i++) {
       if (stopClaimRef.current) break;
@@ -230,9 +222,6 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
         const res = await claimMailAttachments(mail.id);
         if (res.success) {
           claimedCount += 1;
-          totalSilver += res.rewards?.silver ?? 0;
-          totalSpiritStones += res.rewards?.spiritStones ?? 0;
-          totalItemCount += res.rewards?.itemIds?.length ?? 0;
 
           // 实时更新该邮件的已领取状态
           setMails((prev) =>
@@ -247,6 +236,9 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
             ),
           );
           setUnclaimedCount((c) => Math.max(0, c - 1));
+          if (Array.isArray(res.rewards)) {
+            claimedRewards.push(...res.rewards);
+          }
         } else {
           claimErrorMessage = res.message;
           break;
@@ -269,10 +261,7 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
         return;
       }
 
-      const rewards: string[] = [];
-      if (totalSilver) rewards.push(`银两 +${totalSilver}`);
-      if (totalSpiritStones) rewards.push(`灵石 +${totalSpiritStones}`);
-      if (totalItemCount) rewards.push(`物品 x${totalItemCount}`);
+      const rewards = formatGrantedRewardTexts(claimedRewards);
       message.error(
         `领取到第 ${claimedCount} 封后中断：${claimErrorMessage}${rewards.length > 0 ? `（已获得：${rewards.join("，")}）` : ""}`,
       );
@@ -286,10 +275,7 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
       return;
     }
 
-    const rewards: string[] = [];
-    if (totalSilver) rewards.push(`银两 +${totalSilver}`);
-    if (totalSpiritStones) rewards.push(`灵石 +${totalSpiritStones}`);
-    if (totalItemCount) rewards.push(`物品 x${totalItemCount}`);
+    const rewards = formatGrantedRewardTexts(claimedRewards);
     const stoppedTip = stopped ? "（已手动停止）" : "";
     message.success(
       `已领取 ${claimedCount} 封邮件附件${rewards.length > 0 ? "：" + rewards.join("，") : ""}${stoppedTip}`,
@@ -593,48 +579,11 @@ const MailModal: React.FC<MailModalProps> = ({ open, onClose }) => {
                     </div>
                     {hasAttachments(activeMail) ? (
                       <div className="mail-attachments-list">
-                        {activeMail.attachSilver > 0 && (
-                          <div className="mail-attachment">
-                            <span className="mail-attachment-name">银两</span>
-                            <span className="mail-attachment-amount">
-                              x{activeMail.attachSilver.toLocaleString()}
-                            </span>
+                        {formatGrantedRewardTexts(activeMail.attachRewards).map((text, idx) => (
+                          <div key={`${activeMail.id}-${idx}`} className="mail-attachment">
+                            <span className="mail-attachment-name">{text}</span>
                           </div>
-                        )}
-                        {activeMail.attachSpiritStones > 0 && (
-                          <div className="mail-attachment">
-                            <span className="mail-attachment-name">灵石</span>
-                            <span className="mail-attachment-amount">
-                              x{activeMail.attachSpiritStones.toLocaleString()}
-                            </span>
-                          </div>
-                        )}
-                        {activeMail.attachItems?.map((item, idx) => {
-                          const qualityColorMap: Record<string, string> = {
-                            天: "var(--rarity-tian)",
-                            地: "var(--rarity-di)",
-                            玄: "var(--rarity-xuan)",
-                            黄: "var(--rarity-huang)",
-                          };
-                          const nameColor = item.quality
-                            ? qualityColorMap[item.quality]
-                            : undefined;
-                          return (
-                            <div key={idx} className="mail-attachment">
-                              <span
-                                className="mail-attachment-name"
-                                style={
-                                  nameColor ? { color: nameColor } : undefined
-                                }
-                              >
-                                {item.item_name || item.item_def_id}
-                              </span>
-                              <span className="mail-attachment-amount">
-                                x{item.qty}
-                              </span>
-                            </div>
-                          );
-                        })}
+                        ))}
                       </div>
                     ) : (
                       <div className="mail-attachments-empty">无附件</div>

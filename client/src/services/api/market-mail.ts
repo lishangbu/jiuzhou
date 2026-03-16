@@ -5,6 +5,7 @@ import type {
   UnifiedCaptchaPayload,
 } from './auth-character';
 import type { PartnerDisplayDto } from './partner';
+import type { GrantedRewardResultDto } from '../reward';
 
 export type MarketSort = 'timeDesc' | 'priceAsc' | 'priceDesc' | 'qtyDesc';
 
@@ -237,6 +238,7 @@ export interface MailDto {
   attachSilver: number;
   attachSpiritStones: number;
   attachItems: MailAttachItem[];
+  attachRewards: GrantedRewardResultDto[];
   readAt: string | null;
   claimedAt: string | null;
   expireAt: string | null;
@@ -267,11 +269,7 @@ export interface MailUnreadResponse {
 export interface MailClaimResponse {
   success: boolean;
   message: string;
-  rewards?: {
-    silver?: number;
-    spiritStones?: number;
-    itemIds?: number[];
-  };
+  rewards?: GrantedRewardResultDto[];
 }
 
 export interface MailClaimAllResponse {

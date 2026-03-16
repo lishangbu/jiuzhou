@@ -18,6 +18,10 @@
  * 2. OpenAPI `params` 参与签名时必须使用最终发送的 JSON 字符串，不能先按对象签名再让运行时改写顺序。
  */
 import { createHash } from 'node:crypto';
+import type {
+  GrantedRewardItemPayload as RedeemCodeRewardItem,
+  GrantedRewardPayload as RedeemCodeRewardPayload,
+} from '../shared/rewardPayload.js';
 
 export const AFDIAN_TARGET_PLAN_ID = '04f7a35e210c11f182a752540025c377';
 export const AFDIAN_REDEEM_SOURCE_TYPE = 'afdian_order';
@@ -35,20 +39,7 @@ jRlgSRaf/Ind46vMCm3N2sgwxu/g3bnooW+db0iLo13zzuvyn727Q3UDQ0MmZcEW
 MQIDAQAB
 -----END PUBLIC KEY-----`;
 
-export type RedeemCodeRewardItem = {
-  itemDefId: string;
-  quantity: number;
-};
-
-export type RedeemCodeRewardPayload = {
-  exp?: number;
-  silver?: number;
-  spiritStones?: number;
-  items?: RedeemCodeRewardItem[];
-  techniques?: string[];
-  titles?: string[];
-  unlockFeatures?: string[];
-};
+export type { RedeemCodeRewardItem, RedeemCodeRewardPayload };
 
 export type AfdianWebhookSkuDetail = {
   sku_id: string;

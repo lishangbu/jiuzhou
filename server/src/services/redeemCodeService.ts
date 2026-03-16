@@ -12,25 +12,30 @@
  *
  * 数据流/状态流：
  * webhook 服务 -> getOrCreateCodeBySource -> redeem_code；
- * 前端兑换接口 -> redeemCode -> 通用奖励发放器 -> redeem_code 标记已兑换。
+ * 前端兑换接口 -> redeemCode -> 系统奖励邮件 -> redeem_code 标记已兑换。
  *
  * 关键边界条件与坑点：
  * 1. 兑换必须在事务中先锁兑换码再发奖，避免并发请求把同一份奖励发两次。
  * 2. 奖励载荷是服务端单一数据源，兑换入口只能消费这份配置，不能在路由层重新拼奖励。
- * 3. 兑换码奖励复用主线奖励发放器，避免再维护一套“银两/灵石/物品/称号”的平行逻辑。
+ * 3. 兑换码奖励通过系统邮件投递，并复用通用奖励载荷，避免即时发奖和邮件附件各维护一套规则。
  */
 import { randomBytes } from 'node:crypto';
 
 import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
-import { grantSectionRewards } from './mainQuest/grantRewards.js';
+import { mailService } from './mailService.js';
 import type { RewardResult } from './mainQuest/types.js';
 import type { RedeemCodeRewardPayload } from './afdian/shared.js';
+import {
+  buildGrantRewardsInput,
+  buildGrantedRewardPreview,
+  normalizeGrantedRewardPayload,
+} from './shared/rewardPayload.js';
 
 type RedeemCodeRow = {
   id: number | string;
   code: string;
-  reward_payload: RedeemCodeRewardPayload;
+  reward_payload: unknown;
   status: string;
 };
 
@@ -54,46 +59,12 @@ const generateRedeemCode = (): string => {
   return `${REDEEM_CODE_PREFIX}${randomBytes(REDEEM_CODE_LENGTH_BYTES).toString('hex').toUpperCase()}`;
 };
 
-/**
- * 把兑换码奖励载荷映射为主线奖励发放器的统一入参。
- *
- * 设计原因：
- * - 主线奖励已经沉淀出完整的“资源/物品/功法/称号/功能解锁”发放链路；
- * - 兑换码只做字段命名对齐，避免再维护一套平行奖励解释器。
- */
-const toGrantRewardsInput = (rewardPayload: RedeemCodeRewardPayload): {
-  exp?: number;
-  silver?: number;
-  spirit_stones?: number;
-  items?: Array<{ item_def_id: string; quantity: number }>;
-  techniques?: string[];
-  titles?: string[];
-  unlock_features?: string[];
-} => {
-  return {
-    ...(rewardPayload.exp && rewardPayload.exp > 0 ? { exp: rewardPayload.exp } : {}),
-    ...(rewardPayload.silver && rewardPayload.silver > 0 ? { silver: rewardPayload.silver } : {}),
-    ...(rewardPayload.spiritStones && rewardPayload.spiritStones > 0
-      ? { spirit_stones: rewardPayload.spiritStones }
-      : {}),
-    ...(rewardPayload.items && rewardPayload.items.length > 0
-      ? {
-          items: rewardPayload.items.map((item) => ({
-            item_def_id: item.itemDefId,
-            quantity: item.quantity,
-          })),
-        }
-      : {}),
-    ...(rewardPayload.techniques && rewardPayload.techniques.length > 0
-      ? { techniques: [...rewardPayload.techniques] }
-      : {}),
-    ...(rewardPayload.titles && rewardPayload.titles.length > 0
-      ? { titles: [...rewardPayload.titles] }
-      : {}),
-    ...(rewardPayload.unlockFeatures && rewardPayload.unlockFeatures.length > 0
-      ? { unlock_features: [...rewardPayload.unlockFeatures] }
-      : {}),
-  };
+const buildRedeemCodeRewardMailTitle = (): string => {
+  return '兑换码奖励已送达';
+};
+
+const buildRedeemCodeRewardMailContent = (code: string): string => {
+  return `你已成功兑换兑换码 ${code}，奖励已通过系统邮件发放，请及时领取。`;
 };
 
 const createRedeemCodeRow = async (input: {
@@ -180,15 +151,30 @@ class RedeemCodeService {
       return { success: false, message: '兑换码已使用' };
     }
 
-    const rewards = await grantSectionRewards(
-      userId,
-      characterId,
-      toGrantRewardsInput(row.reward_payload),
-      {
-        obtainedFrom: 'redeem_code',
-        obtainedRefId: row.code,
-      },
+    const normalizedRewardPayload = normalizeGrantedRewardPayload(
+      row.reward_payload as RedeemCodeRewardPayload,
     );
+    const rewardPreview = buildGrantedRewardPreview(normalizedRewardPayload);
+
+    const mailResult = await mailService.sendMail({
+      recipientUserId: userId,
+      recipientCharacterId: characterId,
+      senderType: 'system',
+      senderName: '系统',
+      mailType: 'reward',
+      title: buildRedeemCodeRewardMailTitle(),
+      content: buildRedeemCodeRewardMailContent(row.code),
+      attachRewards: normalizedRewardPayload,
+      source: 'redeem_code',
+      sourceRefId: row.code,
+      metadata: {
+        redeemCode: row.code,
+        grantRewardsInput: buildGrantRewardsInput(normalizedRewardPayload),
+      },
+    });
+    if (!mailResult.success) {
+      throw new Error(mailResult.message || '奖励邮件发送失败');
+    }
 
     await query(
       `
@@ -205,10 +191,10 @@ class RedeemCodeService {
 
     return {
       success: true,
-      message: '兑换成功',
+      message: '兑换成功，奖励已通过邮件发放',
       data: {
         code: row.code,
-        rewards,
+        rewards: rewardPreview,
       },
     };
   }

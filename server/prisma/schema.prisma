@@ -847,6 +847,7 @@ model mail {
   attach_silver          Int       @default(0)
   attach_spirit_stones   Int       @default(0)
   attach_items           Json?
+  attach_rewards         Json?
   attach_instance_ids    Json?
   read_at                DateTime? @db.Timestamptz(6)
   claimed_at             DateTime? @db.Timestamptz(6)

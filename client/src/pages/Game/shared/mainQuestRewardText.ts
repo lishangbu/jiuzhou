@@ -19,38 +19,15 @@
  */
 
 import type { MainQuestRewardResultDto } from '../../../services/mainQuestApi';
-import { getCharacterFeatureLabel } from './featureUnlocks';
-import { PARTNER_FEATURE_CODE } from '../../../services/feature';
+import { formatGrantedRewardTexts } from './grantedRewardText';
 
 export const formatMainQuestRewardTexts = (
   rewards: MainQuestRewardResultDto[],
 ): string[] => {
   return rewards.flatMap((reward) => {
-    if (reward.type === 'exp') return [`经验 +${reward.amount}`];
-    if (reward.type === 'silver') return [`银两 +${reward.amount}`];
-    if (reward.type === 'spirit_stones') return [`灵石 +${reward.amount}`];
     if (reward.type === 'chapter_exp') return [`章节经验 +${reward.amount}`];
     if (reward.type === 'chapter_silver') return [`章节银两 +${reward.amount}`];
     if (reward.type === 'chapter_spirit_stones') return [`章节灵石 +${reward.amount}`];
-    if (reward.type === 'item') {
-      const name = reward.itemName || reward.itemDefId;
-      return [`物品「${name}」×${reward.quantity}`];
-    }
-    if (reward.type === 'technique') {
-      return [`功法「${reward.techniqueName || reward.techniqueId}」`];
-    }
-    if (reward.type === 'title') {
-      return [`称号「${reward.title}」`];
-    }
-    if (reward.type === 'feature_unlock') {
-      if (reward.featureCode === PARTNER_FEATURE_CODE) {
-        return [`解锁功能「${getCharacterFeatureLabel(reward.featureCode)}」`];
-      }
-      return [];
-    }
-    if (reward.type === 'partner') {
-      return [`伙伴「${reward.partnerName}」加入队伍`];
-    }
-    return [];
+    return formatGrantedRewardTexts([reward]);
   });
 };

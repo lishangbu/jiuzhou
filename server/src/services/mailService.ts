@@ -21,9 +21,19 @@ import { itemService } from './itemService.js';
 import { getInventoryInfo, moveItemInstanceToBagWithStacking } from './inventory/index.js';
 import { lockCharacterInventoryMutex } from './inventoryMutex.js';
 import { recordCollectItemEvent } from './taskService.js';
-import { getItemDefinitionsByIds } from './staticConfigLoader.js';
 import { createCacheLayer } from './shared/cacheLayer.js';
 import { getGameServer } from '../game/gameServer.js';
+import { grantSectionRewards } from './mainQuest/grantRewards.js';
+import type { RewardResult } from './mainQuest/types.js';
+import {
+  buildGrantRewardsInput,
+  buildGrantedRewardPreview,
+  hasGrantedRewardPayload,
+  normalizeGrantedRewardPayload,
+  type GrantedRewardPayload,
+  type GrantedRewardPreviewResult,
+} from './shared/rewardPayload.js';
+import { getItemDefinitionsByIds } from './staticConfigLoader.js';
 
 // ============================================
 // 类型定义
@@ -55,6 +65,7 @@ export interface SendMailOptions {
   attachSilver?: number;
   attachSpiritStones?: number;
   attachItems?: MailAttachItem[];
+  attachRewards?: GrantedRewardPayload;
   attachInstanceIds?: number[];
   expireDays?: number;
   source?: string;
@@ -72,6 +83,7 @@ export interface MailDto {
   attachSilver: number;
   attachSpiritStones: number;
   attachItems: MailAttachItem[];
+  attachRewards: GrantedRewardPreviewResult[];
   readAt: string | null;
   claimedAt: string | null;
   expireAt: string | null;
@@ -83,6 +95,7 @@ type ClaimMailRow = {
   attach_silver: number;
   attach_spirit_stones: number;
   attach_items: MailAttachItem[] | null;
+  attach_rewards: unknown;
   attach_instance_ids: unknown;
   claimed_at: Date | string | null;
   expire_at: Date | string | null;
@@ -95,12 +108,7 @@ type ClaimInstanceRow = {
   bind_type: string;
 };
 
-type MailAttachItemView = MailAttachItem & {
-  item_name?: string;
-  quality?: string;
-};
-
-const MAIL_HAS_ATTACHMENTS_SQL = '(attach_silver > 0 OR attach_spirit_stones > 0 OR attach_items IS NOT NULL OR attach_instance_ids IS NOT NULL)';
+const MAIL_HAS_ATTACHMENTS_SQL = '(attach_silver > 0 OR attach_spirit_stones > 0 OR attach_items IS NOT NULL OR attach_rewards IS NOT NULL OR attach_instance_ids IS NOT NULL)';
 const MAIL_UNREAD_CACHE_REDIS_TTL_SEC = 30;
 const MAIL_UNREAD_CACHE_MEMORY_TTL_MS = 5_000;
 
@@ -118,6 +126,40 @@ type MailScopedUnionSqlOptions = {
 type MailUnreadCounter = {
   unreadCount: number;
   unclaimedCount: number;
+};
+
+const buildLegacyMailRewardPayload = (input: {
+  attachSilver: number;
+  attachSpiritStones: number;
+  attachItems: MailAttachItem[];
+}): GrantedRewardPayload => {
+  return normalizeGrantedRewardPayload({
+    silver: Math.max(0, Math.floor(Number(input.attachSilver) || 0)),
+    spiritStones: Math.max(0, Math.floor(Number(input.attachSpiritStones) || 0)),
+    items: input.attachItems.map((item) => ({
+      itemDefId: String(item.item_def_id || '').trim(),
+      quantity: Math.max(0, Math.floor(Number(item.qty) || 0)),
+    })),
+  });
+};
+
+const buildMailPreviewRewards = (input: {
+  attachSilver: number;
+  attachSpiritStones: number;
+  attachItems: MailAttachItem[];
+  attachRewardsRaw: unknown;
+}): GrantedRewardPreviewResult[] => {
+  const normalizedAttachRewards = normalizeGrantedRewardPayload(input.attachRewardsRaw);
+  if (hasGrantedRewardPayload(normalizedAttachRewards)) {
+    return buildGrantedRewardPreview(normalizedAttachRewards);
+  }
+  return buildGrantedRewardPreview(
+    buildLegacyMailRewardPayload({
+      attachSilver: input.attachSilver,
+      attachSpiritStones: input.attachSpiritStones,
+      attachItems: input.attachItems,
+    }),
+  );
 };
 
 const buildMailUnreadCacheKey = (userId: number, characterId: number): string => {
@@ -198,7 +240,7 @@ const loadMailUnreadCounter = async (cacheKey: string): Promise<MailUnreadCounte
   if (!parsedKey) return null;
 
   const scopedMailUnionSql = buildRecipientScopedMailUnionSql({
-    selectSql: 'read_at, claimed_at, attach_silver, attach_spirit_stones, attach_items, attach_instance_ids',
+    selectSql: 'read_at, claimed_at, attach_silver, attach_spirit_stones, attach_items, attach_rewards, attach_instance_ids',
     characterIdParamIndex: 1,
     userIdParamIndex: 2,
     commonWhereSql: [
@@ -572,14 +614,6 @@ class MailService {
   }
 
   /**
-   * 计算附件物品总数量
-   */
-  private getAttachItemTotalQty(items: MailAttachItem[] | null | undefined): number {
-    if (!items || items.length === 0) return 0;
-    return items.reduce((sum, item) => sum + Math.max(0, Math.floor(Number(item.qty) || 0)), 0);
-  }
-
-  /**
    * 统一清洗邮件中的“定义附件”结构，避免同一解析逻辑在列表/领取/批量领取里重复实现。
    *
    * 数据流说明：
@@ -654,6 +688,9 @@ class MailService {
   // ============================================
 
   async sendMail(options: SendMailOptions): Promise<{ success: boolean; mailId?: number; message: string }> {
+    const normalizedAttachRewards = normalizeGrantedRewardPayload(options.attachRewards);
+    const hasNormalizedAttachRewards = hasGrantedRewardPayload(normalizedAttachRewards);
+
     // 参数校验
     if (!options.title || options.title.length > 128) {
       return { success: false, message: '邮件标题无效（1-128字符）' };
@@ -672,6 +709,19 @@ class MailService {
     }
     if (options.attachInstanceIds && options.attachInstanceIds.length > 10) {
       return { success: false, message: '附件实例不能超过10个' };
+    }
+    if (
+      hasNormalizedAttachRewards
+      && (
+        (options.attachSilver && options.attachSilver > 0)
+        || (options.attachSpiritStones && options.attachSpiritStones > 0)
+        || (options.attachItems && options.attachItems.length > 0)
+      )
+    ) {
+      return { success: false, message: '通用奖励附件不能与旧附件字段混用' };
+    }
+    if (hasNormalizedAttachRewards && options.attachInstanceIds && options.attachInstanceIds.length > 0) {
+      return { success: false, message: '通用奖励附件不能与实例附件混用' };
     }
 
     const attachInstanceIds = options.attachInstanceIds
@@ -694,9 +744,9 @@ class MailService {
           recipient_user_id, recipient_character_id,
           sender_type, sender_user_id, sender_character_id, sender_name,
           mail_type, title, content,
-          attach_silver, attach_spirit_stones, attach_items, attach_instance_ids,
+          attach_silver, attach_spirit_stones, attach_items, attach_rewards, attach_instance_ids,
           expire_at, source, source_ref_id, metadata
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15, $16, $17, $18)
         RETURNING id
       `, [
         options.recipientUserId,
@@ -708,9 +758,10 @@ class MailService {
         options.mailType || 'normal',
         options.title,
         options.content,
-        options.attachSilver || 0,
-        options.attachSpiritStones || 0,
-        options.attachItems ? JSON.stringify(options.attachItems) : null,
+        hasNormalizedAttachRewards ? 0 : (options.attachSilver || 0),
+        hasNormalizedAttachRewards ? 0 : (options.attachSpiritStones || 0),
+        hasNormalizedAttachRewards ? null : (options.attachItems ? JSON.stringify(options.attachItems) : null),
+        hasNormalizedAttachRewards ? JSON.stringify(normalizedAttachRewards) : null,
         attachInstanceIds.length > 0 ? JSON.stringify(attachInstanceIds) : null,
         expireAt,
         options.source || null,
@@ -776,7 +827,7 @@ class MailService {
     const listScopedMailUnionSql = buildRecipientScopedMailUnionSql({
       selectSql: `
               id, sender_type, sender_name, mail_type, title, content,
-              attach_silver, attach_spirit_stones, attach_items, attach_instance_ids,
+              attach_silver, attach_spirit_stones, attach_items, attach_rewards, attach_instance_ids,
               read_at, claimed_at, expire_at, created_at`,
       characterIdParamIndex: 1,
       userIdParamIndex: 2,
@@ -785,7 +836,7 @@ class MailService {
       limitParamIndex: 5,
     });
     const statsScopedMailUnionSql = buildRecipientScopedMailUnionSql({
-      selectSql: 'read_at, claimed_at, attach_silver, attach_spirit_stones, attach_items, attach_instance_ids',
+      selectSql: 'read_at, claimed_at, attach_silver, attach_spirit_stones, attach_items, attach_rewards, attach_instance_ids',
       characterIdParamIndex: 1,
       userIdParamIndex: 2,
       commonWhereSql: ['deleted_at IS NULL'],
@@ -808,7 +859,7 @@ class MailService {
         )
         SELECT
           id, sender_type, sender_name, mail_type, title, content,
-          attach_silver, attach_spirit_stones, attach_items, attach_instance_ids,
+          attach_silver, attach_spirit_stones, attach_items, attach_rewards, attach_instance_ids,
           read_at, claimed_at, expire_at, created_at
         FROM scoped_mail
         ORDER BY created_at DESC, id DESC
@@ -829,31 +880,6 @@ class MailService {
 
       const stats = statsResult.rows[0];
 
-      const itemDefIds = Array.from(
-        new Set(
-          result.rows.flatMap((row: any) => {
-            const items = this.normalizeAttachItems(row.attach_items);
-            return items
-              .map((item) => String(item.item_def_id || '').trim())
-              .filter((id) => id.length > 0);
-          })
-        )
-      );
-
-      const itemDefMap = new Map<string, { name: string; quality: string }>();
-      if (itemDefIds.length > 0) {
-        const defs = getItemDefinitionsByIds(itemDefIds);
-        for (const id of itemDefIds) {
-          const def = defs.get(id);
-          if (!def) continue;
-          const name = String(def.name || '').trim();
-          itemDefMap.set(id, {
-            name: name || id,
-            quality: String(def.quality || '').trim(),
-          });
-        }
-      }
-
       const mails: MailDto[] = result.rows.map(row => ({
         id: row.id,
         senderType: row.sender_type,
@@ -863,16 +889,15 @@ class MailService {
         content: row.content,
         attachSilver: row.attach_silver,
         attachSpiritStones: row.attach_spirit_stones,
-        attachItems: this.normalizeAttachItems(row.attach_items).map((item: MailAttachItem) => {
-          const itemDefId = String(item.item_def_id || '').trim();
-          const defInfo = itemDefId ? itemDefMap.get(itemDefId) : undefined;
-          const itemName = defInfo?.name || item.item_name || itemDefId || '未知物品';
-          return {
-            ...item,
-            item_def_id: itemDefId,
-            item_name: itemName,
-            quality: defInfo?.quality || '',
-          } as MailAttachItemView;
+        attachItems: this.normalizeAttachItems(row.attach_items).map((item: MailAttachItem) => ({
+          ...item,
+          item_def_id: String(item.item_def_id || '').trim(),
+        })),
+        attachRewards: buildMailPreviewRewards({
+          attachSilver: Number(row.attach_silver) || 0,
+          attachSpiritStones: Number(row.attach_spirit_stones) || 0,
+          attachItems: this.normalizeAttachItems(row.attach_items),
+          attachRewardsRaw: row.attach_rewards,
         }),
         readAt: row.read_at?.toISOString() || null,
         claimedAt: row.claimed_at?.toISOString() || null,
@@ -928,7 +953,7 @@ class MailService {
     characterId: number,
     mailId: number,
     shouldInvalidateUnreadCounter: boolean = true,
-  ): Promise<{ success: boolean; message: string; rewards?: { silver?: number; spiritStones?: number; itemIds?: number[] } }> {
+  ): Promise<{ success: boolean; message: string; rewards?: RewardResult[] }> {
     const collectCounts = new Map<string, number>();
 
     // 1. 先获取角色背包互斥锁，统一“背包锁 → 邮件行锁”的顺序，避免并发领取形成锁等待链。
@@ -938,7 +963,7 @@ class MailService {
     let mailResult: { rows: ClaimMailRow[] };
     try {
       const lockedMailResult = await query<ClaimMailRow>(`
-        SELECT id, attach_silver, attach_spirit_stones, attach_items, attach_instance_ids, claimed_at, expire_at
+        SELECT id, attach_silver, attach_spirit_stones, attach_items, attach_rewards, attach_instance_ids, claimed_at, expire_at
         FROM mail
         WHERE id = $1
           AND ${this.buildRecipientScopeSql(2, 3)}
@@ -970,12 +995,14 @@ class MailService {
     }
 
     // 5. 检查是否有附件
+    const attachRewards = normalizeGrantedRewardPayload(mail.attach_rewards);
+    const hasAttachRewards = hasGrantedRewardPayload(attachRewards);
     const hasCurrency = mail.attach_silver > 0 || mail.attach_spirit_stones > 0;
     const attachItems = this.normalizeAttachItems(mail.attach_items);
     const attachInstanceIds = this.normalizeAttachInstanceIds(mail.attach_instance_ids);
     const hasItems = attachItems.length > 0 || attachInstanceIds.length > 0;
 
-    if (!hasCurrency && !hasItems) {
+    if (!hasAttachRewards && !hasCurrency && !hasItems) {
       return { success: false, message: '该邮件没有附件' };
     }
 
@@ -984,7 +1011,20 @@ class MailService {
     let freeSlots = 0;
 
     // 6. 检查背包空间（如果有物品附件）
-    if (hasItems) {
+    if (hasAttachRewards) {
+      const rewardAttachItems: MailAttachItem[] = (attachRewards.items ?? []).map((item) => ({
+        item_def_id: item.itemDefId,
+        qty: item.quantity,
+      }));
+      if (rewardAttachItems.length > 0) {
+        requiredSlots = await this.estimateRequiredSlots(rewardAttachItems);
+        const inventoryInfo = await getInventoryInfo(characterId);
+        freeSlots = inventoryInfo.bag_capacity - inventoryInfo.bag_used;
+        if (freeSlots < requiredSlots) {
+          return { success: false, message: `背包空间不足，需要${requiredSlots}格，当前剩余${freeSlots}格` };
+        }
+      }
+    } else if (hasItems) {
       if (attachInstanceIds.length > 0) {
         const lockedInstanceResult = await query<ClaimInstanceRow>(
           `
@@ -1045,23 +1085,32 @@ class MailService {
       }
     }
 
-    const rewards: { silver?: number; spiritStones?: number; itemIds?: number[] } = {};
+    let rewards: RewardResult[] = [];
+    let claimedInstanceIds: number[] = [];
 
-    // 7. 发放货币
-    if (hasCurrency) {
-      await query(`
-        UPDATE characters
-        SET silver = silver + $1, spirit_stones = spirit_stones + $2, updated_at = NOW()
-        WHERE id = $3
-      `, [mail.attach_silver, mail.attach_spirit_stones, characterId]);
+    // 7. 发放奖励
+    if (hasAttachRewards) {
+      rewards = await grantSectionRewards(
+        userId,
+        characterId,
+        buildGrantRewardsInput(attachRewards),
+        {
+          obtainedFrom: 'mail',
+          obtainedRefId: String(mailId),
+        },
+      );
+    } else if (hasItems || hasCurrency) {
+      if (hasCurrency) {
+        await query(`
+          UPDATE characters
+          SET silver = silver + $1, spirit_stones = spirit_stones + $2, updated_at = NOW()
+          WHERE id = $3
+        `, [mail.attach_silver, mail.attach_spirit_stones, characterId]);
 
-      if (mail.attach_silver > 0) rewards.silver = mail.attach_silver;
-      if (mail.attach_spirit_stones > 0) rewards.spiritStones = mail.attach_spirit_stones;
-    }
+        if (mail.attach_silver > 0) rewards.push({ type: 'silver', amount: mail.attach_silver });
+        if (mail.attach_spirit_stones > 0) rewards.push({ type: 'spirit_stones', amount: mail.attach_spirit_stones });
+      }
 
-    // 8. 发放物品
-    const itemIds: number[] = [];
-    if (hasItems) {
       if (attachInstanceIds.length > 0) {
         // 实例附件领取：复用库存模块“实例入包自动堆叠”逻辑，避免同规则在邮件/坊市重复实现。
         for (const attachInstanceId of attachInstanceIds) {
@@ -1077,7 +1126,7 @@ class MailService {
             throw new Error(`实例附件入包失败: ${moveResult.message}`);
           }
           if (moveResult.itemId !== undefined) {
-            itemIds.push(moveResult.itemId);
+            claimedInstanceIds.push(moveResult.itemId);
           }
         }
 
@@ -1085,6 +1134,11 @@ class MailService {
           const key = String(row.item_def_id || '').trim();
           const qty = Math.max(1, Math.floor(Number(row.qty) || 1));
           if (key) collectCounts.set(key, (collectCounts.get(key) || 0) + qty);
+          rewards.push({
+            type: 'item',
+            itemDefId: key,
+            quantity: qty,
+          });
         }
       } else {
         for (const attachItem of attachItems) {
@@ -1106,25 +1160,28 @@ class MailService {
           }
 
           if (createResult.itemIds) {
-            itemIds.push(...createResult.itemIds);
+            claimedInstanceIds.push(...createResult.itemIds);
           }
 
           const key = String(attachItem.item_def_id || '').trim();
           if (key) collectCounts.set(key, (collectCounts.get(key) || 0) + Math.max(1, Math.floor(Number(attachItem.qty) || 1)));
+          rewards.push({
+            type: 'item',
+            itemDefId: key,
+            quantity: Math.max(1, Math.floor(Number(attachItem.qty) || 1)),
+            itemName: String(attachItem.item_name || '').trim() || undefined,
+          });
         }
-      }
-      if (itemIds.length > 0) {
-        rewards.itemIds = itemIds;
       }
     }
 
-    // 9. 更新邮件状态
+    // 8. 更新邮件状态
     await query(`
       UPDATE mail
       SET claimed_at = NOW(), read_at = COALESCE(read_at, NOW()),
           attach_instance_ids = $1, updated_at = NOW()
       WHERE id = $2
-    `, [JSON.stringify(itemIds), mailId]);
+    `, [JSON.stringify(claimedInstanceIds), mailId]);
 
     for (const [itemDefId, qty] of collectCounts.entries()) {
       await recordCollectItemEvent(characterId, itemDefId, qty);
@@ -1154,7 +1211,7 @@ class MailService {
     // 1. 获取所有可尝试领取的邮件（不做总量空间校验，改为逐封领取）
     // 说明：此方法不包裹单一大事务，避免批量领取时长时间持有 mail 行锁与背包互斥锁。
     const claimableMailUnionSql = buildRecipientScopedMailUnionSql({
-      selectSql: 'id, attach_silver, attach_spirit_stones, attach_items, attach_instance_ids, created_at',
+      selectSql: 'id, attach_silver, attach_spirit_stones, attach_items, attach_rewards, attach_instance_ids, created_at',
       characterIdParamIndex: 1,
       userIdParamIndex: 2,
       commonWhereSql: [
@@ -1170,7 +1227,7 @@ class MailService {
       WITH candidate_mail AS (
         ${claimableMailUnionSql}
       )
-      SELECT id, attach_silver, attach_spirit_stones, attach_items, attach_instance_ids
+      SELECT id, attach_silver, attach_spirit_stones, attach_items, attach_rewards, attach_instance_ids
       FROM candidate_mail
       ORDER BY created_at ASC, id ASC
     `,
@@ -1189,11 +1246,13 @@ class MailService {
 
     for (const row of mailsResult.rows) {
       const mailId = Number(row.id);
+      const attachRewards = normalizeGrantedRewardPayload(row.attach_rewards);
       const attachItems = this.normalizeAttachItems(row.attach_items);
       const attachInstanceIds = this.normalizeAttachInstanceIds(row.attach_instance_ids);
+      const hasAttachRewards = hasGrantedRewardPayload(attachRewards);
       const hasCurrency = Number(row.attach_silver) > 0 || Number(row.attach_spirit_stones) > 0;
       const hasItems = attachItems.length > 0 || attachInstanceIds.length > 0;
-      if (!hasCurrency && !hasItems) continue;
+      if (!hasAttachRewards && !hasCurrency && !hasItems) continue;
 
       const claimResult = await this.claimAttachments(userId, characterId, mailId, false);
 
@@ -1209,9 +1268,19 @@ class MailService {
       }
 
       claimedCount += 1;
-      totalSilver += Math.max(0, Math.floor(Number(claimResult.rewards?.silver) || 0));
-      totalSpiritStones += Math.max(0, Math.floor(Number(claimResult.rewards?.spiritStones) || 0));
-      totalItemCount += attachItems.length > 0 ? this.getAttachItemTotalQty(attachItems) : attachInstanceIds.length;
+      for (const reward of claimResult.rewards ?? []) {
+        if (reward.type === 'silver') {
+          totalSilver += Math.max(0, Math.floor(Number(reward.amount) || 0));
+          continue;
+        }
+        if (reward.type === 'spirit_stones') {
+          totalSpiritStones += Math.max(0, Math.floor(Number(reward.amount) || 0));
+          continue;
+        }
+        if (reward.type === 'item') {
+          totalItemCount += Math.max(0, Math.floor(Number(reward.quantity) || 0));
+        }
+      }
     }
 
     if (claimedCount === 0) {
@@ -1261,7 +1330,7 @@ class MailService {
       WHERE id = $1
         AND ${this.buildRecipientScopeSql(2, 3)}
         AND deleted_at IS NULL
-      RETURNING id, claimed_at, attach_silver, attach_spirit_stones, attach_items, attach_instance_ids
+      RETURNING id, claimed_at, attach_silver, attach_spirit_stones, attach_items, attach_rewards, attach_instance_ids
     `, [mailId, characterId, userId]);
 
     if (result.rows.length === 0) {
@@ -1273,6 +1342,7 @@ class MailService {
     const mail = result.rows[0];
     const hasAttachments = mail.attach_silver > 0 || mail.attach_spirit_stones > 0 ||
                           this.normalizeAttachItems(mail.attach_items).length > 0 ||
+                          hasGrantedRewardPayload(normalizeGrantedRewardPayload(mail.attach_rewards)) ||
                           this.normalizeAttachInstanceIds(mail.attach_instance_ids).length > 0;
 
     if (hasAttachments && !mail.claimed_at) {
