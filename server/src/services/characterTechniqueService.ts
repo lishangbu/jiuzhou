@@ -10,17 +10,24 @@ import { isCharacterInBattle } from './battle/index.js';
 import { getRealmRankZeroBased } from './shared/realmRules.js';
 import { shouldValidateTechniqueLearnRealm } from './shared/techniqueLearnRule.js';
 import { invalidateCharacterComputedCache } from './characterComputedService.js';
-import { getItemDefinitionById, getSkillDefinitions, getTechniqueDefinitions } from './staticConfigLoader.js';
-import { isCharacterVisibleTechniqueDefinition } from './shared/techniqueUsageScope.js';
+import { getItemDefinitionById } from './staticConfigLoader.js';
 import {
   getItemMetaMap,
   getTechniqueLayerByTechniqueAndLayerStatic,
   getTechniqueLayersByTechniqueIdStatic,
-  getTechniqueLayersByTechniqueIdsStatic,
   resolveTechniqueCostMultiplierByQuality,
   scaleTechniqueBaseCostByQuality,
   type TechniqueLayerStaticRow,
 } from './shared/techniqueUpgradeRules.js';
+import {
+  cleanupPersistedIdleConfigAutoSkillPolicy,
+} from './idle/idleAutoSkillPolicy.js';
+import {
+  getCharacterVisibleTechniqueDefMap,
+  getEnabledSkillDefMap,
+  loadCharacterAvailableSkillEntries,
+  listCharacterAvailableSkillIdSet,
+} from './shared/characterAvailableSkills.js';
 
 // ============================================
 // 类型定义
@@ -87,48 +94,9 @@ const asStringArray = (raw: unknown): string[] => {
     .filter((entry): entry is string => entry.length > 0);
 };
 
-const getTechniqueDefMap = () => {
-  return new Map(
-    getTechniqueDefinitions()
-      .filter((entry) => entry.enabled !== false)
-      .filter((entry) => isCharacterVisibleTechniqueDefinition(entry))
-      .map((entry) => [entry.id, entry] as const),
-  );
-};
+const getTechniqueDefMap = () => getCharacterVisibleTechniqueDefMap();
 
-const getSkillDefMap = () => {
-  return new Map(
-    getSkillDefinitions()
-      .filter((entry) => entry.enabled !== false)
-      .map((entry) => [entry.id, entry] as const),
-  );
-};
-
-type EquippedTechniqueLite = {
-  techniqueId: string;
-  currentLayer: number;
-  slotType: 'main' | 'sub';
-  slotIndex: number | null;
-};
-
-type AvailableSkillEntry = {
-  skillId: string;
-  techniqueId: string;
-  techniqueName: string;
-  skillName: string;
-  skillIcon: string;
-  description: string | null;
-  costLingqi: number;
-  costLingqiRate: number;
-  costQixue: number;
-  costQixueRate: number;
-  cooldown: number;
-  targetType: string;
-  targetCount: number;
-  damageType: string | null;
-  element: string;
-  effects: unknown[];
-};
+const getSkillDefMap = () => getEnabledSkillDefMap();
 
 type SkillSlotLite = {
   slotIndex: number;
@@ -137,97 +105,6 @@ type SkillSlotLite = {
 
 type ReconciledSkillSlot = SkillSlotLite & {
   skillName: string;
-};
-
-const loadEquippedTechniqueLite = async (characterId: number): Promise<EquippedTechniqueLite[]> => {
-  const res = await query(
-    `
-      SELECT technique_id, current_layer, slot_type, slot_index
-      FROM character_technique
-      WHERE character_id = $1 AND slot_type IS NOT NULL
-    `,
-    [characterId],
-  );
-
-  return (res.rows as Array<Record<string, unknown>>)
-    .map((row) => {
-      const techniqueId = typeof row.technique_id === 'string' ? row.technique_id : '';
-      const currentLayer = Number(row.current_layer ?? 0) || 0;
-      const slotType = row.slot_type === 'main' ? 'main' : row.slot_type === 'sub' ? 'sub' : null;
-      const slotIndex = row.slot_index === null || row.slot_index === undefined ? null : Number(row.slot_index);
-      if (!techniqueId || !slotType) return null;
-      return {
-        techniqueId,
-        currentLayer,
-        slotType,
-        slotIndex: Number.isFinite(slotIndex ?? NaN) ? Math.floor(Number(slotIndex)) : null,
-      };
-    })
-    .filter((entry): entry is EquippedTechniqueLite => Boolean(entry));
-};
-
-const loadAvailableSkillEntries = async (characterId: number): Promise<AvailableSkillEntry[]> => {
-  const equipped = await loadEquippedTechniqueLite(characterId);
-  if (equipped.length === 0) return [];
-
-  const techniqueIds = Array.from(new Set(equipped.map((entry) => entry.techniqueId)));
-  const layerRows = getTechniqueLayersByTechniqueIdsStatic(techniqueIds);
-
-  const techniqueMap = getTechniqueDefMap();
-  const skillMap = getSkillDefMap();
-  const maxLayerByTechnique = new Map(equipped.map((entry) => [entry.techniqueId, entry.currentLayer] as const));
-  const unlockedByTechnique = new Map<string, Set<string>>();
-
-  for (const row of layerRows) {
-    const techniqueId = row.techniqueId;
-    const layer = row.layer;
-    const maxLayer = maxLayerByTechnique.get(techniqueId) ?? 0;
-    if (!techniqueId || layer <= 0 || layer > maxLayer) continue;
-    const skillIds = row.unlockSkillIds;
-    const set = unlockedByTechnique.get(techniqueId) ?? new Set<string>();
-    for (const skillId of skillIds) set.add(skillId);
-    unlockedByTechnique.set(techniqueId, set);
-  }
-
-  const dedup = new Set<string>();
-  const entries: AvailableSkillEntry[] = [];
-  for (const equippedEntry of equipped) {
-    const techniqueDef = techniqueMap.get(equippedEntry.techniqueId);
-    const techniqueName = String(techniqueDef?.name || equippedEntry.techniqueId);
-    const skillIds = Array.from(unlockedByTechnique.get(equippedEntry.techniqueId) ?? []);
-    for (const skillId of skillIds) {
-      const skillDef = skillMap.get(skillId);
-      if (!skillDef) continue;
-      const key = `${equippedEntry.techniqueId}:${skillId}`;
-      if (dedup.has(key)) continue;
-      dedup.add(key);
-      entries.push({
-        skillId,
-        techniqueId: equippedEntry.techniqueId,
-        techniqueName,
-        skillName: String(skillDef.name || skillId),
-        skillIcon: String(skillDef.icon || ''),
-        description: typeof skillDef.description === 'string' ? skillDef.description : null,
-        costLingqi: Number(skillDef.cost_lingqi ?? 0) || 0,
-        costLingqiRate: Number(skillDef.cost_lingqi_rate ?? 0) || 0,
-        costQixue: Number(skillDef.cost_qixue ?? 0) || 0,
-        costQixueRate: Number(skillDef.cost_qixue_rate ?? 0) || 0,
-        cooldown: Number(skillDef.cooldown ?? 0) || 0,
-        targetType: String(skillDef.target_type || ''),
-        targetCount: Number(skillDef.target_count ?? 1) || 1,
-        damageType: typeof skillDef.damage_type === 'string' ? skillDef.damage_type : null,
-        element: String(skillDef.element || 'none'),
-        effects: Array.isArray(skillDef.effects) ? skillDef.effects : [],
-      });
-    }
-  }
-
-  return entries.sort((left, right) => left.techniqueName.localeCompare(right.techniqueName) || left.skillName.localeCompare(right.skillName));
-};
-
-const listAvailableSkillIdSet = async (characterId: number): Promise<Set<string>> => {
-  const available = await loadAvailableSkillEntries(characterId);
-  return new Set(available.map((entry) => entry.skillId));
 };
 
 const filterSkillSlotsByAvailableSkillSet = (
@@ -262,7 +139,7 @@ const buildTechniqueSwitchMessage = (baseMessage: string, removedSlots: Reconcil
 };
 
 const reconcileEquippedSkillSlots = async (characterId: number): Promise<ReconciledSkillSlot[]> => {
-  const availableSkillIds = await listAvailableSkillIdSet(characterId);
+  const availableSkillIds = await listCharacterAvailableSkillIdSet(characterId);
   const removedResult =
     availableSkillIds.size === 0
       ? await query(
@@ -721,6 +598,7 @@ class CharacterTechniqueService {
       }
     }
     const removedSlots = await reconcileEquippedSkillSlots(characterId);
+    await cleanupPersistedIdleConfigAutoSkillPolicy(characterId);
     await invalidateCharacterComputedCache(characterId);
     return {
       success: true,
@@ -760,6 +638,7 @@ class CharacterTechniqueService {
       );
     }
     const removedSlots = await reconcileEquippedSkillSlots(characterId);
+    await cleanupPersistedIdleConfigAutoSkillPolicy(characterId);
     await invalidateCharacterComputedCache(characterId);
     return {
       success: true,
@@ -792,7 +671,7 @@ class CharacterTechniqueService {
     element: string;
     effects: unknown[];
   }[]>> {
-    const skills = (await loadAvailableSkillEntries(characterId)).map((row) => ({
+    const skills = (await loadCharacterAvailableSkillEntries(characterId)).map((row) => ({
       skillId: row.skillId,
       skillName: row.skillName,
       skillIcon: row.skillIcon,
@@ -886,7 +765,7 @@ class CharacterTechniqueService {
     await query('SELECT id FROM characters WHERE id = $1 FOR UPDATE', [characterId]);
 
     // 检查技能是否可用（来自已装备功法且已解锁）
-    const available = await loadAvailableSkillEntries(characterId);
+    const available = await loadCharacterAvailableSkillEntries(characterId);
     if (!available.some((entry) => entry.skillId === skillId)) {
       return { success: false, message: '技能不可用（未解锁或功法未装备）' };
     }
@@ -999,7 +878,7 @@ class CharacterTechniqueService {
       .map((row) => (typeof row.skill_id === 'string' ? row.skill_id.trim() : ''))
       .filter((skillId): skillId is string => skillId.length > 0);
 
-    const availableSkillIds = await listAvailableSkillIdSet(characterId);
+    const availableSkillIds = await listCharacterAvailableSkillIdSet(characterId);
     const orderedSkillIds = rawOrderedSkillIds.filter((skillId) => availableSkillIds.has(skillId));
 
     if (orderedSkillIds.length === 0) {

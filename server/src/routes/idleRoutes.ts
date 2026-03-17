@@ -36,6 +36,7 @@ import {
   requestImmediateStop,
 } from '../services/idle/idleBattleExecutorWorker.js';
 import { validateAutoSkillPolicy, serializeAutoSkillPolicy } from '../services/idle/autoSkillPolicyCodec.js';
+import { reconcileIdleAutoSkillPolicyForCharacter } from '../services/idle/idleAutoSkillPolicy.js';
 import { query } from '../config/database.js';
 import { getRoomInMap } from '../services/mapService.js';
 import { getMonsterDefinitions } from '../services/staticConfigLoader.js';
@@ -124,6 +125,7 @@ router.post('/start', requireCharacter, asyncHandler(async (req, res) => {
     res.status(400).json({ success: false, message: '技能策略非法', errors: policyValidation.errors });
     return;
   }
+  const normalizedPolicy = await reconcileIdleAutoSkillPolicyForCharacter(characterId, policyValidation.value);
 
   // 校验 targetMonsterDefId 属于目标房间
   const room = await getRoomInMap(mapId, roomId);
@@ -139,7 +141,7 @@ router.post('/start', requireCharacter, asyncHandler(async (req, res) => {
     mapId,
     roomId,
     maxDurationMs: durationMs,
-    autoSkillPolicy: policyValidation.value,
+    autoSkillPolicy: normalizedPolicy,
     targetMonsterDefId,
     includePartnerInBattle: validatedIncludePartnerInBattle,
   };
@@ -314,13 +316,30 @@ router.get('/config', requireCharacter, asyncHandler(async (req, res) => {
     target_monster_def_id: string | null;
     include_partner_in_battle: boolean;
   };
+  const persistedPolicyValidation = validateAutoSkillPolicy(row.auto_skill_policy);
+  if (!persistedPolicyValidation.success) {
+    throw new Error('idle_configs.auto_skill_policy 数据非法');
+  }
+  const normalizedPolicy = await reconcileIdleAutoSkillPolicyForCharacter(characterId, persistedPolicyValidation.value);
+  const normalizedPolicyJson = serializeAutoSkillPolicy(normalizedPolicy);
+  if (normalizedPolicyJson !== serializeAutoSkillPolicy(persistedPolicyValidation.value)) {
+    await query(
+      `
+        UPDATE idle_configs
+        SET auto_skill_policy = $2::jsonb,
+            updated_at = NOW()
+        WHERE character_id = $1
+      `,
+      [characterId, normalizedPolicyJson],
+    );
+  }
 
   sendSuccess(res, {
     config: {
       mapId: row.map_id,
       roomId: row.room_id,
       maxDurationMs: Number(row.max_duration_ms),
-      autoSkillPolicy: row.auto_skill_policy,
+      autoSkillPolicy: normalizedPolicy,
       targetMonsterDefId: row.target_monster_def_id,
       includePartnerInBattle: row.include_partner_in_battle,
     },
@@ -350,6 +369,7 @@ router.put('/config', requireCharacter, asyncHandler(async (req, res) => {
     res.status(400).json({ success: false, message: '技能策略非法', errors: policyValidation.errors });
     return;
   }
+  const normalizedPolicy = await reconcileIdleAutoSkillPolicyForCharacter(characterId, policyValidation.value);
 
   // maxDurationMs 可选，有值时校验范围
   let validatedDurationMs: number | null = null;
@@ -361,7 +381,7 @@ router.put('/config', requireCharacter, asyncHandler(async (req, res) => {
     validatedDurationMs = durationMs;
   }
 
-  const policyJson = serializeAutoSkillPolicy(policyValidation.value);
+  const policyJson = serializeAutoSkillPolicy(normalizedPolicy);
 
   await query(
     `INSERT INTO idle_configs (character_id, map_id, room_id, max_duration_ms, auto_skill_policy, target_monster_def_id, include_partner_in_battle, updated_at)
