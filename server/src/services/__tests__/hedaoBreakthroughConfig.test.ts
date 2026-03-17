@@ -5,6 +5,8 @@ import { resolve } from 'node:path';
 
 type Requirement = {
   type?: string;
+  title?: string;
+  reason?: string;
   min?: number;
   minCount?: number;
   minLayer?: number;
@@ -55,7 +57,10 @@ test('还虚->合道突破配置应满足合道一期前置/消耗/奖励口径'
   assert.ok(entry, '缺少 还虚期->合道期 突破条目');
 
   const requirements = entry.requirements ?? [];
-  assert.equal(requirements.some((row) => row.type === 'version_locked'), false, '不应存在版本锁前置');
+  const versionLockedReq = requirements.find((row) => row.type === 'version_locked');
+  assert.ok(versionLockedReq, '合道期突破应存在版本锁前置');
+  assert.equal(versionLockedReq.title, '境界开放进度');
+  assert.equal(versionLockedReq.reason, '合道境暂未开放突破');
 
   const expReq = requirements.find((row) => row.type === 'exp_min');
   assert.equal(expReq?.min, 4_300_000);
