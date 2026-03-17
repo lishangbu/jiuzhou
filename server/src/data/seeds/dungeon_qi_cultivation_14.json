@@ -217,6 +217,10 @@
               {
                 "item_def_id": "set-xuanlv-weapon",
                 "qty": 1
+              },
+              {
+                "item_def_id": "set-suijing-weapon",
+                "qty": 1
               }
             ],
             "silver": 3000,
@@ -387,6 +391,10 @@
               },
               {
                 "item_def_id": "set-xuanlv-artifact",
+                "qty": 1
+              },
+              {
+                "item_def_id": "set-suijing-artifact",
                 "qty": 1
               }
             ],

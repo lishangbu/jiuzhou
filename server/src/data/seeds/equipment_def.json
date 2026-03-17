@@ -4704,6 +4704,232 @@
         "悬律套装",
         "合道期"
       ]
+    },
+    {
+      "_comment": "========== 炼神返虚·合道期套装：碎镜套装（物攻/破防追斩） =========="
+    },
+    {
+      "id": "set-suijing-weapon",
+      "name": "碎镜断锋",
+      "category": "equipment",
+      "sub_category": "sword",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/images/set-pojun/01-weapon-set-pojun-weapon.webp",
+      "equip_slot": "weapon",
+      "equip_req_realm": "炼神返虚·合道期",
+      "base_attrs": {
+        "wugong": 38,
+        "baoji_rating": 118
+      },
+      "implicit_attrs": {
+        "wugong": 19,
+        "mingzhong_rating": 118
+      },
+      "affix_pool_id": "ap-weapon-rare",
+      "set_id": "set-suijing",
+      "tags": [
+        "武器",
+        "碎镜套装",
+        "物攻",
+        "合道期"
+      ]
+    },
+    {
+      "id": "set-suijing-head",
+      "name": "碎镜狩冠",
+      "category": "equipment",
+      "sub_category": "hat",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/images/set-pojun/02-head-set-pojun-head.webp",
+      "equip_slot": "head",
+      "equip_req_realm": "炼神返虚·合道期",
+      "base_attrs": {
+        "max_qixue": 564,
+        "wugong": 26,
+        "baoji_rating": 338
+      },
+      "implicit_attrs": {
+        "max_qixue": 192,
+        "wufang": 24
+      },
+      "affix_pool_id": "ap-armor-rare",
+      "set_id": "set-suijing",
+      "tags": [
+        "头部",
+        "碎镜套装",
+        "物攻",
+        "合道期"
+      ]
+    },
+    {
+      "id": "set-suijing-clothes",
+      "name": "碎镜裂甲",
+      "category": "equipment",
+      "sub_category": "robe",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/images/set-pojun/03-clothes-set-pojun-clothes.webp",
+      "equip_slot": "clothes",
+      "equip_req_realm": "炼神返虚·合道期",
+      "base_attrs": {
+        "max_qixue": 828,
+        "wugong": 31,
+        "wufang": 29
+      },
+      "implicit_attrs": {
+        "max_qixue": 256
+      },
+      "affix_pool_id": "ap-armor-rare",
+      "set_id": "set-suijing",
+      "tags": [
+        "衣服",
+        "碎镜套装",
+        "物攻",
+        "合道期"
+      ]
+    },
+    {
+      "id": "set-suijing-gloves",
+      "name": "碎镜束臂",
+      "category": "equipment",
+      "sub_category": "gloves",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/images/set-pojun/04-gloves-set-pojun-gloves.webp",
+      "equip_slot": "gloves",
+      "equip_req_realm": "炼神返虚·合道期",
+      "base_attrs": {
+        "wugong": 26,
+        "baoshang_rating": 512
+      },
+      "implicit_attrs": {
+        "wugong": 13
+      },
+      "affix_pool_id": "ap-armor-rare",
+      "set_id": "set-suijing",
+      "tags": [
+        "手部",
+        "碎镜套装",
+        "物攻",
+        "合道期"
+      ]
+    },
+    {
+      "id": "set-suijing-pants",
+      "name": "碎镜战裳",
+      "category": "equipment",
+      "sub_category": "pants",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/images/set-pojun/05-pants-set-pojun-pants.webp",
+      "equip_slot": "pants",
+      "equip_req_realm": "炼神返虚·合道期",
+      "base_attrs": {
+        "max_qixue": 420,
+        "wufang": 31,
+        "wugong": 18
+      },
+      "implicit_attrs": {
+        "wufang": 16
+      },
+      "affix_pool_id": "ap-armor-rare",
+      "set_id": "set-suijing",
+      "tags": [
+        "腿部",
+        "碎镜套装",
+        "物攻",
+        "合道期"
+      ]
+    },
+    {
+      "id": "set-suijing-necklace",
+      "name": "碎镜骨链",
+      "category": "equipment",
+      "sub_category": "necklace",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/images/set-pojun/06-necklace-set-pojun-necklace.webp",
+      "equip_slot": "necklace",
+      "equip_req_realm": "炼神返虚·合道期",
+      "base_attrs": {
+        "wugong": 24,
+        "mingzhong_rating": 338
+      },
+      "implicit_attrs": {
+        "wugong": 14,
+        "baoji_rating": 110
+      },
+      "affix_pool_id": "ap-accessory-uncommon",
+      "set_id": "set-suijing",
+      "tags": [
+        "项链",
+        "碎镜套装",
+        "物攻",
+        "合道期"
+      ]
+    },
+    {
+      "id": "set-suijing-accessory",
+      "name": "碎镜扳环",
+      "category": "equipment",
+      "sub_category": "ring",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/images/set-pojun/07-accessory-set-pojun-accessory.webp",
+      "equip_slot": "accessory",
+      "equip_req_realm": "炼神返虚·合道期",
+      "base_attrs": {
+        "wugong": 28,
+        "baoji_rating": 280
+      },
+      "implicit_attrs": {
+        "wugong": 15,
+        "baoshang_rating": 160
+      },
+      "affix_pool_id": "ap-accessory-uncommon",
+      "set_id": "set-suijing",
+      "tags": [
+        "饰品",
+        "碎镜套装",
+        "物攻",
+        "合道期"
+      ]
+    },
+    {
+      "id": "set-suijing-artifact",
+      "name": "碎镜悬印",
+      "category": "equipment",
+      "sub_category": "token",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/images/set-pojun/08-artifact-set-pojun-artifact.webp",
+      "equip_slot": "artifact",
+      "equip_req_realm": "炼神返虚·合道期",
+      "base_attrs": {
+        "mingzhong_rating": 420,
+        "baoshang_rating": 1120
+      },
+      "implicit_attrs": {
+        "baoji_rating": 344
+      },
+      "affix_pool_id": "ap-artifact-uncommon",
+      "set_id": "set-suijing",
+      "tags": [
+        "法宝",
+        "碎镜套装",
+        "物攻",
+        "合道期"
+      ]
     }
   ]
 }

@@ -3105,6 +3105,150 @@
           "priority": 3
         }
       ]
+    },
+    {
+      "_comment": "========== 炼神返虚·合道期套装：碎镜套装（物攻/破防追斩） =========="
+    },
+    {
+      "id": "set-suijing",
+      "name": "碎镜套装",
+      "description": "碎镜套装以破镜压防与重斩追势为核心，通过持续压低敌方防势打开物理爆发窗口。",
+      "quality_rank": 6,
+      "min_realm": "炼神返虚·合道期",
+      "pieces": [
+        {
+          "equip_slot": "weapon",
+          "item_def_id": "set-suijing-weapon",
+          "piece_key": "weapon"
+        },
+        {
+          "equip_slot": "head",
+          "item_def_id": "set-suijing-head",
+          "piece_key": "head"
+        },
+        {
+          "equip_slot": "clothes",
+          "item_def_id": "set-suijing-clothes",
+          "piece_key": "clothes"
+        },
+        {
+          "equip_slot": "gloves",
+          "item_def_id": "set-suijing-gloves",
+          "piece_key": "gloves"
+        },
+        {
+          "equip_slot": "pants",
+          "item_def_id": "set-suijing-pants",
+          "piece_key": "pants"
+        },
+        {
+          "equip_slot": "necklace",
+          "item_def_id": "set-suijing-necklace",
+          "piece_key": "necklace"
+        },
+        {
+          "equip_slot": "accessory",
+          "item_def_id": "set-suijing-accessory",
+          "piece_key": "accessory"
+        },
+        {
+          "equip_slot": "artifact",
+          "item_def_id": "set-suijing-artifact",
+          "piece_key": "artifact"
+        }
+      ],
+      "bonuses": [
+        {
+          "piece_count": 2,
+          "effect_defs": [
+            {
+              "trigger": "equip",
+              "target": "self",
+              "effect_type": "buff",
+              "params": {
+                "attr_key": "wugong",
+                "value": 30,
+                "apply_type": "flat"
+              }
+            },
+            {
+              "trigger": "equip",
+              "target": "self",
+              "effect_type": "buff",
+              "params": {
+                "attr_key": "baoji_rating",
+                "value": 180,
+                "apply_type": "flat"
+              }
+            }
+          ],
+          "priority": 0
+        },
+        {
+          "piece_count": 4,
+          "effect_defs": [
+            {
+              "trigger": "on_hit",
+              "target": "enemy",
+              "effect_type": "debuff",
+              "duration_round": 2,
+              "params": {
+                "attr_key": "wufang",
+                "value": 0.1,
+                "apply_type": "percent",
+                "chance": 0.38
+              }
+            }
+          ],
+          "priority": 1
+        },
+        {
+          "piece_count": 6,
+          "effect_defs": [
+            {
+              "trigger": "equip",
+              "target": "self",
+              "effect_type": "buff",
+              "params": {
+                "attr_key": "zengshang",
+                "value": 0.06,
+                "apply_type": "flat"
+              }
+            },
+            {
+              "trigger": "on_hit",
+              "target": "enemy",
+              "effect_type": "damage",
+              "params": {
+                "damage_type": "physical",
+                "value": 0,
+                "scale_key": "wugong",
+                "scale_rate": 0.32,
+                "chance": 0.34
+              }
+            }
+          ],
+          "priority": 2
+        },
+        {
+          "piece_count": 8,
+          "effect_defs": [
+            {
+              "trigger": "on_crit",
+              "target": "enemy",
+              "effect_type": "damage",
+              "params": {
+                "damage_type": "physical",
+                "value": 0,
+                "scale_key": "wugong",
+                "scale_rate": 0.68,
+                "chance": 0.35
+              }
+            }
+          ],
+          "priority": 3
+        }
+      ]
     }
   ]
 }

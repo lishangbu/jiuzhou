@@ -36,7 +36,16 @@ import {
 const HEDAO_DUNGEON_FILE = 'dungeon_qi_cultivation_14.json';
 const HEDAO_DUNGEON_ID = 'dungeon-lianshen-xuanjian-sitian-gong';
 const HEDAO_BOSS_ID = 'monster-boss-hedao-xuanjian-zhenjun';
-const HEDAO_SET_IDS = ['set-zhaogu', 'set-xuanlv'] as const;
+const HEDAO_SET_IDS = ['set-zhaogu', 'set-xuanlv', 'set-suijing'] as const;
+const HEDAO_SET_DROP_IDS = {
+  bossPoolId: 'dp-hedao-boss-xuanjian-zhenjun',
+  nightmarePoolId: 'dp-dungeon-jingxu-nm',
+  weapon: 'set-suijing-weapon',
+  head: 'set-suijing-head',
+  artifact: 'set-suijing-artifact',
+  hardDifficultyId: 'dd-jingxu-sitian-h',
+  nightmareDifficultyId: 'dd-jingxu-sitian-nm',
+} as const;
 const HEDAO_MONSTER_IDS = [
   'monster-hedao-jingjia-guard',
   'monster-hedao-zheguang-lingguan',
@@ -151,6 +160,7 @@ test('合道一期怪物掉落池与套装引用应完整闭环', () => {
   const itemSeed = loadSeed('item_def.json');
   const equipSeed = loadSeed('equipment_def.json');
   const itemSetSeed = loadSeed('item_set.json');
+  const dungeonSeed = loadSeed(HEDAO_DUNGEON_FILE);
 
   const monsterById = buildObjectMap(asArray(monsterSeed.monsters), 'id');
   const dropPoolById = buildObjectMap(asArray(dropPoolSeed.pools), 'id');
@@ -200,6 +210,47 @@ test('合道一期怪物掉落池与套装引用应完整闭环', () => {
       assert.equal(asText(equip?.set_id), setId, `${itemDefId} 的 set_id 应为 ${setId}`);
     }
   }
+
+  const bossPool = dropPoolById.get(HEDAO_SET_DROP_IDS.bossPoolId);
+  assert.ok(bossPool, '缺少玄鉴真君掉落池');
+  const bossPoolItemIds = collectMergedPoolItemIds(HEDAO_SET_DROP_IDS.bossPoolId, dropPoolById, commonPoolById);
+  assert.equal(bossPoolItemIds.has(HEDAO_SET_DROP_IDS.weapon), true, 'Boss 掉落池缺少物理套装武器');
+  assert.equal(bossPoolItemIds.has(HEDAO_SET_DROP_IDS.artifact), true, 'Boss 掉落池缺少物理套装法宝');
+
+  const nightmarePool = dropPoolById.get(HEDAO_SET_DROP_IDS.nightmarePoolId);
+  assert.ok(nightmarePool, '缺少玄鉴司天宫噩梦掉落池');
+  const nightmarePoolItemIds = collectMergedPoolItemIds(HEDAO_SET_DROP_IDS.nightmarePoolId, dropPoolById, commonPoolById);
+  assert.equal(nightmarePoolItemIds.has(HEDAO_SET_DROP_IDS.head), true, '噩梦掉落池缺少物理套装头部');
+
+  const dungeonByDifficultyId = new Map<string, ReturnType<typeof asObject>>();
+  for (const dungeonEntry of asArray(dungeonSeed.dungeons)) {
+    const dungeon = asObject(dungeonEntry);
+    if (!dungeon) continue;
+    for (const difficultyEntry of asArray(dungeon.difficulties)) {
+      const difficulty = asObject(difficultyEntry);
+      const difficultyId = asText(difficulty?.id);
+      if (!difficultyId || !difficulty) continue;
+      dungeonByDifficultyId.set(difficultyId, difficulty);
+    }
+  }
+
+  const hardDifficulty = dungeonByDifficultyId.get(HEDAO_SET_DROP_IDS.hardDifficultyId);
+  const nightmareDifficulty = dungeonByDifficultyId.get(HEDAO_SET_DROP_IDS.nightmareDifficultyId);
+  assert.ok(hardDifficulty, '缺少困难难度定义');
+  assert.ok(nightmareDifficulty, '缺少噩梦难度定义');
+
+  const hardFirstClearItems = asArray(asObject(hardDifficulty?.first_clear_rewards)?.items);
+  const nightmareFirstClearItems = asArray(asObject(nightmareDifficulty?.first_clear_rewards)?.items);
+  assert.equal(
+    hardFirstClearItems.some((entry) => asText(asObject(entry)?.item_def_id) === HEDAO_SET_DROP_IDS.weapon),
+    true,
+    '困难首通奖励缺少物理套装武器',
+  );
+  assert.equal(
+    nightmareFirstClearItems.some((entry) => asText(asObject(entry)?.item_def_id) === HEDAO_SET_DROP_IDS.artifact),
+    true,
+    '噩梦首通奖励缺少物理套装法宝',
+  );
 });
 
 test('合道一期 Boss 应可被运行时解析并携带反伤技能', () => {
