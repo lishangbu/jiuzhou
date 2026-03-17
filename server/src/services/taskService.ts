@@ -20,6 +20,7 @@ import {
   getTaskDefinitionById,
   getTaskDefinitionsByIds,
   getTaskDefinitionsByNpcIds,
+  type TaskDefinition,
 } from './taskDefinitionService.js';
 import { getCharacterIdByUserId as getCharacterIdByUserIdShared } from './shared/characterId.js';
 import {
@@ -34,6 +35,7 @@ import {
   resolveRewardItemDisplayMetaMap,
   type RewardItemDisplayMeta,
 } from './shared/rewardDisplay.js';
+import { buildTaskRecurringUnlockState } from './shared/taskRecurringUnlock.js';
 
 export type TaskCategory = 'main' | 'side' | 'daily' | 'event';
 
@@ -96,6 +98,11 @@ type RawObjective = {
   text?: unknown;
   target?: unknown;
   params?: unknown;
+};
+
+type CharacterTaskRealmState = {
+  realm: string;
+  subRealm: string | null;
 };
 
 const asNonEmptyString = (v: unknown): string | null => {
@@ -320,15 +327,74 @@ const computeRemainingSeconds = (expiresAt: unknown): number | null => {
   return Math.max(0, Math.floor((ms - Date.now()) / 1000));
 };
 
+const loadCharacterTaskRealmState = async (
+  characterId: number,
+  dbClient?: PoolClient,
+): Promise<CharacterTaskRealmState | null> => {
+  const cid = Number(characterId);
+  if (!Number.isFinite(cid) || cid <= 0) return null;
+
+  const runner = dbClient ?? { query };
+  const res = await runner.query(
+    `
+      SELECT realm, sub_realm
+      FROM characters
+      WHERE id = $1
+      LIMIT 1
+    `,
+    [cid],
+  );
+
+  const row = (res.rows?.[0] ?? null) as Record<string, unknown> | null;
+  if (!row) return null;
+  return {
+    realm: asNonEmptyString(row.realm) ?? '凡人',
+    subRealm: asNonEmptyString(row.sub_realm),
+  };
+};
+
+const isTaskDefinitionUnlockedForCharacter = (
+  taskDef: Pick<TaskDefinition, 'category' | 'realm'>,
+  characterRealm: CharacterTaskRealmState,
+): boolean => {
+  return buildTaskRecurringUnlockState(
+    taskDef.category,
+    taskDef.realm,
+    characterRealm.realm,
+    characterRealm.subRealm,
+  ).unlocked;
+};
+
+const getTaskDefinitionUnlockFailureMessage = (
+  taskDef: Pick<TaskDefinition, 'category' | 'realm'>,
+  characterRealm: CharacterTaskRealmState,
+): string | null => {
+  const unlockState = buildTaskRecurringUnlockState(
+    taskDef.category,
+    taskDef.realm,
+    characterRealm.realm,
+    characterRealm.subRealm,
+  );
+  if (unlockState.unlocked || !unlockState.requiredRealm) return null;
+  return `需达到${unlockState.requiredRealm}后开放`;
+};
+
 const resetRecurringTaskProgressIfNeeded = async (
   characterId: number,
   dbClient?: PoolClient,
+  characterRealmState?: CharacterTaskRealmState,
 ): Promise<void> => {
   const cid = Number(characterId);
   if (!Number.isFinite(cid) || cid <= 0) return;
   const runner = dbClient ?? { query };
+  const resolvedCharacterRealmState = characterRealmState ?? await loadCharacterTaskRealmState(cid, dbClient);
+  if (!resolvedCharacterRealmState) return;
   const autoAcceptRecurringTaskIds = getStaticTaskDefinitions()
-    .filter((entry) => entry.enabled && (entry.category === 'daily' || entry.category === 'event'))
+    .filter((entry) => (
+      entry.enabled
+      && (entry.category === 'daily' || entry.category === 'event')
+      && isTaskDefinitionUnlockedForCharacter(entry, resolvedCharacterRealmState)
+    ))
     .map((entry) => entry.id)
     .filter((taskId) => taskId.trim().length > 0);
 
@@ -378,6 +444,7 @@ const resetRecurringTaskProgressIfNeeded = async (
     if (!taskId) continue;
     const taskDef = taskDefMap.get(taskId);
     if (!taskDef || !taskDef.enabled) continue;
+    if (!isTaskDefinitionUnlockedForCharacter(taskDef, resolvedCharacterRealmState)) continue;
     if (taskDef.category === 'daily') dailyTaskIds.add(taskId);
     if (taskDef.category === 'event') eventTaskIds.add(taskId);
   }
@@ -412,12 +479,15 @@ export const getTaskOverview = async (
 ): Promise<{ tasks: TaskOverviewDto[] }> => {
   const cid = Number(characterId);
   if (!Number.isFinite(cid) || cid <= 0) return { tasks: [] };
-  await resetRecurringTaskProgressIfNeeded(cid);
+  const characterRealmState = await loadCharacterTaskRealmState(cid);
+  if (!characterRealmState) return { tasks: [] };
+  await resetRecurringTaskProgressIfNeeded(cid, undefined, characterRealmState);
 
   const resolvedCategory = normalizeTaskCategory(category);
   const defs = getStaticTaskDefinitions().filter((entry) => {
     if (!entry.enabled) return false;
     if (resolvedCategory && entry.category !== resolvedCategory) return false;
+    if (!isTaskDefinitionUnlockedForCharacter(entry, characterRealmState)) return false;
     return true;
   });
 
@@ -690,6 +760,10 @@ export const setTaskTracked = async (
 
   const taskDef = await getTaskDefinitionById(tid);
   if (!taskDef) return { success: false, message: '任务不存在' };
+  const characterRealmState = await loadCharacterTaskRealmState(cid);
+  if (!characterRealmState) return { success: false, message: '角色不存在' };
+  const unlockFailureMessage = getTaskDefinitionUnlockFailureMessage(taskDef, characterRealmState);
+  if (unlockFailureMessage) return { success: false, message: unlockFailureMessage };
 
   const res = await query(
     `
@@ -867,10 +941,14 @@ export const acceptTaskFromNpc = async (
   if (!tid) return { success: false, message: '任务ID不能为空' };
   const nid = asNonEmptyString(npcId);
   if (!nid) return { success: false, message: 'NPC不存在' };
-  await resetRecurringTaskProgressIfNeeded(cid);
+  const characterRealmState = await loadCharacterTaskRealmState(cid);
+  if (!characterRealmState) return { success: false, message: '角色不存在' };
+  await resetRecurringTaskProgressIfNeeded(cid, undefined, characterRealmState);
 
   const taskDef = await getTaskDefinitionById(tid);
   if (!taskDef) return { success: false, message: '任务不存在' };
+  const unlockFailureMessage = getTaskDefinitionUnlockFailureMessage(taskDef, characterRealmState);
+  if (unlockFailureMessage) return { success: false, message: unlockFailureMessage };
   const taskCategory = normalizeTaskCategory(taskDef.category) ?? 'main';
   const giverNpcId = asNonEmptyString(taskDef.giver_npc_id);
   if (!giverNpcId || giverNpcId !== nid) return { success: false, message: '该NPC无法发放此任务' };
@@ -920,7 +998,9 @@ export const submitTask = async (
   if (!tid) return { success: false, message: '任务ID不能为空' };
   const nid = asNonEmptyString(npcId);
   if (!nid) return { success: false, message: 'NPC不存在' };
-  await resetRecurringTaskProgressIfNeeded(cid);
+  const characterRealmState = await loadCharacterTaskRealmState(cid);
+  if (!characterRealmState) return { success: false, message: '角色不存在' };
+  await resetRecurringTaskProgressIfNeeded(cid, undefined, characterRealmState);
 
   const res = await query(
     `
@@ -935,6 +1015,8 @@ export const submitTask = async (
 
   const taskDef = await getTaskDefinitionById(tid);
   if (!taskDef) return { success: false, message: '任务不存在' };
+  const unlockFailureMessage = getTaskDefinitionUnlockFailureMessage(taskDef, characterRealmState);
+  if (unlockFailureMessage) return { success: false, message: unlockFailureMessage };
 
   const row = res.rows[0] as { status?: unknown; progress?: unknown };
   const giverNpcId = asNonEmptyString(taskDef.giver_npc_id);
@@ -967,8 +1049,14 @@ const applyTaskEvent = async (
 ): Promise<void> => {
   const cid = Number(characterId);
   if (!Number.isFinite(cid) || cid <= 0) return;
+  const characterRealmState = await loadCharacterTaskRealmState(cid);
+  if (!characterRealmState) return;
 
-  const eventTaskDefs = getStaticTaskDefinitions().filter((def) => def.enabled && def.category === 'event');
+  const eventTaskDefs = getStaticTaskDefinitions().filter((def) => (
+    def.enabled
+    && def.category === 'event'
+    && isTaskDefinitionUnlockedForCharacter(def, characterRealmState)
+  ));
   for (const eventTaskDef of eventTaskDefs) {
     await query(
       `
@@ -1004,6 +1092,7 @@ const applyTaskEvent = async (
     if (!taskId) continue;
     const taskDef = taskDefMap.get(taskId);
     if (!taskDef) continue;
+    if (!isTaskDefinitionUnlockedForCharacter(taskDef, characterRealmState)) continue;
     const status = asTaskProgressStatusDb(row?.status);
     if (status === 'claimed') continue;
 
@@ -1200,7 +1289,9 @@ export const npcTalk = async (
   if (!Number.isFinite(cid) || cid <= 0) return { success: false, message: '角色不存在' };
   const nid = asNonEmptyString(npcId);
   if (!nid) return { success: false, message: 'NPC不存在' };
-  await resetRecurringTaskProgressIfNeeded(cid);
+  const characterRealmState = await loadCharacterTaskRealmState(cid);
+  if (!characterRealmState) return { success: false, message: '角色不存在' };
+  await resetRecurringTaskProgressIfNeeded(cid, undefined, characterRealmState);
   await ensureMainQuestProgressForNewChapters(cid);
 
   const npcDef = getNpcDefinitions().find((entry) => entry.enabled !== false && entry.id === nid);
@@ -1244,6 +1335,7 @@ export const npcTalk = async (
 
   const tasks: NpcTalkTaskOption[] = [];
   for (const def of taskDefs) {
+    if (!isTaskDefinitionUnlockedForCharacter(def, characterRealmState)) continue;
     const tid = asNonEmptyString(def.id);
     if (!tid) continue;
     const title = String(def.title ?? tid);
@@ -1358,7 +1450,9 @@ class TaskService {
     const tid = asNonEmptyString(taskId);
     if (!tid) return { success: false, message: '任务ID不能为空' };
 
-    await resetRecurringTaskProgressIfNeeded(cid);
+    const characterRealmState = await loadCharacterTaskRealmState(cid);
+    if (!characterRealmState) return { success: false, message: '角色不存在' };
+    await resetRecurringTaskProgressIfNeeded(cid, undefined, characterRealmState);
 
     const progressRes = await query(
       `SELECT status FROM character_task_progress WHERE character_id = $1 AND task_id = $2 FOR UPDATE`,
@@ -1375,6 +1469,10 @@ class TaskService {
     const taskDef = await getTaskDefinitionById(tid);
     if (!taskDef) {
       return { success: false, message: '任务不存在' };
+    }
+    const unlockFailureMessage = getTaskDefinitionUnlockFailureMessage(taskDef, characterRealmState);
+    if (unlockFailureMessage) {
+      return { success: false, message: unlockFailureMessage };
     }
 
     const rewards = parseRewards(taskDef.rewards);
