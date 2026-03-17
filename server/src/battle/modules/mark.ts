@@ -30,11 +30,13 @@ export const VOID_EROSION_MARK_ID = "void_erosion";
 export const EMBER_BRAND_MARK_ID = "ember_brand";
 export const SOUL_SHACKLE_MARK_ID = "soul_shackle";
 export const MOON_ECHO_MARK_ID = "moon_echo";
+export const MIRROR_CRACK_MARK_ID = "mirror_crack";
 export const MARK_ID_LIST = [
   VOID_EROSION_MARK_ID,
   EMBER_BRAND_MARK_ID,
   SOUL_SHACKLE_MARK_ID,
   MOON_ECHO_MARK_ID,
+  MIRROR_CRACK_MARK_ID,
 ] as const;
 export const MARK_OPERATION_LIST = ["apply", "consume"] as const;
 export const MARK_CONSUME_MODE_LIST = ["all", "fixed"] as const;
@@ -62,6 +64,7 @@ const MARK_NAME_MAP: Record<string, string> = {
   [EMBER_BRAND_MARK_ID]: "灼痕",
   [SOUL_SHACKLE_MARK_ID]: "蚀心锁",
   [MOON_ECHO_MARK_ID]: "月痕印记",
+  [MIRROR_CRACK_MARK_ID]: "镜裂印",
 };
 
 export const MARK_TRAIT_GUIDE_BY_ID: Record<string, string> = {
@@ -69,6 +72,7 @@ export const MARK_TRAIT_GUIDE_BY_ID: Record<string, string> = {
   [EMBER_BRAND_MARK_ID]: "被消耗后会额外附加灼烧与余烬潜爆，适合延后爆发与追击。",
   [SOUL_SHACKLE_MARK_ID]: "存在期间会压低目标受疗与回灵效率，消耗时还会抽取灵气，适合封锁续航。",
   [MOON_ECHO_MARK_ID]: "被消耗后会返还施法者灵气，并强化下一次技能，适合身法连段与续转。",
+  [MIRROR_CRACK_MARK_ID]: "存在期间会放大后续镜律追击，适合稳定叠层后集中消耗。",
 };
 
 export type MarkOperation = typeof MARK_OPERATION_LIST[number];

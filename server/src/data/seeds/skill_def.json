@@ -3720,6 +3720,271 @@
       ],
       "sort_weight": 423,
       "enabled": true
+    },
+    {
+      "id": "sk-jingmang-zhan",
+      "code": "sk_jingmang_zhan",
+      "name": "镜芒斩",
+      "description": "镜芒凝于锋端，斩击单体目标并短暂压低其物防。",
+      "icon": "/assets/skills/icon_skill_31.png",
+      "source_type": "innate",
+      "cost_lingqi": 22,
+      "cost_qixue": 0,
+      "cooldown": 3,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "physical",
+      "element": "jin",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "wugong",
+          "scaleRate": 1.46
+        },
+        {
+          "type": "debuff",
+          "duration": 2,
+          "value": 0.12,
+          "buffKey": "debuff-wufang-down",
+          "buffKind": "attr",
+          "attrKey": "wufang",
+          "applyType": "percent"
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 76,
+      "sort_weight": 424,
+      "enabled": true
+    },
+    {
+      "id": "sk-jingjia-fanzhao",
+      "code": "sk_jingjia_fanzhao",
+      "name": "镜甲返照",
+      "description": "镜甲返折来势，短时间内提升物防并反弹所受伤害。",
+      "icon": "/assets/skills/icon_skill_34.png",
+      "source_type": "innate",
+      "cost_lingqi": 24,
+      "cost_qixue": 0,
+      "cooldown": 4,
+      "target_type": "self",
+      "target_count": 1,
+      "damage_type": "none",
+      "element": "jin",
+      "effects": [
+        {
+          "type": "buff",
+          "duration": 2,
+          "value": 0.28,
+          "buffKey": "buff-reflect-damage",
+          "buffKind": "reflect_damage"
+        },
+        {
+          "type": "buff",
+          "duration": 2,
+          "value": 0.12,
+          "buffKey": "buff-wufang-up",
+          "buffKind": "attr",
+          "attrKey": "wufang",
+          "applyType": "percent"
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 84,
+      "sort_weight": 425,
+      "enabled": true
+    },
+    {
+      "id": "sk-zheguang-huilv",
+      "code": "sk_zheguang_huilv",
+      "name": "折光回律",
+      "description": "折射术式回流己身，先以镜律轰击目标，再在身周形成短暂反照。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 24,
+      "cost_qixue": 0,
+      "cooldown": 4,
+      "target_type": "single_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "guang",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 1.52
+        },
+        {
+          "type": "buff",
+          "duration": 1,
+          "value": 0.18,
+          "buffKey": "buff-reflect-damage",
+          "buffKind": "reflect_damage"
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 82,
+      "sort_weight": 426,
+      "enabled": true
+    },
+    {
+      "id": "sk-beishi-nilin",
+      "code": "sk_beishi_nilin",
+      "name": "背誓逆鳞",
+      "description": "以镜律逆冲护体，强化反照并在后续出手中转守为攻。",
+      "icon": "/assets/skills/icon_skill_26.png",
+      "source_type": "innate",
+      "cost_lingqi": 28,
+      "cost_qixue": 0,
+      "cooldown": 5,
+      "target_type": "self",
+      "target_count": 1,
+      "damage_type": "none",
+      "element": "jin",
+      "effects": [
+        {
+          "type": "buff",
+          "duration": 2,
+          "value": 0.35,
+          "buffKey": "buff-reflect-damage",
+          "buffKind": "reflect_damage"
+        },
+        {
+          "type": "buff",
+          "duration": 2,
+          "value": 0.1,
+          "buffKey": "buff-zengshang-up",
+          "buffKind": "attr",
+          "attrKey": "zengshang",
+          "applyType": "flat"
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 85,
+      "sort_weight": 427,
+      "enabled": true
+    },
+    {
+      "id": "sk-jingyu-duanlv",
+      "code": "sk_jingyu_duanlv",
+      "name": "镜狱断律",
+      "description": "镜狱法则横扫全场，减速并束缚失衡目标。",
+      "icon": "/assets/skills/icon_skill_26.png",
+      "source_type": "innate",
+      "cost_lingqi": 30,
+      "cost_qixue": 0,
+      "cooldown": 5,
+      "target_type": "all_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "jin",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 0.76
+        },
+        {
+          "type": "debuff",
+          "duration": 2,
+          "value": 2.8,
+          "buffKey": "debuff-sudu-down",
+          "buffKind": "attr",
+          "attrKey": "sudu",
+          "applyType": "flat"
+        },
+        {
+          "type": "control",
+          "controlType": "root",
+          "duration": 1,
+          "chance": 0.24
+        },
+        {
+          "type": "buff",
+          "duration": 1,
+          "value": 0.42,
+          "buffKey": "buff-reflect-damage",
+          "buffKind": "reflect_damage"
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 88,
+      "sort_weight": 428,
+      "enabled": true
+    },
+    {
+      "id": "sk-fantian-mingjing",
+      "code": "sk_fantian_mingjing",
+      "name": "返天明镜",
+      "description": "明镜反天而起，结成护盾并将来敌之力尽数返照。",
+      "icon": "/assets/skills/icon_skill_34.png",
+      "source_type": "innate",
+      "cost_lingqi": 32,
+      "cost_qixue": 0,
+      "cooldown": 5,
+      "target_type": "self",
+      "target_count": 1,
+      "damage_type": "none",
+      "element": "jin",
+      "effects": [
+        {
+          "type": "shield",
+          "valueType": "scale",
+          "scaleAttr": "max_qixue",
+          "scaleRate": 0.12,
+          "absorbType": "all",
+          "duration": 2
+        },
+        {
+          "type": "buff",
+          "duration": 2,
+          "value": 0.52,
+          "buffKey": "buff-reflect-damage",
+          "buffKind": "reflect_damage"
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 92,
+      "sort_weight": 429,
+      "enabled": true
+    },
+    {
+      "id": "sk-xuanjian-zhenmie",
+      "code": "sk_xuanjian_zhenmie",
+      "name": "玄鉴镇灭",
+      "description": "玄鉴真镜压落全场，以大道镜律镇灭敌方护体根基。",
+      "icon": "/assets/skills/icon_skill_04.png",
+      "source_type": "innate",
+      "cost_lingqi": 30,
+      "cost_qixue": 0,
+      "cooldown": 6,
+      "target_type": "all_enemy",
+      "target_count": 1,
+      "damage_type": "magic",
+      "element": "jin",
+      "effects": [
+        {
+          "type": "damage",
+          "valueType": "scale",
+          "scaleAttr": "fagong",
+          "scaleRate": 0.92
+        },
+        {
+          "type": "debuff",
+          "duration": 2,
+          "value": 0.18,
+          "buffKey": "debuff-fafang-down",
+          "buffKind": "attr",
+          "attrKey": "fafang",
+          "applyType": "percent"
+        }
+      ],
+      "trigger_type": "active",
+      "ai_priority": 86,
+      "sort_weight": 430,
+      "enabled": true
     }
   ]
 }

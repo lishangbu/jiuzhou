@@ -541,12 +541,6 @@
       "to": "炼神返虚·合道期",
       "requirements": [
         {
-          "id": "version-lock-hedao",
-          "type": "version_locked",
-          "title": "境界开放进度",
-          "reason": "炼炁化神·采药期及以上境界暂未开放"
-        },
-        {
           "id": "exp",
           "type": "exp_min",
           "min": 4300000,
@@ -555,7 +549,7 @@
         {
           "id": "tech-main-sub-7",
           "type": "main_and_sub_technique_layer_min",
-          "minLayer": 7,
+          "minLayer": 8,
           "title": "主副功法圆融"
         },
         {
@@ -566,17 +560,32 @@
           "title": "九重功法圆满"
         },
         {
-          "id": "dungeon-clear-any-30",
+          "id": "dungeon-clear-jingxu-hard-3",
           "type": "dungeon_clear_min",
-          "minCount": 30,
-          "title": "秘境百战积累"
+          "dungeonId": "dungeon-lianshen-xuanjian-sitian-gong",
+          "difficultyId": "dd-jingxu-sitian-h",
+          "minCount": 3,
+          "title": "玄鉴司天宫困难通关"
         },
         {
-          "id": "dungeon-clear-frost-abyss-14",
-          "type": "dungeon_clear_min",
-          "dungeonId": "dungeon-qiqi-frost-abyss",
-          "minCount": 14,
-          "title": "寒渊心境巩固"
+          "id": "main-quest-chapter-7",
+          "type": "main_quest_chapter_completed",
+          "chapterId": "mq-chapter-7",
+          "title": "完成第七章主线"
+        },
+        {
+          "id": "item-daojing-xuansha-20",
+          "type": "item_qty_min",
+          "itemDefId": "mat-daojing-xuansha",
+          "qty": 20,
+          "title": "道镜玄砂储备"
+        },
+        {
+          "id": "item-hedao-qiyin-4",
+          "type": "item_qty_min",
+          "itemDefId": "mat-hedao-qiyin",
+          "qty": 4,
+          "title": "合道契印准备"
         }
       ],
       "costs": [
@@ -587,6 +596,19 @@
         {
           "type": "exp",
           "amount": 4300000
+        },
+        {
+          "type": "items",
+          "items": [
+            {
+              "itemDefId": "mat-daojing-xuansha",
+              "qty": 14
+            },
+            {
+              "itemDefId": "mat-hedao-qiyin",
+              "qty": 3
+            }
+          ]
         }
       ],
       "rewards": {

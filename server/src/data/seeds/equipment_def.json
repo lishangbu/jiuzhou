@@ -4264,6 +4264,446 @@
         "镇魂套装",
         "还虚期"
       ]
+    },
+    {
+      "_comment": "========== 炼神返虚·合道期套装：照骨套装（法攻/镜裂追击） =========="
+    },
+    {
+      "id": "set-zhaogu-weapon",
+      "name": "照骨镜锋",
+      "category": "equipment",
+      "sub_category": "sword",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/images/set-xuying/01-weapon-set-xuying-weapon.webp",
+      "equip_slot": "weapon",
+      "equip_req_realm": "炼神返虚·合道期",
+      "base_attrs": {
+        "fagong": 38,
+        "lengque_rating": 118
+      },
+      "implicit_attrs": {
+        "fagong": 19,
+        "baoji_rating": 118
+      },
+      "affix_pool_id": "ap-weapon-rare",
+      "set_id": "set-zhaogu",
+      "tags": [
+        "武器",
+        "照骨套装",
+        "法攻",
+        "合道期"
+      ]
+    },
+    {
+      "id": "set-zhaogu-head",
+      "name": "照骨灵冠",
+      "category": "equipment",
+      "sub_category": "hat",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/images/set-xuying/02-head-set-xuying-head.webp",
+      "equip_slot": "head",
+      "equip_req_realm": "炼神返虚·合道期",
+      "base_attrs": {
+        "max_lingqi": 564,
+        "fagong": 26,
+        "kongzhi_kangxing_rating": 338
+      },
+      "implicit_attrs": {
+        "max_lingqi": 192,
+        "zhaojia_rating": 170
+      },
+      "affix_pool_id": "ap-armor-rare",
+      "set_id": "set-zhaogu",
+      "tags": [
+        "头部",
+        "照骨套装",
+        "法攻",
+        "合道期"
+      ]
+    },
+    {
+      "id": "set-zhaogu-clothes",
+      "name": "照骨玄袍",
+      "category": "equipment",
+      "sub_category": "robe",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/images/set-xuying/03-clothes-set-xuying-clothes.webp",
+      "equip_slot": "clothes",
+      "equip_req_realm": "炼神返虚·合道期",
+      "base_attrs": {
+        "max_lingqi": 828,
+        "fagong": 31,
+        "fafang": 29
+      },
+      "implicit_attrs": {
+        "max_lingqi": 256
+      },
+      "affix_pool_id": "ap-armor-rare",
+      "set_id": "set-zhaogu",
+      "tags": [
+        "衣服",
+        "照骨套装",
+        "法攻",
+        "合道期"
+      ]
+    },
+    {
+      "id": "set-zhaogu-gloves",
+      "name": "照骨镜缚",
+      "category": "equipment",
+      "sub_category": "gloves",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/images/set-xuying/04-gloves-set-xuying-gloves.webp",
+      "equip_slot": "gloves",
+      "equip_req_realm": "炼神返虚·合道期",
+      "base_attrs": {
+        "fagong": 26,
+        "lengque_rating": 512
+      },
+      "implicit_attrs": {
+        "fagong": 13
+      },
+      "affix_pool_id": "ap-armor-rare",
+      "set_id": "set-zhaogu",
+      "tags": [
+        "手部",
+        "照骨套装",
+        "法攻",
+        "合道期"
+      ]
+    },
+    {
+      "id": "set-zhaogu-pants",
+      "name": "照骨流裳",
+      "category": "equipment",
+      "sub_category": "pants",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/images/set-xuying/05-pants-set-xuying-pants.webp",
+      "equip_slot": "pants",
+      "equip_req_realm": "炼神返虚·合道期",
+      "base_attrs": {
+        "max_qixue": 420,
+        "fafang": 31,
+        "fagong": 18
+      },
+      "implicit_attrs": {
+        "fafang": 16
+      },
+      "affix_pool_id": "ap-armor-rare",
+      "set_id": "set-zhaogu",
+      "tags": [
+        "腿部",
+        "照骨套装",
+        "法攻",
+        "合道期"
+      ]
+    },
+    {
+      "id": "set-zhaogu-necklace",
+      "name": "照骨心坠",
+      "category": "equipment",
+      "sub_category": "necklace",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/images/set-xuying/06-necklace-set-xuying-necklace.webp",
+      "equip_slot": "necklace",
+      "equip_req_realm": "炼神返虚·合道期",
+      "base_attrs": {
+        "fagong": 24,
+        "kongzhi_kangxing_rating": 338
+      },
+      "implicit_attrs": {
+        "fagong": 14,
+        "baoji_rating": 110
+      },
+      "affix_pool_id": "ap-accessory-uncommon",
+      "set_id": "set-zhaogu",
+      "tags": [
+        "项链",
+        "照骨套装",
+        "法攻",
+        "合道期"
+      ]
+    },
+    {
+      "id": "set-zhaogu-accessory",
+      "name": "照骨镜珠",
+      "category": "equipment",
+      "sub_category": "ring",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/images/set-xuying/07-accessory-set-xuying-accessory.webp",
+      "equip_slot": "accessory",
+      "equip_req_realm": "炼神返虚·合道期",
+      "base_attrs": {
+        "fagong": 28,
+        "lengque_rating": 280
+      },
+      "implicit_attrs": {
+        "fagong": 15,
+        "lengque_rating": 160
+      },
+      "affix_pool_id": "ap-accessory-uncommon",
+      "set_id": "set-zhaogu",
+      "tags": [
+        "饰品",
+        "照骨套装",
+        "法攻",
+        "合道期"
+      ]
+    },
+    {
+      "id": "set-zhaogu-artifact",
+      "name": "照骨玄鉴",
+      "category": "equipment",
+      "sub_category": "token",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/images/set-xuying/08-artifact-set-xuying-artifact.webp",
+      "equip_slot": "artifact",
+      "equip_req_realm": "炼神返虚·合道期",
+      "base_attrs": {
+        "kongzhi_kangxing_rating": 1120,
+        "lengque_rating": 420
+      },
+      "implicit_attrs": {
+        "kongzhi_kangxing_rating": 344
+      },
+      "affix_pool_id": "ap-artifact-uncommon",
+      "set_id": "set-zhaogu",
+      "tags": [
+        "法宝",
+        "照骨套装",
+        "法攻",
+        "合道期"
+      ]
+    },
+    {
+      "_comment": "========== 炼神返虚·合道期套装：悬律套装（坦度/反震节奏） =========="
+    },
+    {
+      "id": "set-xuanlv-weapon",
+      "name": "悬律镇锋",
+      "category": "equipment",
+      "sub_category": "sword",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/images/set-ningshen/01-weapon-set-ningshen-weapon.webp",
+      "equip_slot": "weapon",
+      "equip_req_realm": "炼神返虚·合道期",
+      "base_attrs": {
+        "wugong": 34,
+        "wufang": 36
+      },
+      "implicit_attrs": {
+        "wugong": 16,
+        "wufang": 17
+      },
+      "affix_pool_id": "ap-weapon-rare",
+      "set_id": "set-xuanlv",
+      "tags": [
+        "武器",
+        "悬律套装",
+        "合道期"
+      ]
+    },
+    {
+      "id": "set-xuanlv-head",
+      "name": "悬律法盔",
+      "category": "equipment",
+      "sub_category": "hat",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/images/set-ningshen/02-head-set-ningshen-head.webp",
+      "equip_slot": "head",
+      "equip_req_realm": "炼神返虚·合道期",
+      "base_attrs": {
+        "max_qixue": 628,
+        "wufang": 31,
+        "kangbao_rating": 374
+      },
+      "implicit_attrs": {
+        "max_qixue": 262
+      },
+      "affix_pool_id": "ap-armor-rare",
+      "set_id": "set-xuanlv",
+      "tags": [
+        "头部",
+        "悬律套装",
+        "合道期"
+      ]
+    },
+    {
+      "id": "set-xuanlv-clothes",
+      "name": "悬律玄甲",
+      "category": "equipment",
+      "sub_category": "robe",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/images/set-ningshen/03-clothes-set-ningshen-clothes.webp",
+      "equip_slot": "clothes",
+      "equip_req_realm": "炼神返虚·合道期",
+      "base_attrs": {
+        "max_qixue": 856,
+        "wufang": 37,
+        "fafang": 29
+      },
+      "implicit_attrs": {
+        "max_qixue": 316
+      },
+      "affix_pool_id": "ap-armor-rare",
+      "set_id": "set-xuanlv",
+      "tags": [
+        "衣服",
+        "悬律套装",
+        "合道期"
+      ]
+    },
+    {
+      "id": "set-xuanlv-gloves",
+      "name": "悬律镇臂",
+      "category": "equipment",
+      "sub_category": "gloves",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/images/set-ningshen/04-gloves-set-ningshen-gloves.webp",
+      "equip_slot": "gloves",
+      "equip_req_realm": "炼神返虚·合道期",
+      "base_attrs": {
+        "wufang": 29,
+        "zhaojia_rating": 676
+      },
+      "implicit_attrs": {
+        "zhaojia_rating": 286
+      },
+      "affix_pool_id": "ap-armor-rare",
+      "set_id": "set-xuanlv",
+      "tags": [
+        "手部",
+        "悬律套装",
+        "合道期"
+      ]
+    },
+    {
+      "id": "set-xuanlv-pants",
+      "name": "悬律战裳",
+      "category": "equipment",
+      "sub_category": "pants",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/images/set-ningshen/05-pants-set-ningshen-pants.webp",
+      "equip_slot": "pants",
+      "equip_req_realm": "炼神返虚·合道期",
+      "base_attrs": {
+        "max_qixue": 498,
+        "fafang": 29
+      },
+      "implicit_attrs": {
+        "fafang": 19
+      },
+      "affix_pool_id": "ap-armor-rare",
+      "set_id": "set-xuanlv",
+      "tags": [
+        "腿部",
+        "悬律套装",
+        "合道期"
+      ]
+    },
+    {
+      "id": "set-xuanlv-necklace",
+      "name": "悬律真链",
+      "category": "equipment",
+      "sub_category": "necklace",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/images/set-ningshen/06-necklace-set-ningshen-necklace.webp",
+      "equip_slot": "necklace",
+      "equip_req_realm": "炼神返虚·合道期",
+      "base_attrs": {
+        "max_qixue": 350,
+        "kangbao_rating": 460
+      },
+      "implicit_attrs": {
+        "kangbao_rating": 286
+      },
+      "affix_pool_id": "ap-accessory-uncommon",
+      "set_id": "set-xuanlv",
+      "tags": [
+        "项链",
+        "悬律套装",
+        "合道期"
+      ]
+    },
+    {
+      "id": "set-xuanlv-accessory",
+      "name": "悬律法环",
+      "category": "equipment",
+      "sub_category": "ring",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/images/set-ningshen/07-accessory-set-ningshen-accessory.webp",
+      "equip_slot": "accessory",
+      "equip_req_realm": "炼神返虚·合道期",
+      "base_attrs": {
+        "wufang": 34,
+        "fafang": 24
+      },
+      "implicit_attrs": {
+        "wufang": 18
+      },
+      "affix_pool_id": "ap-accessory-uncommon",
+      "set_id": "set-xuanlv",
+      "tags": [
+        "饰品",
+        "悬律套装",
+        "合道期"
+      ]
+    },
+    {
+      "id": "set-xuanlv-artifact",
+      "name": "悬律司天印",
+      "category": "equipment",
+      "sub_category": "token",
+      "stack_max": 1,
+      "bind_type": "equip",
+      "tradeable": true,
+      "icon": "/assets/images/set-ningshen/08-artifact-set-ningshen-artifact.webp",
+      "equip_slot": "artifact",
+      "equip_req_realm": "炼神返虚·合道期",
+      "base_attrs": {
+        "kongzhi_kangxing_rating": 972,
+        "zhaojia_rating": 518
+      },
+      "implicit_attrs": {
+        "kongzhi_kangxing_rating": 388
+      },
+      "affix_pool_id": "ap-artifact-uncommon",
+      "set_id": "set-xuanlv",
+      "tags": [
+        "法宝",
+        "悬律套装",
+        "合道期"
+      ]
     }
   ]
 }

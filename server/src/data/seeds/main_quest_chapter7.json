@@ -1,0 +1,316 @@
+{
+  "chapters": [
+    {
+      "id": "mq-chapter-7",
+      "chapter_num": 7,
+      "name": "第七章：合道照真",
+      "description": "还虚已成，你将进入大道镜墟，在镜律反照中照见己身真意，叩问合道门槛。",
+      "background": "大道镜墟是还虚裂界深层显化的镜律残界。这里的一切反照都不是单纯伤害，而是将修士失衡的节奏、贪进的出手和紊乱的神识悉数放大。你需要完成六段试炼，收束道镜玄砂，铸成合道契印，才能真正让神识与大道同频。",
+      "min_realm": "炼神返虚·还虚期",
+      "chapter_rewards": {
+        "exp": 26000,
+        "silver": 36000,
+        "spirit_stones": 3200,
+        "items": [
+          {
+            "item_def_id": "box-011",
+            "quantity": 2
+          },
+          {
+            "item_def_id": "mat-hedao-qiyin",
+            "quantity": 1
+          }
+        ]
+      },
+      "unlock_features": [
+        "map-dadao-jingxu",
+        "dungeon-lianshen-xuanjian-sitian-gong"
+      ],
+      "sort_weight": 910,
+      "enabled": true
+    }
+  ],
+  "sections": [
+    {
+      "id": "main-7-001",
+      "chapter_id": "mq-chapter-7",
+      "section_num": 1,
+      "name": "镜墟初临",
+      "description": "踏入大道镜墟，与引镜使确认镜界问律的规则。",
+      "brief": "抵达镜墟渡口并与引镜使交谈。",
+      "npc_id": "npc-jingxu-guide",
+      "map_id": "map-dadao-jingxu",
+      "room_id": "room-jingxu-dukou",
+      "min_realm": "炼神返虚·还虚期",
+      "dialogue_id": "dlg-main-7-001",
+      "objectives": [
+        {
+          "id": "obj-1",
+          "type": "reach",
+          "text": "抵达镜墟渡口",
+          "target": 1,
+          "params": {
+            "room_id": "room-jingxu-dukou"
+          }
+        },
+        {
+          "id": "obj-2",
+          "type": "talk_npc",
+          "text": "与引镜使交谈",
+          "target": 1,
+          "params": {
+            "npc_id": "npc-jingxu-guide"
+          }
+        }
+      ],
+      "rewards": {
+        "exp": 1800,
+        "silver": 2600,
+        "spirit_stones": 220
+      },
+      "auto_accept": true,
+      "auto_complete": false,
+      "is_chapter_final": false,
+      "sort_weight": 910,
+      "enabled": true
+    },
+    {
+      "id": "main-7-002",
+      "chapter_id": "mq-chapter-7",
+      "section_num": 2,
+      "name": "折光清障",
+      "description": "在大道镜墟外围清理镜甲卫侍与折光灵官，摸清镜界反照的节奏。",
+      "brief": "击败镜甲卫侍6只、折光灵官6只。",
+      "npc_id": "npc-jingxu-guide",
+      "map_id": "map-dadao-jingxu",
+      "room_id": "room-jingxu-zheguang",
+      "min_realm": "炼神返虚·还虚期",
+      "dialogue_id": "dlg-main-7-002",
+      "objectives": [
+        {
+          "id": "obj-1",
+          "type": "kill_monster",
+          "text": "击败镜甲卫侍",
+          "target": 6,
+          "params": {
+            "monster_id": "monster-hedao-jingjia-guard"
+          }
+        },
+        {
+          "id": "obj-2",
+          "type": "kill_monster",
+          "text": "击败折光灵官",
+          "target": 6,
+          "params": {
+            "monster_id": "monster-hedao-zheguang-lingguan"
+          }
+        }
+      ],
+      "rewards": {
+        "exp": 2200,
+        "silver": 3200,
+        "spirit_stones": 260,
+        "items": [
+          {
+            "item_def_id": "mat-daojing-xuansha",
+            "quantity": 4
+          }
+        ]
+      },
+      "auto_accept": true,
+      "auto_complete": false,
+      "is_chapter_final": false,
+      "sort_weight": 911,
+      "enabled": true
+    },
+    {
+      "id": "main-7-003",
+      "chapter_id": "mq-chapter-7",
+      "section_num": 3,
+      "name": "玄宫试律",
+      "description": "进入玄鉴司天宫完成一次普通问律试炼，验证自身能否承受镜律反照。",
+      "brief": "通关玄鉴司天宫（普通）1次。",
+      "npc_id": "npc-jingxu-lawkeeper",
+      "map_id": "map-dadao-jingxu",
+      "room_id": "room-jingxu-sitian-gate",
+      "min_realm": "炼神返虚·还虚期",
+      "dialogue_id": "dlg-main-7-003",
+      "objectives": [
+        {
+          "id": "obj-1",
+          "type": "dungeon_clear",
+          "text": "通关玄鉴司天宫（普通）",
+          "target": 1,
+          "params": {
+            "dungeon_id": "dungeon-lianshen-xuanjian-sitian-gong",
+            "difficulty_id": "dd-jingxu-sitian-n"
+          }
+        }
+      ],
+      "rewards": {
+        "exp": 2600,
+        "silver": 3800,
+        "spirit_stones": 320,
+        "items": [
+          {
+            "item_def_id": "mat-hedao-qiyin",
+            "quantity": 1
+          }
+        ]
+      },
+      "auto_accept": true,
+      "auto_complete": false,
+      "is_chapter_final": false,
+      "sort_weight": 912,
+      "enabled": true
+    },
+    {
+      "id": "main-7-004",
+      "chapter_id": "mq-chapter-7",
+      "section_num": 4,
+      "name": "道砂归炉",
+      "description": "收集足量道镜玄砂并向铸印道人复命，准备合道契印的铸印底胚。",
+      "brief": "收集道镜玄砂16个，向铸印道人复命。",
+      "npc_id": "npc-jingxu-forgemaster",
+      "map_id": "map-dadao-jingxu",
+      "room_id": "room-jingxu-sitian-gate",
+      "min_realm": "炼神返虚·还虚期",
+      "dialogue_id": "dlg-main-7-004",
+      "objectives": [
+        {
+          "id": "obj-1",
+          "type": "collect",
+          "text": "收集道镜玄砂",
+          "target": 16,
+          "params": {
+            "item_id": "mat-daojing-xuansha"
+          }
+        },
+        {
+          "id": "obj-2",
+          "type": "talk_npc",
+          "text": "向铸印道人复命",
+          "target": 1,
+          "params": {
+            "npc_id": "npc-jingxu-forgemaster"
+          }
+        }
+      ],
+      "rewards": {
+        "exp": 3000,
+        "silver": 4400,
+        "spirit_stones": 360,
+        "items": [
+          {
+            "item_def_id": "mat-hedao-qiyin",
+            "quantity": 1
+          }
+        ]
+      },
+      "auto_accept": true,
+      "auto_complete": false,
+      "is_chapter_final": false,
+      "sort_weight": 913,
+      "enabled": true
+    },
+    {
+      "id": "main-7-005",
+      "chapter_id": "mq-chapter-7",
+      "section_num": 5,
+      "name": "司天破镜",
+      "description": "连续完成困难问律试炼，并击败玄鉴真君，压住镜界的最高反照潮。",
+      "brief": "通关玄鉴司天宫困难2次，并击败玄鉴真君1次。",
+      "npc_id": "npc-jingxu-lawkeeper",
+      "map_id": "map-dadao-jingxu",
+      "room_id": "room-jingxu-sitian-gate",
+      "min_realm": "炼神返虚·还虚期",
+      "dialogue_id": "dlg-main-7-005",
+      "objectives": [
+        {
+          "id": "obj-1",
+          "type": "dungeon_clear",
+          "text": "通关玄鉴司天宫（困难）",
+          "target": 2,
+          "params": {
+            "dungeon_id": "dungeon-lianshen-xuanjian-sitian-gong",
+            "difficulty_id": "dd-jingxu-sitian-h"
+          }
+        },
+        {
+          "id": "obj-2",
+          "type": "kill_monster",
+          "text": "击败玄鉴真君",
+          "target": 1,
+          "params": {
+            "monster_id": "monster-boss-hedao-xuanjian-zhenjun"
+          }
+        }
+      ],
+      "rewards": {
+        "exp": 3600,
+        "silver": 5200,
+        "spirit_stones": 420,
+        "items": [
+          {
+            "item_def_id": "mat-daojing-xuansha",
+            "quantity": 6
+          }
+        ]
+      },
+      "auto_accept": true,
+      "auto_complete": false,
+      "is_chapter_final": false,
+      "sort_weight": 914,
+      "enabled": true
+    },
+    {
+      "id": "main-7-006",
+      "chapter_id": "mq-chapter-7",
+      "section_num": 6,
+      "name": "契印合道",
+      "description": "备齐合道契印并完成最终问律，正式满足还虚突破合道的主线前置。",
+      "brief": "收集合道契印4个，向问律师复命。",
+      "npc_id": "npc-jingxu-lawkeeper",
+      "map_id": "map-dadao-jingxu",
+      "room_id": "room-jingxu-sitian-gate",
+      "min_realm": "炼神返虚·还虚期",
+      "dialogue_id": "dlg-main-7-006",
+      "objectives": [
+        {
+          "id": "obj-1",
+          "type": "collect",
+          "text": "收集合道契印",
+          "target": 4,
+          "params": {
+            "item_id": "mat-hedao-qiyin"
+          }
+        },
+        {
+          "id": "obj-2",
+          "type": "talk_npc",
+          "text": "向问律师复命",
+          "target": 1,
+          "params": {
+            "npc_id": "npc-jingxu-lawkeeper"
+          }
+        }
+      ],
+      "rewards": {
+        "exp": 4200,
+        "silver": 6000,
+        "spirit_stones": 480,
+        "items": [
+          {
+            "item_def_id": "box-011",
+            "quantity": 1
+          }
+        ]
+      },
+      "auto_accept": true,
+      "auto_complete": false,
+      "is_chapter_final": true,
+      "sort_weight": 915,
+      "enabled": true
+    }
+  ]
+}

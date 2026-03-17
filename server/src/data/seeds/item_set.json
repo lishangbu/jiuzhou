@@ -2829,6 +2829,282 @@
           "priority": 3
         }
       ]
+    },
+    {
+      "_comment": "========== 炼神返虚·合道期套装：照骨套装（法攻/镜裂追击） =========="
+    },
+    {
+      "id": "set-zhaogu",
+      "name": "照骨套装",
+      "description": "照骨套装以镜裂印为核心，通过叠层、消耗与回响追击打出连段爆发。",
+      "quality_rank": 6,
+      "min_realm": "炼神返虚·合道期",
+      "pieces": [
+        {
+          "equip_slot": "weapon",
+          "item_def_id": "set-zhaogu-weapon",
+          "piece_key": "weapon"
+        },
+        {
+          "equip_slot": "head",
+          "item_def_id": "set-zhaogu-head",
+          "piece_key": "head"
+        },
+        {
+          "equip_slot": "clothes",
+          "item_def_id": "set-zhaogu-clothes",
+          "piece_key": "clothes"
+        },
+        {
+          "equip_slot": "gloves",
+          "item_def_id": "set-zhaogu-gloves",
+          "piece_key": "gloves"
+        },
+        {
+          "equip_slot": "pants",
+          "item_def_id": "set-zhaogu-pants",
+          "piece_key": "pants"
+        },
+        {
+          "equip_slot": "necklace",
+          "item_def_id": "set-zhaogu-necklace",
+          "piece_key": "necklace"
+        },
+        {
+          "equip_slot": "accessory",
+          "item_def_id": "set-zhaogu-accessory",
+          "piece_key": "accessory"
+        },
+        {
+          "equip_slot": "artifact",
+          "item_def_id": "set-zhaogu-artifact",
+          "piece_key": "artifact"
+        }
+      ],
+      "bonuses": [
+        {
+          "piece_count": 2,
+          "effect_defs": [
+            {
+              "trigger": "equip",
+              "target": "self",
+              "effect_type": "buff",
+              "params": {
+                "attr_key": "fagong",
+                "value": 30,
+                "apply_type": "flat"
+              }
+            },
+            {
+              "trigger": "equip",
+              "target": "self",
+              "effect_type": "buff",
+              "params": {
+                "attr_key": "lengque_rating",
+                "value": 180,
+                "apply_type": "flat"
+              }
+            }
+          ],
+          "priority": 0
+        },
+        {
+          "piece_count": 4,
+          "effect_defs": [
+            {
+              "trigger": "on_skill",
+              "target": "enemy",
+              "effect_type": "mark",
+              "params": {
+                "operation": "apply",
+                "mark_id": "mirror_crack",
+                "max_stacks": 4,
+                "chance": 0.45
+              }
+            }
+          ],
+          "priority": 1
+        },
+        {
+          "piece_count": 6,
+          "effect_defs": [
+            {
+              "trigger": "equip",
+              "target": "self",
+              "effect_type": "buff",
+              "params": {
+                "attr_key": "zengshang",
+                "value": 0.06,
+                "apply_type": "flat"
+              }
+            },
+            {
+              "trigger": "on_skill",
+              "target": "enemy",
+              "effect_type": "mark",
+              "params": {
+                "operation": "consume",
+                "mark_id": "mirror_crack",
+                "consume_mode": "fixed",
+                "consume_stacks": 2,
+                "per_stack_rate": 0.88,
+                "result_type": "damage",
+                "value": 0,
+                "scale_key": "fagong",
+                "scale_rate": 0.34
+              }
+            }
+          ],
+          "priority": 2
+        },
+        {
+          "piece_count": 8,
+          "effect_defs": [
+            {
+              "trigger": "on_skill",
+              "target": "enemy",
+              "effect_type": "damage",
+              "params": {
+                "damage_type": "echo",
+                "value": 0.26,
+                "chance": 0.32
+              }
+            }
+          ],
+          "priority": 3
+        }
+      ]
+    },
+    {
+      "_comment": "========== 炼神返虚·合道期套装：悬律套装（坦度/反震节奏） =========="
+    },
+    {
+      "id": "set-xuanlv",
+      "name": "悬律套装",
+      "description": "悬律套装以稳态反震与问律减速为核心，通过受击护盾和节奏反制稳住战线。",
+      "quality_rank": 6,
+      "min_realm": "炼神返虚·合道期",
+      "pieces": [
+        {
+          "equip_slot": "weapon",
+          "item_def_id": "set-xuanlv-weapon",
+          "piece_key": "weapon"
+        },
+        {
+          "equip_slot": "head",
+          "item_def_id": "set-xuanlv-head",
+          "piece_key": "head"
+        },
+        {
+          "equip_slot": "clothes",
+          "item_def_id": "set-xuanlv-clothes",
+          "piece_key": "clothes"
+        },
+        {
+          "equip_slot": "gloves",
+          "item_def_id": "set-xuanlv-gloves",
+          "piece_key": "gloves"
+        },
+        {
+          "equip_slot": "pants",
+          "item_def_id": "set-xuanlv-pants",
+          "piece_key": "pants"
+        },
+        {
+          "equip_slot": "necklace",
+          "item_def_id": "set-xuanlv-necklace",
+          "piece_key": "necklace"
+        },
+        {
+          "equip_slot": "accessory",
+          "item_def_id": "set-xuanlv-accessory",
+          "piece_key": "accessory"
+        },
+        {
+          "equip_slot": "artifact",
+          "item_def_id": "set-xuanlv-artifact",
+          "piece_key": "artifact"
+        }
+      ],
+      "bonuses": [
+        {
+          "piece_count": 2,
+          "effect_defs": [
+            {
+              "trigger": "equip",
+              "target": "self",
+              "effect_type": "buff",
+              "params": {
+                "attr_key": "max_qixue",
+                "value": 620,
+                "apply_type": "flat"
+              }
+            },
+            {
+              "trigger": "equip",
+              "target": "self",
+              "effect_type": "buff",
+              "params": {
+                "attr_key": "wufang",
+                "value": 32,
+                "apply_type": "flat"
+              }
+            }
+          ],
+          "priority": 0
+        },
+        {
+          "piece_count": 4,
+          "effect_defs": [
+            {
+              "trigger": "on_be_hit",
+              "target": "enemy",
+              "effect_type": "debuff",
+              "duration_round": 2,
+              "params": {
+                "attr_key": "sudu",
+                "value": 0.08,
+                "apply_type": "percent",
+                "chance": 0.38
+              }
+            }
+          ],
+          "priority": 1
+        },
+        {
+          "piece_count": 6,
+          "effect_defs": [
+            {
+              "trigger": "on_be_hit",
+              "target": "self",
+              "effect_type": "shield",
+              "duration_round": 2,
+              "params": {
+                "shield_mode": "damage_echo",
+                "value": 0.48,
+                "chance": 0.38
+              }
+            }
+          ],
+          "priority": 2
+        },
+        {
+          "piece_count": 8,
+          "effect_defs": [
+            {
+              "trigger": "on_be_hit",
+              "target": "enemy",
+              "effect_type": "damage",
+              "params": {
+                "damage_type": "reflect",
+                "value": 0.36,
+                "chance": 0.35
+              }
+            }
+          ],
+          "priority": 3
+        }
+      ]
     }
   ]
 }

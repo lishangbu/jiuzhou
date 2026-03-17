@@ -1,0 +1,542 @@
+{
+  "version": 1,
+  "description": "秘境种子数据 - 合道一期 - 玄鉴司天宫",
+  "dungeons": [
+    {
+      "def": {
+        "id": "dungeon-lianshen-xuanjian-sitian-gong",
+        "name": "玄鉴司天宫",
+        "type": "trial",
+        "category": "境界",
+        "description": "大道镜墟核心升起的司天玄宫，所有出手都会被镜律审照并放大失衡。",
+        "icon": "/assets/dungeon/withered_altar.png",
+        "background": "/assets/dungeon/bg_withered_altar.png",
+        "min_players": 1,
+        "max_players": 5,
+        "min_realm": "炼神返虚·还虚期",
+        "recommended_realm": "炼神返虚·合道期",
+        "unlock_condition": {},
+        "daily_limit": 0,
+        "weekly_limit": 0,
+        "stamina_cost": 15,
+        "time_limit_sec": 1260,
+        "revive_limit": 2,
+        "tags": [
+          "合道一期",
+          "试炼",
+          "玄鉴司天宫"
+        ],
+        "sort_weight": 109,
+        "enabled": true,
+        "version": 1
+      },
+      "difficulties": [
+        {
+          "id": "dd-jingxu-sitian-n",
+          "dungeon_id": "dungeon-lianshen-xuanjian-sitian-gong",
+          "name": "普通",
+          "difficulty_rank": 1,
+          "monster_level_add": 0,
+          "monster_attr_mult": 1.62,
+          "reward_mult": 1,
+          "min_realm": "炼神返虚·还虚期",
+          "unlock_prev_difficulty": false,
+          "first_clear_rewards": {
+            "items": [
+              {
+                "item_def_id": "mat-daojing-xuansha",
+                "qty": 6
+              },
+              {
+                "item_def_id": "mat-hedao-qiyin",
+                "qty": 1
+              },
+              {
+                "item_def_id": "set-zhaogu-head",
+                "qty": 1
+              }
+            ],
+            "silver": 2400,
+            "exp": 3000
+          },
+          "drop_pool_id": "dp-dungeon-jingxu-n",
+          "enabled": true,
+          "stages": [
+            {
+              "id": "ds-jingxu-sitian-n-1",
+              "difficulty_id": "dd-jingxu-sitian-n",
+              "stage_index": 1,
+              "name": "照壁外庭",
+              "type": "battle",
+              "description": "外庭的照壁会将来袭术式层层回照，逼迫修士放缓第一轮爆发。",
+              "time_limit_sec": 0,
+              "clear_condition": {
+                "type": "kill_all"
+              },
+              "fail_condition": {},
+              "events": [],
+              "waves": [
+                {
+                  "wave_index": 1,
+                  "spawn_delay_sec": 0,
+                  "monsters": [
+                    {
+                      "monster_def_id": "monster-hedao-jingjia-guard",
+                      "count": 3
+                    },
+                    {
+                      "monster_def_id": "monster-hedao-zheguang-lingguan",
+                      "count": 2
+                    }
+                  ],
+                  "wave_rewards": {}
+                },
+                {
+                  "wave_index": 2,
+                  "spawn_delay_sec": 2,
+                  "monsters": [
+                    {
+                      "monster_def_id": "monster-hedao-jingjia-guard",
+                      "count": 2
+                    },
+                    {
+                      "monster_def_id": "monster-elite-hedao-beishi-xunling",
+                      "count": 1
+                    }
+                  ],
+                  "wave_rewards": {}
+                }
+              ]
+            },
+            {
+              "id": "ds-jingxu-sitian-n-2",
+              "difficulty_id": "dd-jingxu-sitian-n",
+              "stage_index": 2,
+              "name": "问罪长廊",
+              "type": "battle",
+              "description": "长廊镜像会同步放大受击反照，极易把错误节奏变成整队溃散。",
+              "time_limit_sec": 0,
+              "clear_condition": {
+                "type": "kill_all"
+              },
+              "fail_condition": {},
+              "events": [],
+              "waves": [
+                {
+                  "wave_index": 1,
+                  "spawn_delay_sec": 0,
+                  "monsters": [
+                    {
+                      "monster_def_id": "monster-hedao-zheguang-lingguan",
+                      "count": 3
+                    },
+                    {
+                      "monster_def_id": "monster-hedao-jingjia-guard",
+                      "count": 2
+                    }
+                  ],
+                  "wave_rewards": {}
+                },
+                {
+                  "wave_index": 2,
+                  "spawn_delay_sec": 3,
+                  "monsters": [
+                    {
+                      "monster_def_id": "monster-elite-hedao-jingyu-sipan",
+                      "count": 1
+                    },
+                    {
+                      "monster_def_id": "monster-hedao-zheguang-lingguan",
+                      "count": 2
+                    }
+                  ],
+                  "wave_rewards": {}
+                }
+              ]
+            },
+            {
+              "id": "ds-jingxu-sitian-n-3",
+              "difficulty_id": "dd-jingxu-sitian-n",
+              "stage_index": 3,
+              "name": "鉴道主殿",
+              "type": "boss",
+              "description": "玄鉴真君端坐主殿，先以守势照真，再在节奏错位时骤然镇灭。",
+              "time_limit_sec": 0,
+              "clear_condition": {
+                "type": "kill_all"
+              },
+              "fail_condition": {},
+              "events": [],
+              "waves": [
+                {
+                  "wave_index": 1,
+                  "spawn_delay_sec": 0,
+                  "monsters": [
+                    {
+                      "monster_def_id": "monster-elite-hedao-beishi-xunling",
+                      "count": 1
+                    }
+                  ],
+                  "wave_rewards": {}
+                },
+                {
+                  "wave_index": 2,
+                  "spawn_delay_sec": 4,
+                  "monsters": [
+                    {
+                      "monster_def_id": "monster-boss-hedao-xuanjian-zhenjun",
+                      "count": 1
+                    }
+                  ],
+                  "wave_rewards": {}
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "dd-jingxu-sitian-h",
+          "dungeon_id": "dungeon-lianshen-xuanjian-sitian-gong",
+          "name": "困难",
+          "difficulty_rank": 2,
+          "monster_level_add": 2,
+          "monster_attr_mult": 1.88,
+          "reward_mult": 1.48,
+          "min_realm": "炼神返虚·还虚期",
+          "unlock_prev_difficulty": true,
+          "first_clear_rewards": {
+            "items": [
+              {
+                "item_def_id": "mat-daojing-xuansha",
+                "qty": 9
+              },
+              {
+                "item_def_id": "mat-hedao-qiyin",
+                "qty": 2
+              },
+              {
+                "item_def_id": "set-xuanlv-weapon",
+                "qty": 1
+              }
+            ],
+            "silver": 3000,
+            "exp": 3600
+          },
+          "drop_pool_id": "dp-dungeon-jingxu-h",
+          "enabled": true,
+          "stages": [
+            {
+              "id": "ds-jingxu-sitian-h-1",
+              "difficulty_id": "dd-jingxu-sitian-h",
+              "stage_index": 1,
+              "name": "照壁外庭·极",
+              "type": "battle",
+              "description": "更高密度的镜壁共振会迫使队伍频繁切换出手节奏。",
+              "time_limit_sec": 0,
+              "clear_condition": {
+                "type": "kill_all"
+              },
+              "fail_condition": {},
+              "events": [],
+              "waves": [
+                {
+                  "wave_index": 1,
+                  "spawn_delay_sec": 0,
+                  "monsters": [
+                    {
+                      "monster_def_id": "monster-hedao-jingjia-guard",
+                      "count": 4
+                    },
+                    {
+                      "monster_def_id": "monster-hedao-zheguang-lingguan",
+                      "count": 2
+                    }
+                  ],
+                  "wave_rewards": {}
+                },
+                {
+                  "wave_index": 2,
+                  "spawn_delay_sec": 2,
+                  "monsters": [
+                    {
+                      "monster_def_id": "monster-elite-hedao-beishi-xunling",
+                      "count": 1
+                    },
+                    {
+                      "monster_def_id": "monster-hedao-jingjia-guard",
+                      "count": 2
+                    }
+                  ],
+                  "wave_rewards": {}
+                }
+              ]
+            },
+            {
+              "id": "ds-jingxu-sitian-h-2",
+              "difficulty_id": "dd-jingxu-sitian-h",
+              "stage_index": 2,
+              "name": "问罪长廊·极",
+              "type": "battle",
+              "description": "镜狱司判会更频繁地打断全队节奏，迫使队伍保留反制手段。",
+              "time_limit_sec": 0,
+              "clear_condition": {
+                "type": "kill_all"
+              },
+              "fail_condition": {},
+              "events": [],
+              "waves": [
+                {
+                  "wave_index": 1,
+                  "spawn_delay_sec": 0,
+                  "monsters": [
+                    {
+                      "monster_def_id": "monster-hedao-zheguang-lingguan",
+                      "count": 3
+                    },
+                    {
+                      "monster_def_id": "monster-hedao-jingjia-guard",
+                      "count": 2
+                    }
+                  ],
+                  "wave_rewards": {}
+                },
+                {
+                  "wave_index": 2,
+                  "spawn_delay_sec": 3,
+                  "monsters": [
+                    {
+                      "monster_def_id": "monster-elite-hedao-jingyu-sipan",
+                      "count": 1
+                    },
+                    {
+                      "monster_def_id": "monster-elite-hedao-beishi-xunling",
+                      "count": 1
+                    },
+                    {
+                      "monster_def_id": "monster-hedao-zheguang-lingguan",
+                      "count": 1
+                    }
+                  ],
+                  "wave_rewards": {}
+                }
+              ]
+            },
+            {
+              "id": "ds-jingxu-sitian-h-3",
+              "difficulty_id": "dd-jingxu-sitian-h",
+              "stage_index": 3,
+              "name": "鉴道主殿·极",
+              "type": "boss",
+              "description": "玄鉴真君会以更高频率召回镜律反照，逼迫队伍严格管理爆发窗口。",
+              "time_limit_sec": 0,
+              "clear_condition": {
+                "type": "kill_all"
+              },
+              "fail_condition": {},
+              "events": [],
+              "waves": [
+                {
+                  "wave_index": 1,
+                  "spawn_delay_sec": 0,
+                  "monsters": [
+                    {
+                      "monster_def_id": "monster-elite-hedao-jingyu-sipan",
+                      "count": 1
+                    }
+                  ],
+                  "wave_rewards": {}
+                },
+                {
+                  "wave_index": 2,
+                  "spawn_delay_sec": 4,
+                  "monsters": [
+                    {
+                      "monster_def_id": "monster-boss-hedao-xuanjian-zhenjun",
+                      "count": 1
+                    },
+                    {
+                      "monster_def_id": "monster-hedao-jingjia-guard",
+                      "count": 1
+                    }
+                  ],
+                  "wave_rewards": {}
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "dd-jingxu-sitian-nm",
+          "dungeon_id": "dungeon-lianshen-xuanjian-sitian-gong",
+          "name": "噩梦",
+          "difficulty_rank": 3,
+          "monster_level_add": 4,
+          "monster_attr_mult": 2.18,
+          "reward_mult": 2.02,
+          "min_realm": "炼神返虚·还虚期",
+          "unlock_prev_difficulty": true,
+          "first_clear_rewards": {
+            "items": [
+              {
+                "item_def_id": "mat-daojing-xuansha",
+                "qty": 12
+              },
+              {
+                "item_def_id": "mat-hedao-qiyin",
+                "qty": 3
+              },
+              {
+                "item_def_id": "set-xuanlv-artifact",
+                "qty": 1
+              }
+            ],
+            "silver": 3800,
+            "exp": 4400
+          },
+          "drop_pool_id": "dp-dungeon-jingxu-nm",
+          "enabled": true,
+          "stages": [
+            {
+              "id": "ds-jingxu-sitian-nm-1",
+              "difficulty_id": "dd-jingxu-sitian-nm",
+              "stage_index": 1,
+              "name": "照壁外庭·噩",
+              "type": "battle",
+              "description": "镜壁会连续诱发受击反照，任何盲目爆发都会被直接反噬。",
+              "time_limit_sec": 0,
+              "clear_condition": {
+                "type": "kill_all"
+              },
+              "fail_condition": {},
+              "events": [],
+              "waves": [
+                {
+                  "wave_index": 1,
+                  "spawn_delay_sec": 0,
+                  "monsters": [
+                    {
+                      "monster_def_id": "monster-hedao-jingjia-guard",
+                      "count": 4
+                    },
+                    {
+                      "monster_def_id": "monster-hedao-zheguang-lingguan",
+                      "count": 3
+                    }
+                  ],
+                  "wave_rewards": {}
+                },
+                {
+                  "wave_index": 2,
+                  "spawn_delay_sec": 2,
+                  "monsters": [
+                    {
+                      "monster_def_id": "monster-elite-hedao-beishi-xunling",
+                      "count": 1
+                    },
+                    {
+                      "monster_def_id": "monster-elite-hedao-jingyu-sipan",
+                      "count": 1
+                    }
+                  ],
+                  "wave_rewards": {}
+                }
+              ]
+            },
+            {
+              "id": "ds-jingxu-sitian-nm-2",
+              "difficulty_id": "dd-jingxu-sitian-nm",
+              "stage_index": 2,
+              "name": "问罪长廊·噩",
+              "type": "battle",
+              "description": "长廊中的镜律会在错误窗口成倍放大压力，考验整队轮转与保命。",
+              "time_limit_sec": 0,
+              "clear_condition": {
+                "type": "kill_all"
+              },
+              "fail_condition": {},
+              "events": [],
+              "waves": [
+                {
+                  "wave_index": 1,
+                  "spawn_delay_sec": 0,
+                  "monsters": [
+                    {
+                      "monster_def_id": "monster-hedao-zheguang-lingguan",
+                      "count": 4
+                    },
+                    {
+                      "monster_def_id": "monster-hedao-jingjia-guard",
+                      "count": 2
+                    }
+                  ],
+                  "wave_rewards": {}
+                },
+                {
+                  "wave_index": 2,
+                  "spawn_delay_sec": 3,
+                  "monsters": [
+                    {
+                      "monster_def_id": "monster-elite-hedao-jingyu-sipan",
+                      "count": 1
+                    },
+                    {
+                      "monster_def_id": "monster-elite-hedao-beishi-xunling",
+                      "count": 1
+                    },
+                    {
+                      "monster_def_id": "monster-hedao-zheguang-lingguan",
+                      "count": 2
+                    }
+                  ],
+                  "wave_rewards": {}
+                }
+              ]
+            },
+            {
+              "id": "ds-jingxu-sitian-nm-3",
+              "difficulty_id": "dd-jingxu-sitian-nm",
+              "stage_index": 3,
+              "name": "鉴道主殿·噩",
+              "type": "boss",
+              "description": "玄鉴真君会在高压问律中反复拉长反照阶段，只有稳准地抓到窗口才能通关。",
+              "time_limit_sec": 0,
+              "clear_condition": {
+                "type": "kill_all"
+              },
+              "fail_condition": {},
+              "events": [],
+              "waves": [
+                {
+                  "wave_index": 1,
+                  "spawn_delay_sec": 0,
+                  "monsters": [
+                    {
+                      "monster_def_id": "monster-elite-hedao-jingyu-sipan",
+                      "count": 1
+                    },
+                    {
+                      "monster_def_id": "monster-elite-hedao-beishi-xunling",
+                      "count": 1
+                    }
+                  ],
+                  "wave_rewards": {}
+                },
+                {
+                  "wave_index": 2,
+                  "spawn_delay_sec": 4,
+                  "monsters": [
+                    {
+                      "monster_def_id": "monster-boss-hedao-xuanjian-zhenjun",
+                      "count": 1
+                    }
+                  ],
+                  "wave_rewards": {}
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

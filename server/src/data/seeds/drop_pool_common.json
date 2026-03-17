@@ -1352,6 +1352,133 @@
         }
       ],
       "enabled": true
+    },
+    {
+      "id": "dp-common-monster-hedao",
+      "name": "炼神返虚·合道期公共掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "box-011",
+          "chance": 0.04,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-zhaogu-head",
+          "chance": 0.08,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-zhaogu-clothes",
+          "chance": 0.07,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-zhaogu-gloves",
+          "chance": 0.08,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-zhaogu-pants",
+          "chance": 0.07,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-zhaogu-necklace",
+          "chance": 0.06,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-zhaogu-accessory",
+          "chance": 0.06,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-zhaogu-weapon",
+          "chance": 0.035,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-zhaogu-artifact",
+          "chance": 0.045,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-xuanlv-head",
+          "chance": 0.08,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-xuanlv-clothes",
+          "chance": 0.07,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-xuanlv-gloves",
+          "chance": 0.08,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-xuanlv-pants",
+          "chance": 0.07,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-xuanlv-necklace",
+          "chance": 0.06,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-xuanlv-accessory",
+          "chance": 0.06,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-xuanlv-weapon",
+          "chance": 0.035,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-xuanlv-artifact",
+          "chance": 0.045,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ],
+      "enabled": true
     }
   ]
 }

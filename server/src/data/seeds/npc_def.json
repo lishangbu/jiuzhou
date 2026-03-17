@@ -594,6 +594,81 @@
       "quest_giver_id": "qg-chapter6-main",
       "sort_weight": 258,
       "enabled": true
+    },
+    {
+      "id": "npc-jingxu-guide",
+      "code": "jingxu_guide",
+      "name": "引镜使",
+      "title": "镜墟接引官",
+      "gender": "男",
+      "realm": "炼神返虚·合道期",
+      "avatar": "/assets/npc/guide.png",
+      "description": "负责维持镜墟渡口的界桥稳定，引导还虚修士进入大道镜墟。",
+      "npc_type": "quest",
+      "area": "S",
+      "base_attrs": {
+        "qixue": 13600,
+        "max_qixue": 13600,
+        "wugong": 348,
+        "fagong": 382,
+        "wufang": 304,
+        "fafang": 326,
+        "sudu": 13
+      },
+      "talk_tree_id": "talk-shenshi-guide",
+      "quest_giver_id": "qg-chapter7-main",
+      "sort_weight": 259,
+      "enabled": true
+    },
+    {
+      "id": "npc-jingxu-lawkeeper",
+      "code": "jingxu_lawkeeper",
+      "name": "问律师",
+      "title": "司天问律官",
+      "gender": "女",
+      "realm": "炼神返虚·合道期",
+      "avatar": "/assets/npc/teleporter.png",
+      "description": "执掌镜墟问律之职，负责最终判定修士能否承接合道之印。",
+      "npc_type": "quest",
+      "area": "S",
+      "base_attrs": {
+        "qixue": 14200,
+        "max_qixue": 14200,
+        "wugong": 336,
+        "fagong": 398,
+        "wufang": 312,
+        "fafang": 338,
+        "sudu": 12
+      },
+      "talk_tree_id": "talk-shenshi-watcher",
+      "quest_giver_id": "qg-chapter7-main",
+      "sort_weight": 260,
+      "enabled": true
+    },
+    {
+      "id": "npc-jingxu-forgemaster",
+      "code": "jingxu_forgemaster",
+      "name": "铸印道人",
+      "title": "镜印铸律师",
+      "gender": "男",
+      "realm": "炼神返虚·合道期",
+      "avatar": "/assets/npc/mysterious_merchant.png",
+      "description": "专司镜砂熔印与契印铸成，负责合道前的材料收束与契印校正。",
+      "npc_type": "quest",
+      "area": "S",
+      "base_attrs": {
+        "qixue": 13800,
+        "max_qixue": 13800,
+        "wugong": 342,
+        "fagong": 390,
+        "wufang": 298,
+        "fafang": 334,
+        "sudu": 11
+      },
+      "talk_tree_id": "talk-shenshi-merchant",
+      "quest_giver_id": "qg-chapter7-main",
+      "sort_weight": 261,
+      "enabled": true
     }
   ],
   "talk_trees": [

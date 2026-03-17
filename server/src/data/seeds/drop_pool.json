@@ -2051,6 +2051,270 @@
         }
       ],
       "common_pool_ids": []
+    },
+    {
+      "_comment": "========== 炼神返虚·合道期怪物掉落池 =========="
+    },
+    {
+      "id": "dp-hedao-jingjia-guard",
+      "name": "镜甲卫侍掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-daojing-xuansha",
+          "chance": 0.9,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-hedao-qiyin",
+          "chance": 0.18,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ],
+      "common_pool_ids": [
+        "dp-common-monster-global",
+        "dp-common-monster-hedao"
+      ]
+    },
+    {
+      "id": "dp-hedao-zheguang-lingguan",
+      "name": "折光灵官掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-daojing-xuansha",
+          "chance": 0.84,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-hedao-qiyin",
+          "chance": 0.24,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ],
+      "common_pool_ids": [
+        "dp-common-monster-global",
+        "dp-common-monster-hedao"
+      ]
+    },
+    {
+      "id": "dp-hedao-elite-beishi-xunling",
+      "name": "背誓巡灵掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-daojing-xuansha",
+          "chance": 1,
+          "qty_min": 3,
+          "qty_max": 5,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-hedao-qiyin",
+          "chance": 0.52,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        }
+      ],
+      "common_pool_ids": [
+        "dp-common-monster-global",
+        "dp-common-monster-hedao",
+        "dp-common-monster-elite"
+      ]
+    },
+    {
+      "id": "dp-hedao-elite-jingyu-sipan",
+      "name": "镜狱司判掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-daojing-xuansha",
+          "chance": 1,
+          "qty_min": 3,
+          "qty_max": 5,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-hedao-qiyin",
+          "chance": 0.58,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        }
+      ],
+      "common_pool_ids": [
+        "dp-common-monster-global",
+        "dp-common-monster-hedao",
+        "dp-common-monster-elite"
+      ]
+    },
+    {
+      "id": "dp-hedao-boss-xuanjian-zhenjun",
+      "name": "玄鉴真君掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-hedao-qiyin",
+          "chance": 1,
+          "qty_min": 3,
+          "qty_max": 5,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-daojing-xuansha",
+          "chance": 1,
+          "qty_min": 6,
+          "qty_max": 10,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "box-011",
+          "chance": 0.92,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-zhaogu-weapon",
+          "chance": 0.14,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-zhaogu-artifact",
+          "chance": 0.14,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-xuanlv-weapon",
+          "chance": 0.14,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-xuanlv-artifact",
+          "chance": 0.14,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "cons-monthcard-001",
+          "chance": 0.005,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ],
+      "common_pool_ids": [
+        "dp-common-monster-global",
+        "dp-common-monster-hedao",
+        "dp-common-monster-boss",
+        "dp-common-dungeon-boss-unbind"
+      ]
+    },
+    {
+      "_comment": "========== 合道一期秘境掉落池 =========="
+    },
+    {
+      "id": "dp-dungeon-jingxu-n",
+      "name": "玄鉴司天宫普通掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-daojing-xuansha",
+          "chance": 0.82,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-hedao-qiyin",
+          "chance": 0.16,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ],
+      "common_pool_ids": []
+    },
+    {
+      "id": "dp-dungeon-jingxu-h",
+      "name": "玄鉴司天宫困难掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-daojing-xuansha",
+          "chance": 0.76,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-hedao-qiyin",
+          "chance": 0.22,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "box-011",
+          "chance": 0.24,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ],
+      "common_pool_ids": []
+    },
+    {
+      "id": "dp-dungeon-jingxu-nm",
+      "name": "玄鉴司天宫噩梦掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "mat-daojing-xuansha",
+          "chance": 0.72,
+          "qty_min": 1,
+          "qty_max": 2,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-hedao-qiyin",
+          "chance": 0.28,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-zhaogu-head",
+          "chance": 0.03,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-xuanlv-head",
+          "chance": 0.03,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ],
+      "common_pool_ids": []
     }
   ]
 }

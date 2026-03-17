@@ -3263,6 +3263,230 @@
             }
           ],
           "items": [],
+          "portals": [
+            {
+              "target_map_id": "map-dadao-jingxu",
+              "target_room_id": "room-jingxu-dukou",
+              "name": "大道镜墟界桥",
+              "req_realm_min": "炼神返虚·还虚期"
+            }
+          ],
+          "events": []
+        }
+      ]
+    },
+    {
+      "id": "map-dadao-jingxu",
+      "code": "dadao_jingxu",
+      "name": "大道镜墟",
+      "description": "还虚裂界更深处显化出的镜律残界，折光如潮，唯有能承受问律反照者方可前行。",
+      "background_image": "/assets/map/yanbing_rift.png",
+      "map_type": "field",
+      "parent_map_id": "map-huixu-rift",
+      "region": "东洲",
+      "world_position": {
+        "x": 232,
+        "y": 252
+      },
+      "req_realm_min": "炼神返虚·还虚期",
+      "safe_zone": false,
+      "pk_mode": "normal",
+      "revive_map_id": "map-dadao-jingxu",
+      "revive_room_id": "room-jingxu-dukou",
+      "sort_weight": 590,
+      "enabled": true,
+      "rooms": [
+        {
+          "id": "room-jingxu-dukou",
+          "name": "镜墟渡口",
+          "description": "界桥尽头的镜墟渡口由引镜使驻守，负责校准初入者的神识波动。",
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "room_type": "safe",
+          "connections": [
+            {
+              "direction": "north",
+              "target_room_id": "room-jingxu-zheguang"
+            }
+          ],
+          "npcs": [
+            "npc-jingxu-guide"
+          ],
+          "monsters": [],
+          "resources": [],
+          "items": [],
+          "portals": [
+            {
+              "target_map_id": "map-huixu-rift",
+              "target_room_id": "room-huixu-tiantai-gate",
+              "name": "还虚裂界界桥"
+            }
+          ],
+          "events": []
+        },
+        {
+          "id": "room-jingxu-zheguang",
+          "name": "折光外环",
+          "description": "外环镜壁不断折返来袭术式，镜甲卫侍与折光灵官在此巡弋。",
+          "position": {
+            "x": 0,
+            "y": 1
+          },
+          "room_type": "field",
+          "connections": [
+            {
+              "direction": "south",
+              "target_room_id": "room-jingxu-dukou"
+            },
+            {
+              "direction": "east",
+              "target_room_id": "room-jingxu-zhaozui"
+            }
+          ],
+          "npcs": [],
+          "monsters": [
+            {
+              "monster_def_id": "monster-hedao-jingjia-guard",
+              "count": 3,
+              "respawn_sec": 55
+            },
+            {
+              "monster_def_id": "monster-hedao-zheguang-lingguan",
+              "count": 2,
+              "respawn_sec": 60
+            }
+          ],
+          "resources": [
+            {
+              "resource_id": "mat-daojing-xuansha",
+              "count": 9,
+              "collect_limit": 9,
+              "respawn_sec": 340
+            }
+          ],
+          "items": [],
+          "portals": [],
+          "events": []
+        },
+        {
+          "id": "room-jingxu-zhaozui",
+          "name": "照罪长阶",
+          "description": "长阶上的镜律会主动审照来者，失衡者很快会遭到精英镜狱巡灵围杀。",
+          "position": {
+            "x": 1,
+            "y": 1
+          },
+          "room_type": "field",
+          "connections": [
+            {
+              "direction": "west",
+              "target_room_id": "room-jingxu-zheguang"
+            },
+            {
+              "direction": "north",
+              "target_room_id": "room-jingxu-wendao"
+            }
+          ],
+          "npcs": [],
+          "monsters": [
+            {
+              "monster_def_id": "monster-hedao-jingjia-guard",
+              "count": 2,
+              "respawn_sec": 60
+            },
+            {
+              "monster_def_id": "monster-elite-hedao-beishi-xunling",
+              "count": 1,
+              "respawn_sec": 220
+            }
+          ],
+          "resources": [
+            {
+              "resource_id": "mat-daojing-xuansha",
+              "count": 7,
+              "collect_limit": 7,
+              "respawn_sec": 360
+            }
+          ],
+          "items": [],
+          "portals": [],
+          "events": []
+        },
+        {
+          "id": "room-jingxu-wendao",
+          "name": "问道悬庭",
+          "description": "悬庭中的问道镜台会放大道律音，镜狱司判常在此逼迫修士露出破绽。",
+          "position": {
+            "x": 1,
+            "y": 2
+          },
+          "room_type": "field",
+          "connections": [
+            {
+              "direction": "south",
+              "target_room_id": "room-jingxu-zhaozui"
+            },
+            {
+              "direction": "east",
+              "target_room_id": "room-jingxu-sitian-gate"
+            }
+          ],
+          "npcs": [],
+          "monsters": [
+            {
+              "monster_def_id": "monster-hedao-zheguang-lingguan",
+              "count": 2,
+              "respawn_sec": 58
+            },
+            {
+              "monster_def_id": "monster-elite-hedao-jingyu-sipan",
+              "count": 1,
+              "respawn_sec": 240
+            }
+          ],
+          "resources": [
+            {
+              "resource_id": "mat-daojing-xuansha",
+              "count": 6,
+              "collect_limit": 6,
+              "respawn_sec": 380
+            }
+          ],
+          "items": [],
+          "portals": [],
+          "events": []
+        },
+        {
+          "id": "room-jingxu-sitian-gate",
+          "name": "司天宫门",
+          "description": "玄鉴司天宫门前立有问律真镜，问律师与铸印道人在此审定合道资格。",
+          "position": {
+            "x": 2,
+            "y": 2
+          },
+          "room_type": "safe",
+          "connections": [
+            {
+              "direction": "west",
+              "target_room_id": "room-jingxu-wendao"
+            }
+          ],
+          "npcs": [
+            "npc-jingxu-lawkeeper",
+            "npc-jingxu-forgemaster"
+          ],
+          "monsters": [],
+          "resources": [
+            {
+              "resource_id": "mat-hedao-qiyin",
+              "count": 3,
+              "collect_limit": 3,
+              "respawn_sec": 560
+            }
+          ],
+          "items": [],
           "portals": [],
           "events": []
         }

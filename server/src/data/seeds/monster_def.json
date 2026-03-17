@@ -2901,6 +2901,315 @@
       "silver_reward_min": 1180,
       "silver_reward_max": 1760,
       "enabled": true
+    },
+    {
+      "_comment": "========== 炼神返虚·合道期怪物 =========="
+    },
+    {
+      "id": "monster-hedao-jingjia-guard",
+      "code": "hedao_jingjia_guard",
+      "name": "镜甲卫侍",
+      "title": "镜律巡卫",
+      "realm": "炼神返虚·合道期",
+      "level": 57,
+      "avatar": "/assets/monster/storm_wolf_lord.png",
+      "kind": "normal",
+      "element": "金",
+      "base_attrs": {
+        "qixue": 9300,
+        "max_qixue": 9300,
+        "lingqi": 860,
+        "max_lingqi": 860,
+        "wugong": 346,
+        "fagong": 258,
+        "wufang": 228,
+        "fafang": 218,
+        "mingzhong": 1.58,
+        "shanbi": 0.112,
+        "baoji": 0.224,
+        "baoshang": 2.76,
+        "sudu": 8,
+        "kongzhi_kangxing": 1.14
+      },
+      "attr_variance": 0,
+      "attr_multiplier_min": 1.02,
+      "attr_multiplier_max": 1.24,
+      "ai_profile": {
+        "skills": [
+          "sk-jingmang-zhan",
+          "sk-jingjia-fanzhao"
+        ],
+        "skill_weights": {
+          "sk-jingmang-zhan": 54,
+          "sk-jingjia-fanzhao": 46
+        }
+      },
+      "drop_pool_id": "dp-hedao-jingjia-guard",
+      "exp_reward": 1742,
+      "silver_reward_min": 486,
+      "silver_reward_max": 728,
+      "enabled": true
+    },
+    {
+      "id": "monster-hedao-zheguang-lingguan",
+      "code": "hedao_zheguang_lingguan",
+      "name": "折光灵官",
+      "title": "镜庭执律者",
+      "realm": "炼神返虚·合道期",
+      "level": 58,
+      "avatar": "/assets/monster/shadow_viper.png",
+      "kind": "normal",
+      "element": "光",
+      "base_attrs": {
+        "qixue": 8800,
+        "max_qixue": 8800,
+        "lingqi": 920,
+        "max_lingqi": 920,
+        "wugong": 262,
+        "fagong": 352,
+        "wufang": 214,
+        "fafang": 238,
+        "mingzhong": 1.62,
+        "shanbi": 0.116,
+        "baoji": 0.23,
+        "baoshang": 2.8,
+        "sudu": 9,
+        "kongzhi_kangxing": 1.1
+      },
+      "attr_variance": 0,
+      "attr_multiplier_min": 1.03,
+      "attr_multiplier_max": 1.26,
+      "ai_profile": {
+        "skills": [
+          "sk-zheguang-huilv"
+        ],
+        "skill_weights": {
+          "sk-zheguang-huilv": 100
+        }
+      },
+      "drop_pool_id": "dp-hedao-zheguang-lingguan",
+      "exp_reward": 1818,
+      "silver_reward_min": 512,
+      "silver_reward_max": 764,
+      "enabled": true
+    },
+    {
+      "id": "monster-elite-hedao-beishi-xunling",
+      "code": "elite_hedao_beishi_xunling",
+      "name": "背誓巡灵",
+      "title": "精英",
+      "realm": "炼神返虚·合道期",
+      "level": 59,
+      "avatar": "/assets/monster/rune_golem.png",
+      "kind": "elite",
+      "element": "金",
+      "base_attrs": {
+        "qixue": 27200,
+        "max_qixue": 27200,
+        "lingqi": 1480,
+        "max_lingqi": 1480,
+        "wugong": 508,
+        "fagong": 456,
+        "wufang": 338,
+        "fafang": 324,
+        "mingzhong": 1.72,
+        "shanbi": 0.114,
+        "baoji": 0.238,
+        "baoshang": 2.94,
+        "sudu": 8,
+        "kongzhi_kangxing": 1.32
+      },
+      "attr_variance": 0,
+      "attr_multiplier_min": 1.36,
+      "attr_multiplier_max": 1.72,
+      "ai_profile": {
+        "skills": [
+          "sk-jingmang-zhan",
+          "sk-beishi-nilin"
+        ],
+        "skill_weights": {
+          "sk-jingmang-zhan": 46,
+          "sk-beishi-nilin": 54
+        },
+        "phase_triggers": [
+          {
+            "hp_percent": 0.6,
+            "action": "enrage",
+            "effects": [
+              {
+                "type": "buff",
+                "value": 0.22,
+                "duration": 99,
+                "stacks": 1,
+                "buffKey": "buff-zengshang-up",
+                "buffKind": "attr",
+                "attrKey": "zengshang",
+                "applyType": "flat"
+              }
+            ]
+          }
+        ]
+      },
+      "drop_pool_id": "dp-hedao-elite-beishi-xunling",
+      "exp_reward": 2680,
+      "silver_reward_min": 756,
+      "silver_reward_max": 1128,
+      "enabled": true
+    },
+    {
+      "id": "monster-elite-hedao-jingyu-sipan",
+      "code": "elite_hedao_jingyu_sipan",
+      "name": "镜狱司判",
+      "title": "精英",
+      "realm": "炼神返虚·合道期",
+      "level": 60,
+      "avatar": "/assets/monster/withered_ent.png",
+      "kind": "elite",
+      "element": "金",
+      "base_attrs": {
+        "qixue": 28600,
+        "max_qixue": 28600,
+        "lingqi": 1540,
+        "max_lingqi": 1540,
+        "wugong": 494,
+        "fagong": 488,
+        "wufang": 332,
+        "fafang": 342,
+        "mingzhong": 1.76,
+        "shanbi": 0.116,
+        "baoji": 0.242,
+        "baoshang": 2.98,
+        "sudu": 8,
+        "kongzhi_kangxing": 1.36
+      },
+      "attr_variance": 0,
+      "attr_multiplier_min": 1.38,
+      "attr_multiplier_max": 1.74,
+      "ai_profile": {
+        "skills": [
+          "sk-zheguang-huilv",
+          "sk-jingyu-duanlv"
+        ],
+        "skill_weights": {
+          "sk-zheguang-huilv": 34,
+          "sk-jingyu-duanlv": 66
+        }
+      },
+      "drop_pool_id": "dp-hedao-elite-jingyu-sipan",
+      "exp_reward": 2824,
+      "silver_reward_min": 794,
+      "silver_reward_max": 1188,
+      "enabled": true
+    },
+    {
+      "id": "monster-boss-hedao-xuanjian-zhenjun",
+      "code": "boss_hedao_xuanjian_zhenjun",
+      "name": "玄鉴真君",
+      "title": "首领",
+      "realm": "炼神返虚·合道期",
+      "level": 62,
+      "avatar": "/assets/monster/withered_ent.png",
+      "kind": "boss",
+      "element": "金",
+      "base_attrs": {
+        "qixue": 71200,
+        "max_qixue": 71200,
+        "lingqi": 3240,
+        "max_lingqi": 3240,
+        "wugong": 804,
+        "fagong": 792,
+        "wufang": 542,
+        "fafang": 518,
+        "mingzhong": 2.04,
+        "shanbi": 0.108,
+        "zhaojia": 0.35,
+        "baoji": 0.264,
+        "baoshang": 3.16,
+        "sudu": 7,
+        "kongzhi_kangxing": 1.5
+      },
+      "attr_variance": 0,
+      "attr_multiplier_min": 1.48,
+      "attr_multiplier_max": 1.88,
+      "ai_profile": {
+        "skills": [
+          "sk-fantian-mingjing",
+          "sk-xuanjian-zhenmie",
+          "sk-jingyu-duanlv",
+          "sk-zheguang-huilv"
+        ],
+        "skill_weights": {
+          "sk-fantian-mingjing": 28,
+          "sk-xuanjian-zhenmie": 30,
+          "sk-jingyu-duanlv": 24,
+          "sk-zheguang-huilv": 18
+        },
+        "phase_triggers": [
+          {
+            "hp_percent": 0.7,
+            "action": "summon",
+            "summon_id": "monster-hedao-jingjia-guard",
+            "summon_count": 2
+          },
+          {
+            "hp_percent": 0.55,
+            "action": "enrage",
+            "effects": [
+              {
+                "type": "buff",
+                "value": 0.14,
+                "duration": 99,
+                "stacks": 1,
+                "buffKey": "buff-wufang-up",
+                "buffKind": "attr",
+                "attrKey": "wufang",
+                "applyType": "percent"
+              },
+              {
+                "type": "buff",
+                "value": 0.14,
+                "duration": 99,
+                "stacks": 1,
+                "buffKey": "buff-fafang-up",
+                "buffKind": "attr",
+                "attrKey": "fafang",
+                "applyType": "percent"
+              }
+            ]
+          },
+          {
+            "hp_percent": 0.35,
+            "action": "enrage",
+            "effects": [
+              {
+                "type": "buff",
+                "value": 0.18,
+                "duration": 99,
+                "stacks": 1,
+                "buffKey": "buff-zengshang-up",
+                "buffKind": "attr",
+                "attrKey": "zengshang",
+                "applyType": "flat"
+              },
+              {
+                "type": "buff",
+                "value": 1,
+                "duration": 99,
+                "stacks": 1,
+                "buffKey": "buff-sudu-up",
+                "buffKind": "attr",
+                "attrKey": "sudu",
+                "applyType": "flat"
+              }
+            ]
+          }
+        ]
+      },
+      "drop_pool_id": "dp-hedao-boss-xuanjian-zhenjun",
+      "exp_reward": 4120,
+      "silver_reward_min": 1360,
+      "silver_reward_max": 2020,
+      "enabled": true
     }
   ]
 }
