@@ -24,6 +24,7 @@ import {
   getCharacterComputedByUserId,
 } from "../characterComputedService.js";
 import { partnerService } from "../partnerService.js";
+import { getMonthCardActiveMapByCharacterIds } from "../shared/monthCardBenefits.js";
 import type { BattleResult, StartDungeonPVEBattleOptions } from "./battleTypes.js";
 import {
   BATTLE_START_COOLDOWN_MS,
@@ -62,8 +63,10 @@ export async function startPVEBattle(
     if (!characterBattleLoadout) {
       return { success: false, message: "角色战斗资料不存在" };
     }
+    const monthCardActiveMap = await getMonthCardActiveMapByCharacterIds([characterId]);
     const characterWithSetBonus: CharacterData = {
       ...characterBase,
+      monthCardActive: monthCardActiveMap.get(characterId) ?? false,
       setBonusEffects: characterBattleLoadout.setBonusEffects,
     };
 
@@ -226,8 +229,10 @@ export async function startDungeonPVEBattle(
     if (!characterBattleLoadout) {
       return { success: false, message: "角色战斗资料不存在" };
     }
+    const monthCardActiveMap = await getMonthCardActiveMapByCharacterIds([characterId]);
     const characterWithSetBonus: CharacterData = {
       ...baseCharacter,
+      monthCardActive: monthCardActiveMap.get(characterId) ?? false,
       setBonusEffects: characterBattleLoadout.setBonusEffects,
     };
     if (characterWithSetBonus.qixue <= 0) {

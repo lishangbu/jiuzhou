@@ -21,6 +21,7 @@ import {
   getCharacterComputedByCharacterId,
   getCharacterComputedByUserId,
 } from "../characterComputedService.js";
+import { getMonthCardActiveMapByCharacterIds } from "../shared/monthCardBenefits.js";
 import {
   calculateArenaRatingDelta,
   DEFAULT_ARENA_RATING,
@@ -131,12 +132,15 @@ export async function startPVPBattle(
     if (!opponentLoadout) {
       return { success: false, message: "对手战斗资料不存在" };
     }
+    const monthCardActiveMap = await getMonthCardActiveMapByCharacterIds([challengerCharacterId, oppId]);
     const challenger = {
       ...challengerBase,
+      monthCardActive: monthCardActiveMap.get(challengerCharacterId) ?? false,
       setBonusEffects: challengerLoadout.setBonusEffects,
     };
     const opponent = {
       ...opponentBase,
+      monthCardActive: monthCardActiveMap.get(oppId) ?? false,
       setBonusEffects: opponentLoadout.setBonusEffects,
     };
     const recoveredChallenger = withBattleStartResources(challenger);

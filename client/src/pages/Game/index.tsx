@@ -526,6 +526,7 @@ const buildEnemyUnit = (target: InfoTarget): BattleUnit => {
     maxHp: 31,
     qi: 0,
     maxQi: 0,
+    monthCardActive: target.type === 'player' ? target.monthCardActive : undefined,
   };
 
   if (target.type !== 'monster') return fallback;
@@ -577,6 +578,7 @@ const buildAllyUnit = (character: CharacterData | null): BattleUnit => {
     maxHp: character.maxQixue ?? fallback.maxHp,
     qi: character.lingqi ?? fallback.qi,
     maxQi: character.maxLingqi ?? fallback.maxQi,
+    monthCardActive: character.monthCardActive,
   };
 };
 

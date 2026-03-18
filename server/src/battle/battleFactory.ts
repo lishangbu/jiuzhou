@@ -23,6 +23,7 @@ export interface CharacterData {
   user_id: number;
   id: number;
   nickname: string;
+  monthCardActive?: boolean;
   realm: string;
   sub_realm?: string | null;
   attribute_element: string;
@@ -359,6 +360,7 @@ function createCharacterUnit(
     id: `${type}-${data.id}`,
     name: data.nickname,
     type,
+    monthCardActive: data.monthCardActive,
     sourceId: data.id,
     baseAttrs: { ...attrs },
     currentAttrs: attrs,

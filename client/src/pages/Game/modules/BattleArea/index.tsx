@@ -15,6 +15,7 @@ import {
 } from '../../../../services/api';
 import type { BattleRealtimePayload } from '../../../../services/battleRealtime';
 import { gameSocket, type BattleCooldownState } from '../../../../services/gameSocket';
+import PlayerName from '../../shared/PlayerName';
 import {
   FAST_BATTLE_LOG_SYSTEM_LINES,
   buildBattleEndLineFast,
@@ -39,6 +40,7 @@ export type BattleUnit = {
   qi: number;
   maxQi: number;
   isPlayer?: boolean;
+  monthCardActive?: boolean;
 };
 
 interface BattleAreaProps {
@@ -191,8 +193,11 @@ const UnitCard: React.FC<{
         ))}
       </div>
       <div className="battle-unit-head">
-        <div className="battle-unit-name" title={unit.name}>
-          {unit.name}
+        <div className="battle-unit-name">
+          <PlayerName
+            name={unit.name}
+            monthCardActive={unit.monthCardActive}
+          />
           {unit.isPlayer ? <Tag color="blue" style={{ marginLeft: 4, fontSize: 10 }}>队友</Tag> : null}
         </div>
         <div className="battle-unit-tag">{unit.tag || '凡人'}</div>
@@ -212,6 +217,7 @@ const toClientUnit = (u: {
   lingqi: number;
   currentAttrs: { max_qixue: number; max_lingqi: number; realm?: string };
   type: 'player' | 'monster' | 'npc' | 'summon' | 'partner';
+  monthCardActive?: boolean;
 }): BattleUnit => {
   return {
     id: u.id,
@@ -222,6 +228,7 @@ const toClientUnit = (u: {
     qi: Number(u.lingqi) || 0,
     maxQi: Number(u.currentAttrs?.max_lingqi) || 0,
     isPlayer: u.type === 'player',
+    monthCardActive: u.monthCardActive,
   };
 };
 
