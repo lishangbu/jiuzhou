@@ -6,6 +6,7 @@ import './WaveDetailPanel.scss';
 type DungeonStages = NonNullable<DungeonPreviewResponse['data']>['stages'];
 type DungeonWave = NonNullable<DungeonStages[number]['waves']>[number];
 type DungeonMonster = NonNullable<DungeonWave['monsters']>[number];
+type DropItem = NonNullable<DungeonPreviewResponse['data']>['drop_items'][number];
 
 type StageWaveView = {
   key: string;
@@ -22,6 +23,7 @@ type StageWaveView = {
 
 interface WaveDetailPanelProps {
   stages: DungeonStages;
+  drop_items: DropItem[];
   loading: boolean;
 }
 
@@ -37,7 +39,15 @@ const formatDropProbPercent = (value: number | null | undefined): string => {
  * - 输出：仅返回 UI，不修改任何业务状态或数据。
  * - 约束：保持原有字段语义，不新增兜底分支，空数据时给出明确提示。
  */
-const WaveDetailPanel = ({ stages, loading }: WaveDetailPanelProps) => {
+const WaveDetailPanel = ({ stages, drop_items, loading }: WaveDetailPanelProps) => {
+  const itemMap = useMemo(() => {
+    const map = new Map<string, { name: string; quality: string | null }>();
+    for (const item of drop_items) {
+      map.set(item.id, { name: item.name, quality: item.quality ?? null });
+    }
+    return map;
+  }, [drop_items]);
+
   const stageViews = useMemo<StageWaveView[]>(
     () =>
       stages.map((stage) => {
@@ -132,6 +142,7 @@ const WaveDetailPanel = ({ stages, loading }: WaveDetailPanelProps) => {
                             {(monster.drop_preview ?? []).length > 0 ? (
                               <div className="map-modal-wave-drop-list">
                                 {(monster.drop_preview ?? []).map((drop, dropIndex) => {
+                                  const itemInfo = itemMap.get(drop.item_id) ?? { name: drop.item_id, quality: null };
                                   const qty = drop.qty_min === drop.qty_max ? `${drop.qty_min}` : `${drop.qty_min}-${drop.qty_max}`;
                                   const rate =
                                     drop.mode === 'prob'
@@ -141,9 +152,9 @@ const WaveDetailPanel = ({ stages, loading }: WaveDetailPanelProps) => {
                                         : '-';
                                   const rateLabel = drop.mode === 'prob' ? '概率' : '权重';
                                   return (
-                                    <div key={`${wave.key}-${monster.id}-${drop.item.id}-${dropIndex}`} className="map-modal-wave-drop-item">
+                                    <div key={`${wave.key}-${monster.id}-${drop.item_id}-${dropIndex}`} className="map-modal-wave-drop-item">
                                       <span className="map-modal-wave-drop-item-name">
-                                        {drop.item.name} ×{qty}
+                                        {itemInfo.name} ×{qty}
                                       </span>
                                       <span className="map-modal-wave-drop-item-rate">
                                         {rateLabel}:{rate}

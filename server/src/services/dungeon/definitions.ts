@@ -135,21 +135,19 @@ export const getDungeonPreview = async (
           count: number;
           drop_pool_id: string | null;
           drop_preview: Array<{
-            item: { id: string; name: string; quality: string | null; icon: string | null };
+            item_id: string;
             mode: 'prob' | 'weight';
             chance: number | null;
             weight: number | null;
             qty_min: number;
             qty_max: number;
-            quality_weights: Record<string, unknown> | null;
-            bind_type: string | null;
           }>;
         }>;
       }>;
     }
   >;
-  monsters: MonsterLiteRow[];
-  drops: Array<{ id: string; name: string; quality: string | null; icon: string | null; from: string }>;
+  drop_items: Array<{ id: string; name: string; quality: string | null }>;
+  drop_sources: Array<{ pool_id: string; from: string }>;
 } | null> => {
   const dungeon = getDungeonDefById(dungeonId);
   if (!dungeon) return null;
@@ -167,7 +165,7 @@ export const getDungeonPreview = async (
     getEnabledDungeonDifficultiesByDungeonId(dungeonId).find((entry) => entry.difficulty_rank === difficultyRank) ??
     null;
   if (!diffRow) {
-    return { dungeon, difficulty: null, entry, stages: [], monsters: [], drops: [] };
+    return { dungeon, difficulty: null, entry, stages: [], drop_items: [], drop_sources: [] };
   }
 
   const stages = getEnabledDungeonStagesByDifficultyId(diffRow.id);
@@ -230,8 +228,6 @@ export const getDungeonPreview = async (
     qty_min_add_by_monster_realm: number;
     qty_max_add_by_monster_realm: number;
     qty_multiply_by_monster_realm: number;
-    quality_weights: Record<string, unknown> | null;
-    bind_type: string | null;
     sourceType: DropEntrySourceType;
     sourcePoolId: string;
     sort_order: number;
@@ -258,8 +254,6 @@ export const getDungeonPreview = async (
         qty_min_add_by_monster_realm: entry.qty_min_add_by_monster_realm,
         qty_max_add_by_monster_realm: entry.qty_max_add_by_monster_realm,
         qty_multiply_by_monster_realm: asNumber(entry.qty_multiply_by_monster_realm, 1),
-        quality_weights: entry.quality_weights,
-        bind_type: entry.bind_type,
         sourceType: entry.sourceType,
         sourcePoolId: entry.sourcePoolId,
         sort_order: Math.max(0, Math.floor(asNumber(entry.sort_order, 0))),
@@ -301,8 +295,6 @@ export const getDungeonPreview = async (
       qty_min_add_by_monster_realm: number;
       qty_max_add_by_monster_realm: number;
       qty_multiply_by_monster_realm: number;
-      quality_weights: Record<string, unknown> | null;
-      bind_type: string | null;
       sourceType: DropEntrySourceType;
       sourcePoolId: string;
       sort_order: number;
@@ -325,8 +317,6 @@ export const getDungeonPreview = async (
       qty_min_add_by_monster_realm: r.qty_min_add_by_monster_realm,
       qty_max_add_by_monster_realm: r.qty_max_add_by_monster_realm,
       qty_multiply_by_monster_realm: r.qty_multiply_by_monster_realm,
-      quality_weights: r.quality_weights,
-      bind_type: r.bind_type,
       sourceType: r.sourceType,
       sourcePoolId: r.sourcePoolId,
       sort_order: r.sort_order,
@@ -346,8 +336,6 @@ export const getDungeonPreview = async (
       qty_min_add_by_monster_realm: number;
       qty_max_add_by_monster_realm: number;
       qty_multiply_by_monster_realm: number;
-      quality_weights: Record<string, unknown> | null;
-      bind_type: string | null;
       sourceType: DropEntrySourceType;
       sourcePoolId: string;
       sort_order: number;
@@ -355,20 +343,17 @@ export const getDungeonPreview = async (
     monsterKind: string | null,
     monsterRealm: string | null,
   ): Array<{
-    item: { id: string; name: string; quality: string | null; icon: string | null };
+    item_id: string;
     mode: 'prob' | 'weight';
     chance: number | null;
     weight: number | null;
     qty_min: number;
     qty_max: number;
-    quality_weights: Record<string, unknown> | null;
-    bind_type: string | null;
   }> => {
     const kind = normalizeMonsterKind(monsterKind);
     const options = { isDungeonBattle: true, monsterKind: kind, monsterRealm };
     return rows
       .map((r) => {
-        const itemMeta = dropPreviewItemMap.get(r.item_def_id);
         const quantityRange = getAdjustedDropQuantityRange({
           itemDefId: r.item_def_id,
           qtyMin: r.qty_min,
@@ -382,12 +367,7 @@ export const getDungeonPreview = async (
           monsterRealm,
         });
         return {
-          item: {
-            id: r.item_def_id,
-            name: itemMeta?.name ?? r.item_def_id,
-            quality: itemMeta?.quality ?? null,
-            icon: itemMeta?.icon ?? null,
-          },
+          item_id: r.item_def_id,
           mode: r.mode,
           chance: r.mode === 'prob'
             ? getAdjustedChance(r.chance, r.sourceType, r.sourcePoolId, {
@@ -398,8 +378,6 @@ export const getDungeonPreview = async (
           weight: r.mode === 'weight' ? getAdjustedWeight(r.weight, r.sourceType, r.sourcePoolId, options) : null,
           qty_min: quantityRange.qtyMin,
           qty_max: quantityRange.qtyMax,
-          quality_weights: r.quality_weights,
-          bind_type: r.bind_type,
         };
       });
   };
@@ -433,14 +411,12 @@ export const getDungeonPreview = async (
           count: number;
           drop_pool_id: string | null;
           drop_preview: Array<{
-            item: { id: string; name: string; quality: string | null; icon: string | null };
+            item_id: string;
             mode: 'prob' | 'weight';
             chance: number | null;
             weight: number | null;
             qty_min: number;
             qty_max: number;
-            quality_weights: Record<string, unknown> | null;
-            bind_type: string | null;
           }>;
         }> = [];
 
@@ -510,20 +486,25 @@ export const getDungeonPreview = async (
     });
   }
 
-  const drops = dropItems
-    .map((d) => {
-      const it = itemMap.get(d.item_def_id);
-      if (!it) return null;
-      return { id: it.id, name: it.name, quality: it.quality ?? null, icon: it.icon ?? null, from: d.from };
-    })
-    .filter((x): x is NonNullable<typeof x> => Boolean(x));
+  const drop_items = Array.from(new Set(
+    Array.from(dropPreviewItemMap.values()).map((it) => ({
+      id: it.id,
+      name: it.name,
+      quality: it.quality ?? null,
+    }))
+  )).sort((a, b) => a.id.localeCompare(b.id));
+
+  const drop_sources: Array<{ pool_id: string; from: string }> = [
+    ...monsterDropPoolIds.map((poolId) => ({ pool_id: poolId, from: '击杀掉落' })),
+    ...dropItems.map((d) => ({ pool_id: d.item_def_id, from: d.from })),
+  ];
 
   return {
     dungeon,
     difficulty: { id: diffRow.id, name: diffRow.name, difficulty_rank: diffRow.difficulty_rank },
     entry,
     stages: stagesWithWaves,
-    monsters,
-    drops,
+    drop_items,
+    drop_sources,
   };
 };

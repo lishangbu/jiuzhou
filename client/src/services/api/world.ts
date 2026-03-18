@@ -273,20 +273,18 @@ export interface DungeonPreviewResponse {
           count: number;
           drop_pool_id: string | null;
           drop_preview: Array<{
-            item: { id: string; name: string; quality: string | null; icon: string | null };
+            item_id: string;
             mode: 'prob' | 'weight';
             chance: number | null;
             weight: number | null;
             qty_min: number;
             qty_max: number;
-            quality_weights: Record<string, unknown> | null;
-            bind_type: string | null;
           }>;
         }>;
       }>;
     }>;
-    monsters: Array<{ id: string; name: string; realm: string | null; level: number; avatar: string | null; kind: string | null }>;
-    drops: Array<{ id: string; name: string; quality: string | null; icon: string | null; from: string }>;
+    drop_items: Array<{ id: string; name: string; quality: string | null }>;
+    drop_sources: Array<{ pool_id: string; from: string }>;
   };
 }
 

@@ -40,6 +40,7 @@ type MapEntry = {
   drops: MapDrop[];
   dungeonStages?: NonNullable<DungeonPreviewResponse['data']>['stages'];
   dungeonEntry?: NonNullable<DungeonPreviewResponse['data']>['entry'];
+  dungeonDropItems?: NonNullable<DungeonPreviewResponse['data']>['drop_items'];
 };
 
 type DungeonDifficultyOption = {
@@ -47,7 +48,7 @@ type DungeonDifficultyOption = {
   label: string;
 };
 
-type MapEntryDetail = Pick<MapEntry, 'npcs' | 'monsters' | 'drops' | 'dungeonStages' | 'dungeonEntry'> & {
+type MapEntryDetail = Pick<MapEntry, 'npcs' | 'monsters' | 'drops' | 'dungeonStages' | 'dungeonEntry' | 'dungeonDropItems'> & {
   startRoomId: string;
   monsterObjs?: MapMonster[];
   monsterDropsById?: Record<string, MonsterDrop[]>;
@@ -111,15 +112,21 @@ const mergeDungeonDifficultyOptions = (
 const buildDungeonPreviewDetail = (
   preview: NonNullable<DungeonPreviewResponse['data']> | null | undefined,
 ): MapEntryDetail => {
-  const monsters = preview?.monsters ?? [];
-  const drops = preview?.drops ?? [];
+  const drop_items = preview?.drop_items ?? [];
+  const drop_sources = preview?.drop_sources ?? [];
+  const dropItemsForUI = drop_items.map((item) => ({
+    name: item.name,
+    quality: item.quality || '普通',
+    from: drop_sources.find((s) => s.pool_id === item.id)?.from || '奖励',
+  }));
   return {
     npcs: [],
-    monsters: monsters.map((monster) => monster.name).filter(Boolean),
-    monsterObjs: monsters.map((monster) => ({ id: monster.id, name: monster.name })).filter((monster) => monster.id && monster.name),
-    drops: drops.map((drop) => ({ name: drop.name, quality: drop.quality || '普通', from: drop.from || '奖励' })),
+    monsters: [],
+    monsterObjs: [],
+    drops: dropItemsForUI,
     dungeonStages: preview?.stages ?? [],
     dungeonEntry: preview?.entry ?? null,
+    dungeonDropItems: drop_items,
     startRoomId: '',
   };
 };
@@ -522,6 +529,12 @@ const MapModal: React.FC<MapModalProps> = ({
     }
     return mergedActiveMap.dungeonStages ?? [];
   }, [mergedActiveMap]);
+  const dungeonDropItems = useMemo(() => {
+    if (!mergedActiveMap || mergedActiveMap.category !== 'dungeon') {
+      return [] as NonNullable<DungeonPreviewResponse['data']>['drop_items'];
+    }
+    return mergedActiveMap.dungeonDropItems ?? [];
+  }, [mergedActiveMap]);
   const totalWaveCount = useMemo(
     () => dungeonWaveStages.reduce((total, stage) => total + (stage.waves?.length ?? 0), 0),
     [dungeonWaveStages],
@@ -811,7 +824,7 @@ const MapModal: React.FC<MapModalProps> = ({
                   <div className="map-modal-section">
                     <div className="map-modal-section-title">波次详情（共{totalWaveCount}波）</div>
                     <div className="map-modal-wave-shell">
-                      <WaveDetailPanel stages={dungeonWaveStages} loading={detailLoading && !activeDetail} />
+                      <WaveDetailPanel stages={dungeonWaveStages} drop_items={dungeonDropItems} loading={detailLoading && !activeDetail} />
                     </div>
                   </div>
                 ) : null}
