@@ -107,12 +107,19 @@ export interface UseIdleBattleReturn {
   batchLog: BattleLogEntryDto[];
 }
 
+interface UseIdleBattleOptions {
+  initialSession?: IdleSessionDto | null;
+  deferInitialStatusLoad?: boolean;
+}
+
 // ============================================
 // Hook 实现
 // ============================================
 
-export function useIdleBattle(): UseIdleBattleReturn {
-  const [activeSession, setActiveSession] = useState<IdleSessionDto | null>(null);
+export function useIdleBattle(options?: UseIdleBattleOptions): UseIdleBattleReturn {
+  const initialSession = options?.initialSession;
+  const deferInitialStatusLoad = options?.deferInitialStatusLoad === true;
+  const [activeSession, setActiveSession] = useState<IdleSessionDto | null>(initialSession ?? null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -232,9 +239,22 @@ export function useIdleBattle(): UseIdleBattleReturn {
   }, []);
 
   useEffect(() => {
+    if (initialSession === undefined) return;
+    setActiveSession(initialSession);
+  }, [initialSession]);
+
+  useEffect(() => {
+    if (deferInitialStatusLoad) {
+      setIsLoading(true);
+      return;
+    }
+    if (initialSession !== undefined) {
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     void loadStatus().finally(() => setIsLoading(false));
-  }, [loadStatus]);
+  }, [deferInitialStatusLoad, initialSession, loadStatus]);
 
   useEffect(() => {
     monthCardActiveRef.current = monthCardActive;

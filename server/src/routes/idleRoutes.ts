@@ -48,6 +48,7 @@ import {
   MIN_IDLE_DURATION_MS,
   resolveIdleDurationLimitByCharacter,
 } from '../services/shared/idleDurationLimits.js';
+import { toIdleSessionView } from '../services/idle/idleSessionView.js';
 
 // ============================================
 // 常量
@@ -65,29 +66,6 @@ function parseIncludePartnerInBattle(value: unknown): boolean {
 // ============================================
 // 序列化工具
 // ============================================
-
-/**
- * 将 IdleSessionRow 序列化为客户端 DTO
- *
- * 作用：
- *   从 sessionSnapshot 中提取 targetMonsterDefId，并通过 monster_def 解析怪物中文名。
- *   剥离 sessionSnapshot（内含角色属性快照，不应暴露给客户端）。
- *
- * 复用点：所有返回 session 的端点（/status、/history、/progress）统一调用。
- */
-function sessionToDto(session: IdleSessionRow): Record<string, unknown> {
-  const targetMonsterDefId = session.sessionSnapshot?.targetMonsterDefId ?? null;
-  let targetMonsterName: string | null = null;
-  if (targetMonsterDefId) {
-    const monsterDefs = getMonsterDefinitions();
-    const def = monsterDefs.find((m) => m.id === targetMonsterDefId);
-    targetMonsterName = def?.name ?? targetMonsterDefId;
-  }
-
-  // 解构掉 sessionSnapshot，不暴露给客户端
-  const { sessionSnapshot: _snap, ...rest } = session;
-  return { ...rest, targetMonsterDefId, targetMonsterName };
-}
 
 // ============================================
 // POST /start — 启动挂机会话
@@ -200,7 +178,7 @@ router.get('/status', requireCharacter, asyncHandler(async (req, res) => {
   const characterId = req.characterId!;
 
   const session = await idleSessionService.getActiveIdleSession(characterId);
-  sendSuccess(res, { session: session ? sessionToDto(session) : null });
+  sendSuccess(res, { session: session ? toIdleSessionView(session) : null });
 }));
 
 // ============================================
@@ -211,7 +189,7 @@ router.get('/history', requireCharacter, asyncHandler(async (req, res) => {
   const characterId = req.characterId!;
 
   const history = await idleSessionService.getIdleHistory(characterId);
-  sendSuccess(res, { history: history.map(sessionToDto) });
+  sendSuccess(res, { history: history.map(toIdleSessionView) });
 }));
 
 // ============================================
@@ -280,7 +258,7 @@ router.get('/progress', requireCharacter, asyncHandler(async (req, res) => {
   }
 
   const batches = await idleSessionService.getSessionBatchSummaries(session.id, characterId);
-  sendSuccess(res, { session: sessionToDto(session), batches });
+  sendSuccess(res, { session: toIdleSessionView(session), batches });
 }));
 
 // ============================================

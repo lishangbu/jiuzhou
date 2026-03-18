@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { ConfigProvider, App as AntdApp, Modal, Spin, theme as antdTheme } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import Auth from './pages/Auth';
-import { verifySession, checkCharacter, API_ERROR_TOAST_EVENT, type ApiErrorToastDetail } from './services/api';
+import { getAuthBootstrap, API_ERROR_TOAST_EVENT, type ApiErrorToastDetail } from './services/api';
 import { gameSocket } from './services/gameSocket';
 import { THEME_EVENT_NAME, applyThemeModeToDocument, type ThemeMode } from './constants/theme';
 import './App.css';
@@ -63,11 +63,9 @@ function App({ initialThemeMode }: AppProps) {
       }
 
       try {
-        const result = await verifySession();
+        const result = await getAuthBootstrap();
         if (result.success) {
-          // 检查是否有角色
-          const charResult = await checkCharacter();
-          if (charResult.success && charResult.data?.hasCharacter) {
+          if (result.data?.hasCharacter) {
             setIsLoggedIn(true);
           }
         } else {

@@ -115,6 +115,20 @@ export const verifySession = (): Promise<VerifyResponse> => {
   return api.get('/auth/verify');
 };
 
+export interface AuthBootstrapResponse {
+  success: boolean;
+  message: string;
+  kicked?: boolean;
+  data?: {
+    userId: number;
+    hasCharacter: boolean;
+  };
+}
+
+export const getAuthBootstrap = (): Promise<AuthBootstrapResponse> => {
+  return api.get('/auth/bootstrap');
+};
+
 // 检查是否有角色
 export const checkCharacter = (): Promise<CharacterResponse> => {
   return api.get('/character/check');

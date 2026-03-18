@@ -18,6 +18,7 @@ import { sendSuccess, sendResult } from '../middleware/response.js';
 import { BusinessError } from '../middleware/BusinessError.js';
 import { resolveRequestIp } from '../shared/requestIp.js';
 import { verifyCaptchaByProvider } from '../shared/verifyCaptchaByProvider.js';
+import { checkCharacter } from '../domains/character/index.js';
 
 const router = Router();
 
@@ -130,6 +131,33 @@ router.get('/verify', asyncHandler(async (req, res) => {
   }
 
   sendSuccess(res, { userId: result.decoded?.id });
+}));
+
+// 启动信息接口（用于持久登录恢复，合并 verify + character/check）
+router.get('/bootstrap', asyncHandler(async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    throw new BusinessError('登录状态无效，请重新登录', 401);
+  }
+
+  const token = authHeader.split(' ')[1];
+  const result = await verifyTokenAndSession(token);
+
+  if (!result.valid) {
+    if (result.kicked) {
+      res.status(401).json({ success: false, message: '账号已在其他设备登录', kicked: true });
+    } else {
+      throw new BusinessError('登录状态无效，请重新登录', 401);
+    }
+    return;
+  }
+
+  const userId = Number(result.decoded?.id ?? 0);
+  const characterResult = await checkCharacter(userId);
+  sendSuccess(res, {
+    userId,
+    hasCharacter: characterResult.data?.hasCharacter === true,
+  });
 }));
 
 export default router;

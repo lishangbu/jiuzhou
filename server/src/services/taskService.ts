@@ -39,9 +39,9 @@ import { buildTaskRecurringUnlockState } from './shared/taskRecurringUnlock.js';
 
 export type TaskCategory = 'main' | 'side' | 'daily' | 'event';
 
-type TaskStatus = 'ongoing' | 'turnin' | 'claimable' | 'completed';
+export type TaskStatus = 'ongoing' | 'turnin' | 'claimable' | 'completed';
 
-type TaskObjectiveDto = {
+export type TaskObjectiveDto = {
   id: string;
   type: string;
   text: string;
@@ -52,12 +52,12 @@ type TaskObjectiveDto = {
   mapNameType: 'map' | 'dungeon' | null;
 };
 
-type TaskRewardDto =
+export type TaskRewardDto =
   | { type: 'silver'; name: string; amount: number }
   | { type: 'spirit_stones'; name: string; amount: number }
   | { type: 'item'; itemDefId: string; name: string; icon: string | null; amount: number; amountMax?: number };
 
-type TaskOverviewDto = {
+export type TaskOverviewDto = {
   id: string;
   category: TaskCategory;
   title: string;
@@ -73,9 +73,9 @@ type TaskOverviewDto = {
   rewards: TaskRewardDto[];
 };
 
-type BountyTaskSourceType = 'daily' | 'player';
+export type BountyTaskSourceType = 'daily' | 'player';
 
-type BountyTaskOverviewDto = Omit<TaskOverviewDto, 'category'> & {
+export type BountyTaskOverviewDto = Omit<TaskOverviewDto, 'category'> & {
   category: 'bounty';
   bountyInstanceId: number;
   sourceType: BountyTaskSourceType;

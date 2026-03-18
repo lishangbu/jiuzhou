@@ -34,6 +34,7 @@ import partnerRoutes from '../routes/partnerRoutes.js';
 import captchaRoutes from '../routes/captchaRoutes.js';
 import afdianRoutes from '../routes/afdianRoutes.js';
 import redeemCodeRoutes from '../routes/redeemCodeRoutes.js';
+import gameRoutes from '../routes/gameRoutes.js';
 
 /**
  * 统一注册 HTTP 路由。
@@ -71,6 +72,7 @@ export const registerRoutes = (app: Express): void => {
   app.use('/api/idle', idleRoutes);
   app.use('/api/insight', insightRoutes);
   app.use('/api/partner', partnerRoutes);
+  app.use('/api/game', gameRoutes);
   app.use('/api/captcha', captchaRoutes);
   app.use('/api/afdian', afdianRoutes);
   app.use('/api/redeem-code', redeemCodeRoutes);

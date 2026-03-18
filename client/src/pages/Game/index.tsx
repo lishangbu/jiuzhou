@@ -36,6 +36,7 @@ import WarehouseModal from './modules/WarehouseModal';
 import SignInModal from './modules/SignInModal';
 import PartnerModal from './modules/PartnerModal';
 import { useIdleBattle, IdleBattlePanel, IdleBattleStatusBar } from './modules/IdleBattle';
+import type { IdleSessionDto } from './modules/IdleBattle/types';
 import {
   gameSocket,
   type CharacterData,
@@ -48,6 +49,7 @@ import {
   createDungeonInstance,
   gatherRoomResource,
   getDungeonInstanceByBattleId,
+  getGameHomeOverview,
   pickupRoomItem,
   getInventoryItems,
   npcTalk,
@@ -64,14 +66,17 @@ import {
 import { getUnifiedApiErrorMessage } from '../../services/api';
 import type {
   BountyTaskOverviewRowDto,
+  GameHomeOverviewDto,
   InventoryItemDto,
   NpcTalkResponse,
   NpcTalkTaskOption,
+  RealmOverviewDto,
+  TaskOverviewRowDto,
   TechniqueResearchResultStatusDto,
 } from '../../services/api';
-import { getMainQuestProgress, startDialogue, advanceDialogue, selectDialogueChoice, completeSection, type DialogueState } from '../../services/mainQuestApi';
+import { getMainQuestProgress, startDialogue, advanceDialogue, selectDialogueChoice, completeSection, type DialogueState, type MainQuestProgressDto } from '../../services/mainQuestApi';
 import { PARTNER_FEATURE_CODE } from '../../services/feature';
-import { getMyTeam, getTeamApplications, leaveTeam, type TeamInfo } from '../../services/teamApi';
+import { getMyTeam, getTeamApplications, leaveTeam, type TeamApplication, type TeamInfo } from '../../services/teamApi';
 import {
   IMG_GAME_HEADER_LOGO as gameHeaderLogo,
   IMG_LINGSHI as lingshi,
@@ -112,8 +117,8 @@ import {
   loadSharedBountyTaskOverview,
   loadSharedTaskOverview,
 } from './shared/taskOverviewRequests';
+import { hydratePhoneBindingStatus, invalidatePhoneBindingStatus } from './shared/usePhoneBindingStatus';
 import { useRealtimeMemberPresence } from './shared/useRealtimeMemberPresence';
-import { useDeferredGameRequest } from './shared/useDeferredGameRequest';
 
 interface GameProps {
   onLogout?: () => void;
@@ -143,7 +148,6 @@ const EQUIP_QUALITY_COLOR: Record<string, string> = {
 };
 const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
 const TECHNIQUE_RESEARCH_ENABLED = !import.meta.env.PROD;
-const HOMEPAGE_AUX_REQUEST_DELAY_MS = 1200;
 
 const EQUIP_QUALITY_TEXT: Record<string, string> = {
   天: '天品',
@@ -258,6 +262,80 @@ const parseRatioText = (text: string) => {
   const max = Number(m[2]);
   if (!Number.isFinite(cur) || !Number.isFinite(max)) return null;
   return { cur, max };
+};
+
+const resolveCurrentMonth = (): string => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+};
+
+const countUnreadTeamApplications = (
+  characterId: number | null,
+  teamId: string | null,
+  applications: TeamApplication[],
+): number => {
+  if (!characterId || !teamId) return 0;
+  const seenKey = `team_apps_seen_${characterId}_${teamId}`;
+  const seenAtRaw = localStorage.getItem(seenKey);
+  const seenAtNum = Number(seenAtRaw ?? 0);
+  const seenAt = Number.isFinite(seenAtNum) ? seenAtNum : 0;
+  return applications.filter((application) => (Number(application.time) || 0) > seenAt).length;
+};
+
+const resolveTrackedRoomIdsForMap = (
+  currentMapId: string,
+  taskList: TaskOverviewRowDto[],
+  mainQuestProgress: MainQuestProgressDto | null,
+): string[] => {
+  if (!currentMapId) return [];
+
+  const taskRoomIds = taskList
+    .filter((task) => task.tracked === true && task.status !== 'completed' && task.mapId === currentMapId && typeof task.roomId === 'string' && task.roomId)
+    .map((task) => task.roomId as string);
+
+  const mainQuestRoomIds: string[] = [];
+  if (mainQuestProgress?.tracked && mainQuestProgress.currentSection && mainQuestProgress.currentSection.status !== 'completed') {
+    if (mainQuestProgress.currentSection.mapId === currentMapId && mainQuestProgress.currentSection.roomId) {
+      mainQuestRoomIds.push(mainQuestProgress.currentSection.roomId);
+    }
+  }
+
+  return Array.from(new Set([...taskRoomIds, ...mainQuestRoomIds]));
+};
+
+const resolveTaskIndicatorSnapshot = (
+  taskRows: TaskOverviewRowDto[],
+  bountyTasks: BountyTaskOverviewRowDto[],
+  nowTs: number,
+): { count: number; nextExpiryTs: number | null } => {
+  const taskCount = countCompletableTaskOverviewRows(taskRows);
+  const bountyCount = countCompletableBountyTaskOverviewRows(bountyTasks, nowTs);
+  return {
+    count: taskCount + bountyCount,
+    nextExpiryTs: getNextBountyTaskExpiryTs(bountyTasks, nowTs),
+  };
+};
+
+const mapInventoryItemsToEquippedViews = (
+  items: InventoryItemDto[],
+): Array<{ id: number; name: string; icon: string; equippedSlot: string; item: InventoryItemDto }> => {
+  return items
+    .map((item) => {
+      const def = item.def;
+      if (!def) return null;
+      const slot = String(item.equipped_slot ?? def.equip_slot ?? '').trim();
+      if (!slot) return null;
+      const name = String(def.name ?? '').trim() || String(def.id ?? item.item_def_id ?? '').trim();
+      const icon = resolveItemIcon(def.icon);
+      return {
+        id: Number(item.id),
+        name,
+        icon,
+        equippedSlot: slot,
+        item,
+      };
+    })
+    .filter((item): item is { id: number; name: string; icon: string; equippedSlot: string; item: InventoryItemDto } => Boolean(item));
 };
 
 type CharacterWorldPosition = {
@@ -598,10 +676,17 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const [techniqueIndicatorStatus, setTechniqueIndicatorStatus] = useState<TechniqueResearchResultStatusDto | null>(null);
   const [mailModalOpen, setMailModalOpen] = useState(false);
   const [settingModalOpen, setSettingModalOpen] = useState(false);
+  const [homeOverviewSettled, setHomeOverviewSettled] = useState(false);
+  const [homeOverviewRealmOverview, setHomeOverviewRealmOverview] = useState<RealmOverviewDto | null | undefined>(undefined);
+  const [homeOverviewEquippedItems, setHomeOverviewEquippedItems] = useState<InventoryItemDto[] | null>(null);
+  const [homeOverviewIdleSession, setHomeOverviewIdleSession] = useState<IdleSessionDto | null | undefined>(undefined);
   // 挂机面板 Modal 开关
   const [idleModalOpen, setIdleModalOpen] = useState(false);
   // 挂机状态 Hook（顶层单例，IdleBattlePanel 和 IdleBattleStatusBar 共享同一实例）
-  const idle = useIdleBattle();
+  const idle = useIdleBattle({
+    initialSession: homeOverviewIdleSession,
+    deferInitialStatusLoad: !homeOverviewSettled,
+  });
   const [npcTalkOpen, setNpcTalkOpen] = useState(false);
   const [npcTalkNpcId, setNpcTalkNpcId] = useState('');
   const [npcTalkLoading, setNpcTalkLoading] = useState(false);
@@ -650,6 +735,8 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const taskIndicatorQueuedRefreshTimerRef = useRef<number | null>(null);
   const taskIndicatorExpiryTimerRef = useRef<number | null>(null);
   const latestBountyOverviewTasksRef = useRef<BountyTaskOverviewRowDto[]>([]);
+  const currentMapIdSnapshotRef = useRef(currentMapId);
+  const hasHydratedPositionStateRef = useRef(hasHydratedPosition);
   const dungeonBattleIdRef = useRef<string | null>(null);
   const dungeonInstanceIdRef = useRef<string | null>(null);
   const arenaBattleIdRef = useRef<string | null>(null);
@@ -657,6 +744,10 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const viewModeRef = useRef<'map' | 'battle'>('map');
   const hasLocalBattleTargetsRef = useRef(false);
   const pendingDungeonReconnectBattleIdRef = useRef<string | null>(null);
+  const homeOverviewLoadingRef = useRef(false);
+  const homeOverviewRequestSeqRef = useRef(0);
+  const pendingHomeTaskSnapshotRef = useRef<GameHomeOverviewDto['task'] | null>(null);
+  const pendingHomeMainQuestSnapshotRef = useRef<MainQuestProgressDto | null>(null);
   const inTeam = Boolean(teamInfo?.id);
   const canRenderWorldPanels = hasHydratedPosition && currentMapId.length > 0 && currentRoomId.length > 0;
   const externalBattleId = arenaBattleId || dungeonBattleId || (inTeam && !isTeamLeader ? teamBattleId : null) || reconnectBattleId;
@@ -689,6 +780,14 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   useEffect(() => {
     reconnectBattleIdRef.current = reconnectBattleId;
   }, [reconnectBattleId]);
+
+  useEffect(() => {
+    currentMapIdSnapshotRef.current = currentMapId;
+  }, [currentMapId]);
+
+  useEffect(() => {
+    hasHydratedPositionStateRef.current = hasHydratedPosition;
+  }, [hasHydratedPosition]);
 
   useEffect(() => {
     viewModeRef.current = viewMode;
@@ -800,6 +899,25 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const partnerUnlocked = hasCharacterFeature(character, PARTNER_FEATURE_CODE);
   const myBattleUnitId = useMemo(() => (characterId ? `player-${characterId}` : null), [characterId]);
   const isMobileBattleMode = isMobile && viewMode === 'battle';
+
+  const applyTeamOverview = useCallback((team: {
+    info: TeamInfo | null;
+    role: 'leader' | 'member' | null;
+    applications: TeamApplication[];
+  }) => {
+    setTeamInfo(team.info);
+
+    const teamId = team.info?.id ?? null;
+    const leader = Boolean(teamId && team.role === 'leader');
+    setIsTeamLeader(leader);
+
+    if (!leader || !teamId) {
+      setTeamApplicationUnread(0);
+      return;
+    }
+
+    setTeamApplicationUnread(countUnreadTeamApplications(characterId, teamId, team.applications));
+  }, [characterId]);
 
   useEffect(() => {
     setMobileChatDrawerOpen(false);
@@ -914,38 +1032,41 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     [appendSystemChat, currentMapId, currentRoomId, stopGatherLoop],
   );
 
+  const loadTrackedRoomIdsByMap = useCallback(async (mapId: string) => {
+    try {
+      // 复用首页任务总览共享请求层，避免地图追踪与任务角标首屏重复命中同一接口。
+      const taskRes = await loadSharedTaskOverview(taskOverviewRequestScopeKeyRef.current);
+      const taskList = taskRes?.success && taskRes.data?.tasks ? taskRes.data.tasks : [];
+
+      // 获取主线任务追踪的房间
+      const mainQuestRes = await getMainQuestProgress();
+      const mainQuestProgress = mainQuestRes?.success ? mainQuestRes.data : null;
+      setTrackedRoomIds(resolveTrackedRoomIdsForMap(mapId, taskList, mainQuestProgress));
+    } catch {
+      setTrackedRoomIds([]);
+    }
+  }, []);
+
   const refreshTrackedRoomIds = useCallback(async () => {
     if (!hasHydratedPosition || !currentMapId) {
       setTrackedRoomIds([]);
       return;
     }
-
-    try {
-      // 复用首页任务总览共享请求层，避免地图追踪与任务角标首屏重复命中同一接口。
-      const taskRes = await loadSharedTaskOverview(taskOverviewRequestScopeKeyRef.current);
-      const taskList = taskRes?.success && taskRes.data?.tasks ? taskRes.data.tasks : [];
-      const taskRoomIds = taskList
-        .filter((t) => t.tracked === true && t.status !== 'completed' && t.mapId === currentMapId && typeof t.roomId === 'string' && t.roomId)
-        .map((t) => t.roomId as string);
-
-      // 获取主线任务追踪的房间
-      const mainQuestRes = await getMainQuestProgress();
-      const mainQuestRoomIds: string[] = [];
-      if (mainQuestRes?.success && mainQuestRes.data) {
-        const { tracked, currentSection } = mainQuestRes.data;
-        if (tracked && currentSection && currentSection.status !== 'completed') {
-          if (currentSection.mapId === currentMapId && currentSection.roomId) {
-            mainQuestRoomIds.push(currentSection.roomId);
-          }
-        }
-      }
-
-      const roomIds = Array.from(new Set([...taskRoomIds, ...mainQuestRoomIds]));
-      setTrackedRoomIds(roomIds);
-    } catch {
-      setTrackedRoomIds([]);
+    if (homeOverviewLoadingRef.current) {
+      return;
     }
-  }, [currentMapId, hasHydratedPosition]);
+
+    const homeTaskSnapshot = pendingHomeTaskSnapshotRef.current;
+    const homeMainQuestSnapshot = pendingHomeMainQuestSnapshotRef.current;
+    if (homeTaskSnapshot && homeMainQuestSnapshot) {
+      pendingHomeTaskSnapshotRef.current = null;
+      pendingHomeMainQuestSnapshotRef.current = null;
+      setTrackedRoomIds(resolveTrackedRoomIdsForMap(currentMapId, homeTaskSnapshot.tasks, homeMainQuestSnapshot));
+      return;
+    }
+
+    await loadTrackedRoomIdsByMap(currentMapId);
+  }, [currentMapId, hasHydratedPosition, loadTrackedRoomIdsByMap]);
 
   useEffect(() => {
     void refreshTrackedRoomIds();
@@ -1193,18 +1314,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     try {
       const res = await getInventoryItems('equipped', 1, 200);
       if (!res.success || !res.data) throw new Error(getUnifiedApiErrorMessage(res, '获取已穿戴物品失败'));
-      const list = (res.data.items ?? [])
-        .map((it: InventoryItemDto) => {
-          const def = it.def;
-          if (!def) return null;
-          const slot = String(it.equipped_slot ?? def.equip_slot ?? '').trim();
-          if (!slot) return null;
-          const name = String(def.name ?? '').trim() || String(def.id ?? it.item_def_id ?? '').trim();
-          const icon = resolveItemIcon(def.icon);
-          return { id: Number(it.id), name, icon, equippedSlot: slot, item: it };
-        })
-        .filter((x): x is { id: number; name: string; icon: string; equippedSlot: string; item: InventoryItemDto } => Boolean(x));
-      setEquippedItems(list);
+      setEquippedItems(mapInventoryItemsToEquippedViews(res.data.items ?? []));
     } catch {
       setEquippedItems([]);
     }
@@ -1215,8 +1325,15 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       setEquippedItems([]);
       return;
     }
+    if (!homeOverviewSettled) {
+      return;
+    }
+    if (homeOverviewEquippedItems !== null) {
+      setEquippedItems(mapInventoryItemsToEquippedViews(homeOverviewEquippedItems));
+      return;
+    }
     void refreshEquippedItems();
-  }, [characterId, refreshEquippedItems]);
+  }, [characterId, homeOverviewEquippedItems, homeOverviewSettled, refreshEquippedItems]);
 
   useEffect(() => {
     const handler = () => {
@@ -1285,40 +1402,39 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     try {
       const res = await getMyTeam(characterId, SILENT_REQUEST_CONFIG);
       if (!res.success) {
-        setTeamInfo(null);
-        setIsTeamLeader(false);
-        setTeamApplicationUnread(0);
+        applyTeamOverview({ info: null, role: null, applications: [] });
         return;
       }
 
-      setTeamInfo(res.data ?? null);
-
       const nextTeamId = res.data?.id ?? null;
-      const leader = Boolean(nextTeamId && res.role === 'leader');
-      setIsTeamLeader(leader);
-
-      if (!leader || !nextTeamId) {
-        setTeamApplicationUnread(0);
+      if (!nextTeamId || res.role !== 'leader') {
+        applyTeamOverview({
+          info: res.data ?? null,
+          role: res.role === 'leader' ? 'leader' : res.role === 'member' ? 'member' : null,
+          applications: [],
+        });
         return;
       }
 
       const appsRes = await getTeamApplications(nextTeamId, characterId, SILENT_REQUEST_CONFIG);
       if (!appsRes.success) {
-        setTeamApplicationUnread(0);
+        applyTeamOverview({
+          info: res.data ?? null,
+          role: 'leader',
+          applications: [],
+        });
         return;
       }
 
-      const list = appsRes.data ?? [];
-      const seenKey = `team_apps_seen_${characterId}_${nextTeamId}`;
-      const seenAtRaw = localStorage.getItem(seenKey);
-      const seenAtNum = Number(seenAtRaw ?? 0);
-      const seenAt = Number.isFinite(seenAtNum) ? seenAtNum : 0;
-      const unread = list.filter((a) => (Number(a.time) || 0) > seenAt).length;
-      setTeamApplicationUnread(unread);
+      applyTeamOverview({
+        info: res.data ?? null,
+        role: 'leader',
+        applications: appsRes.data ?? [],
+      });
     } catch {
-      setTeamApplicationUnread(0);
+      applyTeamOverview({ info: null, role: null, applications: [] });
     }
-  }, [characterId]);
+  }, [applyTeamOverview, characterId]);
 
   const applySectIndicator = useCallback((payload: SectIndicatorPayload) => {
     setSectMyApplicationCount(Math.max(0, Math.floor(payload.myPendingApplicationCount)));
@@ -1337,18 +1453,15 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   }, []);
 
   useEffect(() => {
-    if (!characterId) return;
-    const t = window.setTimeout(() => {
-      void refreshTeamData();
-    }, 0);
+    if (!characterId) {
+      applyTeamOverview({ info: null, role: null, applications: [] });
+      return;
+    }
     const unsubscribe = gameSocket.onTeamUpdate(() => {
       void refreshTeamData();
     });
-    return () => {
-      window.clearTimeout(t);
-      unsubscribe();
-    };
-  }, [characterId, refreshTeamData]);
+    return unsubscribe;
+  }, [applyTeamOverview, characterId, refreshTeamData]);
 
   useEffect(() => {
     if (!characterId) {
@@ -1539,17 +1652,13 @@ const Game: FC<GameProps> = ({ onLogout }) => {
 
   const refreshSignInDot = useCallback(async () => {
     try {
-      const now = new Date();
-      const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      const res = await getSignInOverview(month);
+      const res = await getSignInOverview(resolveCurrentMonth());
       if (!res.success || !res.data) return;
       setShowSignInDot(!res.data.signedToday);
     } catch {
       setShowSignInDot(false);
     }
   }, []);
-
-  useDeferredGameRequest(Boolean(characterId), refreshSignInDot, HOMEPAGE_AUX_REQUEST_DELAY_MS);
 
   useEffect(() => {
     if (!characterId) {
@@ -1592,8 +1701,6 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     }
   }, []);
 
-  useDeferredGameRequest(Boolean(characterId), refreshAchievementIndicator, HOMEPAGE_AUX_REQUEST_DELAY_MS);
-
   const clearTaskIndicatorQueuedRefreshTimer = useCallback(() => {
     if (taskIndicatorQueuedRefreshTimerRef.current == null) return;
     window.clearTimeout(taskIndicatorQueuedRefreshTimerRef.current);
@@ -1605,6 +1712,25 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     window.clearTimeout(taskIndicatorExpiryTimerRef.current);
     taskIndicatorExpiryTimerRef.current = null;
   }, []);
+
+  const applyTaskIndicatorSnapshot = useCallback((
+    taskRows: TaskOverviewRowDto[],
+    bountyTasks: BountyTaskOverviewRowDto[],
+    onExpiry: () => void,
+  ) => {
+    const nowTs = Date.now();
+    const { count, nextExpiryTs } = resolveTaskIndicatorSnapshot(taskRows, bountyTasks, nowTs);
+    latestBountyOverviewTasksRef.current = bountyTasks;
+    clearTaskIndicatorExpiryTimer();
+    if (nextExpiryTs != null) {
+      const delayMs = Math.max(0, nextExpiryTs - nowTs + 1000);
+      taskIndicatorExpiryTimerRef.current = window.setTimeout(() => {
+        taskIndicatorExpiryTimerRef.current = null;
+        onExpiry();
+      }, delayMs);
+    }
+    setTaskCompletableCount(count);
+  }, [clearTaskIndicatorExpiryTimer]);
 
   const refreshTaskIndicator = useCallback(async () => {
     if (!characterId) {
@@ -1619,28 +1745,16 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       loadSharedBountyTaskOverview(taskOverviewRequestScopeKeyRef.current),
     ]);
 
-    const nowTs = Date.now();
-    const taskCount = taskResult.status === 'fulfilled' && taskResult.value.success && taskResult.value.data
-      ? countCompletableTaskOverviewRows(taskResult.value.data.tasks || [])
-      : 0;
+    const taskRows = taskResult.status === 'fulfilled' && taskResult.value.success && taskResult.value.data
+      ? taskResult.value.data.tasks || []
+      : [];
     const bountyTasks = bountyResult.status === 'fulfilled' && bountyResult.value.success && bountyResult.value.data
       ? bountyResult.value.data.tasks || []
       : [];
-    latestBountyOverviewTasksRef.current = bountyTasks;
-    const bountyCount = countCompletableBountyTaskOverviewRows(bountyTasks, nowTs);
-
-    clearTaskIndicatorExpiryTimer();
-    const nextExpiryTs = getNextBountyTaskExpiryTs(bountyTasks, nowTs);
-    if (nextExpiryTs != null) {
-      const delayMs = Math.max(0, nextExpiryTs - nowTs + 1000);
-      taskIndicatorExpiryTimerRef.current = window.setTimeout(() => {
-        taskIndicatorExpiryTimerRef.current = null;
-        void refreshTaskIndicator();
-      }, delayMs);
-    }
-
-    setTaskCompletableCount(taskCount + bountyCount);
-  }, [characterId, clearTaskIndicatorExpiryTimer]);
+    applyTaskIndicatorSnapshot(taskRows, bountyTasks, () => {
+      void refreshTaskIndicator();
+    });
+  }, [applyTaskIndicatorSnapshot, characterId, clearTaskIndicatorExpiryTimer]);
 
   const queueTaskIndicatorRefresh = useCallback((delayMs: number = 240) => {
     if (!characterId) return;
@@ -1652,7 +1766,90 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   }, [characterId, clearTaskIndicatorQueuedRefreshTimer, refreshTaskIndicator]);
 
   useEffect(() => {
+    if (!characterId) return;
+
+    const requestSeq = homeOverviewRequestSeqRef.current + 1;
+    homeOverviewRequestSeqRef.current = requestSeq;
+    homeOverviewLoadingRef.current = true;
+    setHomeOverviewSettled(false);
+    setHomeOverviewRealmOverview(undefined);
+    setHomeOverviewEquippedItems(null);
+    setHomeOverviewIdleSession(undefined);
+
+    void (async () => {
+      try {
+        const response = await getGameHomeOverview();
+        if (homeOverviewRequestSeqRef.current !== requestSeq) return;
+        if (!response.success || !response.data) {
+          homeOverviewLoadingRef.current = false;
+          setHomeOverviewRealmOverview(null);
+          setHomeOverviewIdleSession(undefined);
+          setHomeOverviewSettled(true);
+          if (hasHydratedPositionStateRef.current && currentMapIdSnapshotRef.current) {
+            void loadTrackedRoomIdsByMap(currentMapIdSnapshotRef.current);
+          }
+          return;
+        }
+
+        const overview = response.data;
+        hydratePhoneBindingStatus(overview.phoneBinding);
+        setShowSignInDot(!overview.signIn.signedToday);
+        setAchievementClaimableCount(Math.max(0, Math.floor(overview.achievement.claimableCount)));
+        setHomeOverviewRealmOverview(overview.realmOverview);
+        setHomeOverviewEquippedItems(overview.equippedItems);
+        setHomeOverviewIdleSession(overview.idleSession);
+        applyTeamOverview(overview.team);
+        pendingHomeTaskSnapshotRef.current = overview.task;
+        pendingHomeMainQuestSnapshotRef.current = overview.mainQuest;
+        applyTaskIndicatorSnapshot(overview.task.tasks, overview.task.bountyTasks, () => {
+          void refreshTaskIndicator();
+        });
+
+        const currentMapIdValue = currentMapIdSnapshotRef.current;
+        if (hasHydratedPositionStateRef.current && currentMapIdValue) {
+          pendingHomeTaskSnapshotRef.current = null;
+          pendingHomeMainQuestSnapshotRef.current = null;
+          setTrackedRoomIds(resolveTrackedRoomIdsForMap(currentMapIdValue, overview.task.tasks, overview.mainQuest));
+        }
+        setHomeOverviewSettled(true);
+      } catch {
+        if (homeOverviewRequestSeqRef.current !== requestSeq) return;
+        homeOverviewLoadingRef.current = false;
+        setHomeOverviewRealmOverview(null);
+        setHomeOverviewIdleSession(undefined);
+        setHomeOverviewSettled(true);
+        if (hasHydratedPositionStateRef.current && currentMapIdSnapshotRef.current) {
+          void loadTrackedRoomIdsByMap(currentMapIdSnapshotRef.current);
+        }
+      } finally {
+        if (homeOverviewRequestSeqRef.current === requestSeq) {
+          homeOverviewLoadingRef.current = false;
+        }
+      }
+    })();
+  }, [
+    applyTaskIndicatorSnapshot,
+    applyTeamOverview,
+    characterId,
+    loadTrackedRoomIdsByMap,
+    refreshTaskIndicator,
+  ]);
+
+  useEffect(() => {
     if (!characterId) {
+      homeOverviewLoadingRef.current = false;
+      homeOverviewRequestSeqRef.current += 1;
+      pendingHomeTaskSnapshotRef.current = null;
+      pendingHomeMainQuestSnapshotRef.current = null;
+      setHomeOverviewSettled(false);
+      setHomeOverviewRealmOverview(undefined);
+      setHomeOverviewEquippedItems(null);
+      setHomeOverviewIdleSession(undefined);
+      invalidatePhoneBindingStatus();
+      applyTeamOverview({ info: null, role: null, applications: [] });
+      setAchievementClaimableCount(0);
+      setShowSignInDot(false);
+      setTrackedRoomIds([]);
       latestBountyOverviewTasksRef.current = [];
       clearTaskIndicatorQueuedRefreshTimer();
       clearTaskIndicatorExpiryTimer();
@@ -1660,12 +1857,11 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       return;
     }
 
-    queueTaskIndicatorRefresh(0);
     return () => {
       clearTaskIndicatorQueuedRefreshTimer();
       clearTaskIndicatorExpiryTimer();
     };
-  }, [characterId, clearTaskIndicatorExpiryTimer, clearTaskIndicatorQueuedRefreshTimer, queueTaskIndicatorRefresh]);
+  }, [applyTeamOverview, characterId, clearTaskIndicatorExpiryTimer, clearTaskIndicatorQueuedRefreshTimer]);
 
   useEffect(() => {
     if (!characterId) return;
@@ -1872,7 +2068,10 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       <div className="game-container">
         {!isMobile ? (
           <aside className="game-left">
-            <PlayerInfo />
+            <PlayerInfo
+              initialRealmOverview={homeOverviewRealmOverview}
+              suspendInitialRealmOverviewLoad={!homeOverviewSettled}
+            />
           </aside>
         ) : null}
 
@@ -2174,7 +2373,10 @@ const Game: FC<GameProps> = ({ onLogout }) => {
           title={null}
           styles={{ wrapper: { height: '84dvh', maxHeight: '760px' }, body: { padding: 0 } }}
         >
-          <PlayerInfo />
+          <PlayerInfo
+            initialRealmOverview={homeOverviewRealmOverview}
+            suspendInitialRealmOverviewLoad={!homeOverviewSettled}
+          />
         </Drawer>
       ) : null}
 

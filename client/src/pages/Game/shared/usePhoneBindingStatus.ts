@@ -18,7 +18,7 @@ import {
  * - 输出：当前状态、加载态、错误信息和主动刷新方法。
  *
  * 数据流/状态流：
- * 组件挂载 -> 读取共享缓存或发起请求 -> 缓存状态广播 -> PlayerInfo / MarketModal 同步刷新。
+ * 首页概览或业务组件挂载 -> 读取/预热共享缓存 -> 缓存状态广播 -> PlayerInfo / ChatPanel / MarketModal 同步刷新。
  *
  * 关键边界条件与坑点：
  * 1. 状态是账号级共享数据，多个使用方必须共用一份缓存，否则绑定成功后会出现不同面板显示不一致。
@@ -44,6 +44,11 @@ const subscribe = (listener: () => void): (() => void) => {
   };
 };
 
+const updateCachedStatus = (status: PhoneBindingStatusDto | null): void => {
+  cachedStatus = status;
+  emitStatusUpdated();
+};
+
 const loadPhoneBindingStatusInternal = async (forceRefresh: boolean): Promise<PhoneBindingStatusDto> => {
   if (!forceRefresh && cachedStatus) {
     return cachedStatus;
@@ -57,8 +62,7 @@ const loadPhoneBindingStatusInternal = async (forceRefresh: boolean): Promise<Ph
     if (!response.success || !response.data) {
       throw new Error(getUnifiedApiErrorMessage(response, '读取手机号绑定状态失败'));
     }
-    cachedStatus = response.data;
-    emitStatusUpdated();
+    updateCachedStatus(response.data);
     return response.data;
   })().finally(() => {
     inflight = null;
@@ -68,12 +72,15 @@ const loadPhoneBindingStatusInternal = async (forceRefresh: boolean): Promise<Ph
 };
 
 export const invalidatePhoneBindingStatus = (): void => {
-  cachedStatus = null;
-  emitStatusUpdated();
+  updateCachedStatus(null);
 };
 
 export const loadPhoneBindingStatus = async (forceRefresh: boolean = false): Promise<PhoneBindingStatusDto> => {
   return loadPhoneBindingStatusInternal(forceRefresh);
+};
+
+export const hydratePhoneBindingStatus = (status: PhoneBindingStatusDto): void => {
+  updateCachedStatus(status);
 };
 
 export const usePhoneBindingStatus = (
@@ -89,13 +96,13 @@ export const usePhoneBindingStatus = (
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    const unsubscribe = subscribe(() => rerender());
     if (!enabled) {
       setLoading(false);
       setErrorMessage(null);
-      return;
+      return unsubscribe;
     }
 
-    const unsubscribe = subscribe(() => rerender());
     setLoading(cachedStatus === null);
     setErrorMessage(null);
     void loadPhoneBindingStatusInternal(false)

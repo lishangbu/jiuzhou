@@ -427,6 +427,27 @@ export const getAchievementList = async (
   };
 };
 
+export const getAchievementClaimableCount = async (characterId: number): Promise<number> => {
+  const cid = asFiniteNonNegativeInt(characterId, 0);
+  if (!cid) return 0;
+
+  await ensureCharacterAchievementPoints(cid);
+  await syncCharacterAchievements(cid);
+  await syncStaticAchievementProgress(cid);
+
+  const result = await query<{ count: number | string }>(
+    `
+      SELECT COUNT(*)::int AS count
+      FROM character_achievement
+      WHERE character_id = $1
+        AND status = 'completed'
+    `,
+    [cid],
+  );
+
+  return asFiniteNonNegativeInt(result.rows[0]?.count, 0);
+};
+
 export const getAchievementDetail = async (
   characterId: number,
   achievementId: string,

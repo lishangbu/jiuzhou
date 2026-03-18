@@ -24,12 +24,20 @@ const CHARACTER_REFRESH_INTERVAL_MS = 30_000;
 const PLAYER_INFO_AUX_REQUEST_DELAY_MS = 800;
 const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
 
-const PlayerInfo: React.FC = () => {
+interface PlayerInfoProps {
+  initialRealmOverview?: RealmOverviewDto | null;
+  suspendInitialRealmOverviewLoad?: boolean;
+}
+
+const PlayerInfo: React.FC<PlayerInfoProps> = ({
+  initialRealmOverview,
+  suspendInitialRealmOverviewLoad = false,
+}) => {
   const { message } = App.useApp();
   const messageRef = useRef(message);
   const realmOverviewRequestSeqRef = useRef(0);
   const [character, setCharacter] = useState<CharacterData | null>(null);
-  const [realmOverview, setRealmOverview] = useState<RealmOverviewDto | null>(null);
+  const [realmOverview, setRealmOverview] = useState<RealmOverviewDto | null>(initialRealmOverview ?? null);
   const [uploading, setUploading] = useState(false);
   const [processingPoint, setProcessingPoint] = useState<string | null>(null);
   const [phoneBindingDialogOpen, setPhoneBindingDialogOpen] = useState(false);
@@ -103,11 +111,18 @@ const PlayerInfo: React.FC = () => {
     setRealmOverview(null);
   }, [character?.realm]);
 
+  useEffect(() => {
+    if (initialRealmOverview === undefined) return;
+    setRealmOverview(initialRealmOverview ?? null);
+  }, [initialRealmOverview]);
+
   const ensurePhoneBindingStatusLoaded = useCallback(() => {
     setShouldLoadPhoneBindingStatus(true);
   }, []);
 
-  useDeferredGameRequest(Boolean(character?.realm), refreshRealmOverview, PLAYER_INFO_AUX_REQUEST_DELAY_MS);
+  const shouldLoadRealmOverview = Boolean(character?.realm) && !suspendInitialRealmOverviewLoad && realmOverview === null;
+
+  useDeferredGameRequest(shouldLoadRealmOverview, refreshRealmOverview, PLAYER_INFO_AUX_REQUEST_DELAY_MS);
 
   const clampPercent = (value: number) => Math.max(0, Math.min(100, value));
 
@@ -280,8 +295,10 @@ const PlayerInfo: React.FC = () => {
   ];
   const phoneBindingEnabled = phoneBindingStatus?.enabled === true;
   const phoneBindingBound = phoneBindingStatus?.isBound === true;
-  const shouldShowPhoneBindingSection = !shouldLoadPhoneBindingStatus || (
-    phoneBindingStatusLoading
+  const hasPhoneBindingSnapshot = phoneBindingStatus !== null;
+  const shouldShowPhoneBindingSection = (
+    !hasPhoneBindingSnapshot
+    || phoneBindingStatusLoading
     || Boolean(phoneBindingStatusErrorMessage)
     || !phoneBindingEnabled
     || !phoneBindingBound
@@ -399,19 +416,7 @@ const PlayerInfo: React.FC = () => {
           <div className="attr-section-header">
             <div className="attr-section-title">账号安全</div>
           </div>
-          {!shouldLoadPhoneBindingStatus ? (
-            <div className="player-phone-binding-row">
-              <div className="player-phone-binding-tip">需要时再读取手机号绑定状态，避免首页首屏提前请求安全校验接口。</div>
-              <Button
-                size="small"
-                onClick={() => {
-                  ensurePhoneBindingStatusLoaded();
-                }}
-              >
-                查看绑定状态
-              </Button>
-            </div>
-          ) : phoneBindingStatusLoading ? (
+          {phoneBindingStatusLoading ? (
             <div className="player-phone-binding-tip">手机号状态读取中...</div>
           ) : phoneBindingStatusErrorMessage ? (
             <div className="player-phone-binding-row">
@@ -424,6 +429,18 @@ const PlayerInfo: React.FC = () => {
                 }}
               >
                 重新加载
+              </Button>
+            </div>
+          ) : !hasPhoneBindingSnapshot ? (
+            <div className="player-phone-binding-row">
+              <div className="player-phone-binding-tip">需要时再读取手机号绑定状态，避免首页首屏提前请求安全校验接口。</div>
+              <Button
+                size="small"
+                onClick={() => {
+                  ensurePhoneBindingStatusLoaded();
+                }}
+              >
+                查看绑定状态
               </Button>
             </div>
           ) : phoneBindingEnabled ? (

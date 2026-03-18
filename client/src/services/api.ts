@@ -15,6 +15,7 @@ export * from './api/info-config';
 export * from './api/technique';
 export * from './api/combat-realm';
 export * from './api/partner';
+export * from './api/gameHome';
 export * from './api/gemSynthesis';
 export * from './api/error';
 export * from './api/captchaConfig';

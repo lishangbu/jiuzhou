@@ -28,7 +28,7 @@ const getFullRealm = (realm: string, subRealm: string | null): string => {
 };
 
 // 队伍成员类型
-interface TeamMember {
+export interface TeamMember {
   id: string;
   characterId: number;
   name: string;
@@ -40,7 +40,7 @@ interface TeamMember {
 }
 
 // 队伍信息类型
-interface TeamInfo {
+export interface TeamInfo {
   id: string;
   name: string;
   leader: string;
@@ -94,7 +94,7 @@ interface TeamApplicationQueryRow {
   avatar: string | null;
 }
 
-interface TeamApplicationListItem {
+export interface TeamApplicationListItem {
   id: string;
   characterId: number;
   name: string;
