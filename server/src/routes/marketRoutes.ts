@@ -164,6 +164,9 @@ router.post('/list', ...marketCharacterGuards, marketListMutationQpsLimit, async
     qty: Number(qty),
     unitPriceSpiritStones: Number(unitPriceSpiritStones),
   });
+  if (result.success) {
+    await safePushCharacterUpdate(userId);
+  }
 
   return sendResult(res, result);
 }));
@@ -174,6 +177,9 @@ router.post('/cancel', ...marketCharacterGuards, marketCancelMutationQpsLimit, a
 
   const { listingId } = req.body as { listingId?: unknown };
   const result = await marketService.cancelMarketListing({ userId, characterId, listingId: Number(listingId) });
+  if (result.success) {
+    await safePushCharacterUpdate(userId);
+  }
   return sendResult(res, result);
 }));
 
@@ -188,6 +194,14 @@ router.post('/buy', ...marketCharacterGuards, marketBuyMutationQpsLimit, require
     listingId: Number(listingId),
     qty: Number(qty),
   });
+  if (result.success) {
+    const sellerUserId = result.data?.sellerUserId ?? null;
+
+    await safePushCharacterUpdate(userId);
+    if (sellerUserId !== null && sellerUserId !== userId) {
+      await safePushCharacterUpdate(sellerUserId);
+    }
+  }
   return sendResult(res, result);
 }));
 

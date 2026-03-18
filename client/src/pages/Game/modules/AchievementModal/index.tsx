@@ -13,6 +13,7 @@ import {
   type AchievementRewardView,
   type TitleInfoDto,
 } from '../../../../services/api';
+import { gameSocket } from '../../../../services/gameSocket';
 import { resolveIconUrl, DEFAULT_ICON as coin01 } from '../../shared/resolveIcon';
 import { IMG_LINGSHI as lingshiIcon, IMG_TONGQIAN as tongqianIcon, IMG_EXP as expIcon } from '../../shared/imageAssets';
 import { useIsMobile } from '../../shared/responsive';
@@ -222,6 +223,7 @@ const AchievementModal: React.FC<AchievementModalProps> = ({ open, onClose, onCh
 
   const [tab, setTab] = useState<AchievementTab>('all');
   const isMobile = useIsMobile();
+  const [characterId, setCharacterId] = useState<number | null>(() => gameSocket.getCharacter()?.id ?? null);
   const [loading, setLoading] = useState(false);
   const [achievements, setAchievements] = useState<AchievementItemDto[]>([]);
   const [pointsInfo, setPointsInfo] = useState({
@@ -235,8 +237,12 @@ const AchievementModal: React.FC<AchievementModalProps> = ({ open, onClose, onCh
   const [equippingTitleId, setEquippingTitleId] = useState('');
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
 
-  const refreshData = useCallback(async () => {
-    setLoading(true);
+  const refreshData = useCallback(async (mode: 'blocking' | 'silent' = 'blocking') => {
+    const isBlocking = mode === 'blocking';
+    if (isBlocking) {
+      setLoading(true);
+    }
+
     try {
       const category = tab === 'all' ? undefined : tab;
       const [listRes, pointsRewardRes, titleRes] = await Promise.all([
@@ -271,7 +277,9 @@ const AchievementModal: React.FC<AchievementModalProps> = ({ open, onClose, onCh
       setPointRewards([]);
       setTitles([]);
     } finally {
-      setLoading(false);
+      if (isBlocking) {
+        setLoading(false);
+      }
     }
   }, [tab]);
 
@@ -279,6 +287,20 @@ const AchievementModal: React.FC<AchievementModalProps> = ({ open, onClose, onCh
     if (!open) return;
     void refreshData();
   }, [open, refreshData]);
+
+  useEffect(() => {
+    return gameSocket.onCharacterUpdate((character) => {
+      setCharacterId(character?.id ?? null);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!open || !characterId) return;
+    return gameSocket.onAchievementUpdate((payload) => {
+      if (payload.characterId !== characterId) return;
+      void refreshData('silent');
+    });
+  }, [characterId, open, refreshData]);
 
   /**
    * 称号剩余时间按分钟刷新即可，避免逐秒刷新导致不必要的重渲染。

@@ -9,6 +9,7 @@ import {
   getAchievementPointsRewards,
   type AchievementListStatusFilter,
 } from '../services/achievementService.js';
+import { notifyAchievementUpdate } from '../services/achievementPush.js';
 import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
 import { sendSuccess, sendResult } from '../middleware/response.js';
 import { BusinessError } from '../middleware/BusinessError.js';
@@ -56,6 +57,7 @@ router.post('/claim', requireCharacter, asyncHandler(async (req, res) => {
   if (!result.success) return sendResult(res, result);
 
   await safePushCharacterUpdate(userId);
+  await notifyAchievementUpdate(characterId, userId);
 
   return sendResult(res, result);
 }));
@@ -88,6 +90,7 @@ router.post('/points/claim', requireCharacter, asyncHandler(async (req, res) => 
   if (!result.success) return sendResult(res, result);
 
   await safePushCharacterUpdate(userId);
+  await notifyAchievementUpdate(characterId, userId);
 
   return sendResult(res, result);
 }));

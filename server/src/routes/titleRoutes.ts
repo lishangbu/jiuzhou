@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { requireCharacter } from '../middleware/auth.js';
 import { equipTitle, getTitleList } from '../services/achievementService.js';
+import { notifyAchievementUpdate } from '../services/achievementPush.js';
 import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
 import { sendSuccess, sendResult } from '../middleware/response.js';
 
@@ -32,6 +33,7 @@ router.post('/equip', requireCharacter, asyncHandler(async (req, res) => {
   if (!result.success) return sendResult(res, result);
 
   await safePushCharacterUpdate(userId);
+  await notifyAchievementUpdate(characterId, userId);
 
   return sendResult(res, result);
 }));

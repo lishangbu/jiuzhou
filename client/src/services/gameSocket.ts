@@ -184,6 +184,11 @@ type IdleUpdateListener = (data: IdleUpdatePayload) => void;
 type IdleFinishedListener = (data: IdleFinishedPayload) => void;
 export type MailIndicatorPayload = NonNullable<MailUnreadResponse["data"]>;
 type MailUpdateListener = (data: MailIndicatorPayload) => void;
+export interface AchievementUpdatePayload {
+  characterId: number;
+  claimableCount: number;
+}
+type AchievementUpdateListener = (data: AchievementUpdatePayload) => void;
 export type TaskOverviewScope = "task" | "bounty";
 export interface TaskOverviewUpdatePayload {
   characterId: number;
@@ -269,6 +274,7 @@ class GameSocketService {
   private idleUpdateListeners: Set<IdleUpdateListener> = new Set();
   private idleFinishedListeners: Set<IdleFinishedListener> = new Set();
   private mailUpdateListeners: Set<MailUpdateListener> = new Set();
+  private achievementUpdateListeners: Set<AchievementUpdateListener> = new Set();
   private taskOverviewUpdateListeners: Set<TaskOverviewUpdateListener> = new Set();
   private gameTimeSyncListeners: Set<GameTimeSyncListener> = new Set();
   private techniqueResearchResultListeners: Set<TechniqueResearchResultListener> = new Set();
@@ -281,6 +287,7 @@ class GameSocketService {
   private currentSectIndicator: SectIndicatorPayload | null = null;
   private currentOnlinePlayers: OnlinePlayersPayloadDto | null = null;
   private currentMailIndicator: MailIndicatorPayload | null = null;
+  private currentAchievementUpdate: AchievementUpdatePayload | null = null;
   private currentGameTimeSync: GameTimeSyncPayload | null = null;
   private currentTechniqueResearchStatus: TechniqueResearchStatusPayload | null =
     null;
@@ -324,6 +331,7 @@ class GameSocketService {
       this.currentSectIndicator = null;
       this.currentOnlinePlayers = null;
       this.currentMailIndicator = null;
+      this.currentAchievementUpdate = null;
       this.currentGameTimeSync = null;
       this.currentTechniqueResearchStatus = null;
       this.currentPartnerRecruitStatus = null;
@@ -405,6 +413,11 @@ class GameSocketService {
     this.socket.on("mail:update", (data: MailIndicatorPayload) => {
       this.currentMailIndicator = data;
       this.notifyMailUpdateListeners(data);
+    });
+
+    this.socket.on("achievement:update", (data: AchievementUpdatePayload) => {
+      this.currentAchievementUpdate = data;
+      this.notifyAchievementUpdateListeners(data);
     });
 
     this.socket.on("task:update", (data: TaskOverviewUpdatePayload) => {
@@ -559,6 +572,7 @@ class GameSocketService {
       this.currentSectIndicator = null;
       this.currentOnlinePlayers = null;
       this.currentMailIndicator = null;
+      this.currentAchievementUpdate = null;
       this.currentGameTimeSync = null;
       this.currentTechniqueResearchStatus = null;
       this.currentPartnerRecruitStatus = null;
@@ -641,6 +655,14 @@ class GameSocketService {
       listener(this.currentMailIndicator);
     }
     return () => this.mailUpdateListeners.delete(listener);
+  }
+
+  onAchievementUpdate(listener: AchievementUpdateListener): () => void {
+    this.achievementUpdateListeners.add(listener);
+    if (this.currentAchievementUpdate) {
+      listener(this.currentAchievementUpdate);
+    }
+    return () => this.achievementUpdateListeners.delete(listener);
   }
 
   onGameTimeSync(listener: GameTimeSyncListener): () => void {
@@ -803,6 +825,12 @@ class GameSocketService {
 
   private notifyMailUpdateListeners(data: MailIndicatorPayload): void {
     this.mailUpdateListeners.forEach((listener) => listener(data));
+  }
+
+  private notifyAchievementUpdateListeners(
+    data: AchievementUpdatePayload,
+  ): void {
+    this.achievementUpdateListeners.forEach((listener) => listener(data));
   }
 
   private notifyTaskOverviewUpdateListeners(

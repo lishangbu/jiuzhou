@@ -856,7 +856,13 @@ class MarketService {
     buyerCharacterId: number;
     listingId: number;
     qty: number;
-  }): Promise<{ success: boolean; message: string }> {
+  }): Promise<{
+    success: boolean;
+    message: string;
+    data?: {
+      sellerUserId: number;
+    };
+  }> {
     const listingId = parsePositiveInt(params.listingId);
     if (listingId === null)
       return { success: false, message: "listingId参数错误" };
@@ -1107,7 +1113,13 @@ class MarketService {
     }
 
     await invalidateMarketListingsCache();
-    return { success: true, message: "购买成功，物品已通过邮件发放" };
+    return {
+      success: true,
+      message: "购买成功，物品已通过邮件发放",
+      data: {
+        sellerUserId,
+      },
+    };
   }
 
   // 纯读方法，不加 @Transactional

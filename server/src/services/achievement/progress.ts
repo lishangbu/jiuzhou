@@ -1,4 +1,4 @@
-import { query, getTransactionClient } from '../../config/database.js';
+import { afterTransactionCommit, query, getTransactionClient } from '../../config/database.js';
 import { Transactional } from '../../decorators/transactional.js';
 import {
   asFiniteNonNegativeInt,
@@ -13,6 +13,7 @@ import {
 } from './shared.js';
 import type { AchievementDefRow } from './types.js';
 import { getAchievementDefinitions } from '../staticConfigLoader.js';
+import { notifyAchievementUpdate } from '../achievementPush.js';
 
 /**
  * 成就进度更新服务
@@ -229,6 +230,7 @@ class AchievementProgressService {
     const categoryToPoints = new Map<string, number>();
     let totalPointsToAdd = 0;
     const delta = this.normalizeIncrement(increment);
+    let hasAchievementChanged = false;
 
     for (const def of defs) {
       const row = progressById.get(def.id);
@@ -273,6 +275,7 @@ class AchievementProgressService {
       }
 
       if (!changed) continue;
+      hasAchievementChanged = true;
 
       const target = def.track_type === 'multi'
         ? (() => {
@@ -312,6 +315,11 @@ class AchievementProgressService {
     }
 
     await this.applyPointsDeltaTx(cid, categoryToPoints, totalPointsToAdd);
+    if (!hasAchievementChanged) return;
+
+    await afterTransactionCommit(async () => {
+      await notifyAchievementUpdate(cid);
+    });
   }
 }
 

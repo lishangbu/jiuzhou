@@ -636,7 +636,9 @@ class PartnerMarketService {
   }): Promise<{
     success: boolean;
     message: string;
-    data?: { sellerUserId: number };
+    data?: {
+      sellerUserId: number;
+    };
   }> {
     const listingId = parsePositiveInt(params.listingId);
     if (listingId === null) return { success: false, message: 'listingId参数错误' };

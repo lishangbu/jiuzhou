@@ -55,7 +55,6 @@ import {
   getInventoryItems,
   npcTalk,
   getSignInOverview,
-  getAchievementList,
   nextDungeonInstance,
   startDungeonInstance,
   submitTaskToNpc,
@@ -1662,6 +1661,19 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   }, [applyMailIndicator, characterId]);
 
   useEffect(() => {
+    if (!characterId) {
+      setAchievementClaimableCount(0);
+      return;
+    }
+
+    return gameSocket.onAchievementUpdate((payload) => {
+      if (payload.characterId !== characterId) return;
+      const claimableCount = Math.max(0, Math.floor(Number(payload.claimableCount) || 0));
+      setAchievementClaimableCount(claimableCount);
+    });
+  }, [characterId]);
+
+  useEffect(() => {
     if (!TECHNIQUE_RESEARCH_ENABLED) {
       setTechniqueIndicatorStatus(null);
       return undefined;
@@ -1676,20 +1688,6 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       applyTechniqueResearchStatus(payload.status);
     });
   }, [applyTechniqueResearchStatus, characterId]);
-
-  const refreshAchievementIndicator = useCallback(async () => {
-    try {
-      const res = await getAchievementList({ status: 'claimable', page: 1, limit: 1 });
-      if (!res.success || !res.data) {
-        setAchievementClaimableCount(0);
-        return;
-      }
-      const total = typeof res.data.total === 'number' ? Math.max(0, Math.floor(res.data.total)) : 0;
-      setAchievementClaimableCount(total);
-    } catch {
-      setAchievementClaimableCount(0);
-    }
-  }, []);
 
   const clearTaskIndicatorQueuedRefreshTimer = useCallback(() => {
     if (taskIndicatorQueuedRefreshTimerRef.current == null) return;
@@ -2270,7 +2268,6 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                 if (key === 'rank') setRankModalOpen(true);
                 if (key === 'achievement') {
                   setAchievementModalOpen(true);
-                  void refreshAchievementIndicator();
                 }
                 if (key === 'idle') setIdleModalOpen(true);
                 if (key === 'battle-report') setMobileChatDrawerOpen(true);
@@ -2784,7 +2781,6 @@ const Game: FC<GameProps> = ({ onLogout }) => {
           open={achievementModalOpen}
           onClose={() => setAchievementModalOpen(false)}
           onChanged={() => {
-            void refreshAchievementIndicator();
             gameSocket.refreshCharacter();
           }}
         />

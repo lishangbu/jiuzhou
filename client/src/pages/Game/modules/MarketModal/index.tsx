@@ -46,7 +46,7 @@ import {
   getPartnerVisibleCombatAttrs,
   resolvePartnerAvatar,
 } from '../../shared/partnerDisplay';
-import { dispatchPartnerChangedEvent, PARTNER_CHANGED_EVENT } from '../../shared/partnerTradeEvents';
+import { PARTNER_CHANGED_EVENT } from '../../shared/partnerTradeEvents';
 import MarketItemTooltipContent, {
   ITEM_TOOLTIP_CLASS_NAMES,
 } from '../../shared/MarketItemTooltipContent';
@@ -1252,8 +1252,6 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
       if (!res.success) throw new Error(res.message || '购买失败');
       messageRef.current.success(res.message || '购买成功');
       setPreviewPartnerListing(null);
-      dispatchPartnerChangedEvent();
-      gameSocket.refreshCharacter();
       await Promise.all([
         refreshPartnerMarket(marketPage),
         refreshMyPartnerListings(myPage),
@@ -1401,8 +1399,6 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
         const res = await cancelPartnerMarketListing(row.id);
         if (!res.success) throw new Error(res.message || '下架失败');
         messageRef.current.success(res.message || '下架成功');
-        dispatchPartnerChangedEvent();
-        gameSocket.refreshCharacter();
         await Promise.all([
           refreshPartnerMarket(marketPage),
           refreshMyPartnerListings(myPage),
@@ -1431,8 +1427,6 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
       messageRef.current.success(res.message || '上架成功');
       setPanel('my');
       setPartnerListPrice('');
-      dispatchPartnerChangedEvent();
-      gameSocket.refreshCharacter();
       await Promise.all([
         refreshPartnerMarket(marketPage),
         refreshMyPartnerListings(myPage),

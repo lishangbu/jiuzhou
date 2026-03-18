@@ -18,6 +18,7 @@ import { getRemainingCooldown } from "../services/battle/cooldownManager.js";
 import { syncBattleStateOnReconnect } from "../services/battle/index.js";
 import { detectSensitiveWords } from "../services/sensitiveWordService.js";
 import { mailService } from "../services/mailService.js";
+import { notifyAchievementUpdate } from "../services/achievementPush.js";
 import { notifyPartnerRecruitStatus } from "../services/partnerRecruitPush.js";
 import { getSectIndicatorByCharacterId } from "../services/sect/indicator.js";
 import { notifyTechniqueResearchStatus } from "../services/techniqueResearchPush.js";
@@ -195,6 +196,7 @@ class GameServer {
 	            }
 
 	            await Promise.all([
+	              notifyAchievementUpdate(character.id, userId),
 	              mailService.pushUnreadCounterUpdateToUser(userId),
 	              notifyTechniqueResearchStatus(character.id, userId),
 	              notifyPartnerRecruitStatus(character.id, userId),
