@@ -23,13 +23,16 @@ import { useEffect, useRef, useState } from 'react';
 
 import {
   getMarketPurchaseCaptcha,
+  notifyUnifiedApiError,
   verifyMarketPurchaseCaptcha,
 } from '../../../../services/api';
-import { getUnifiedApiErrorMessage } from '../../../../services/api/error';
 import CaptchaChallengeInput from '../../../shared/CaptchaChallengeInput';
 import { useCaptchaChallenge } from '../../../shared/useCaptchaChallenge';
 import { useCaptchaConfig } from '../../../shared/useCaptchaConfig';
-import { useTencentCaptcha } from '../../../shared/useTencentCaptcha';
+import {
+  isTencentCaptchaCancelledError,
+  useTencentCaptcha,
+} from '../../../shared/useTencentCaptcha';
 
 interface MarketCaptchaDialogProps {
   open: boolean;
@@ -120,7 +123,7 @@ function MarketCaptchaDialogLocal({
       });
       setCaptchaCode('');
     } catch (error) {
-      message.error(getUnifiedApiErrorMessage(error, '坊市验证码校验失败'));
+      notifyUnifiedApiError(message, error, '坊市验证码校验失败');
       setCaptchaCode('');
       await refreshCaptcha();
       setSubmitting(false);
@@ -200,9 +203,8 @@ function MarketCaptchaDialogTencent({
           randstr: ticket.randstr,
         });
       } catch (error) {
-        const err = error as Error;
-        if (err.message !== '用户取消验证') {
-          message.error(getUnifiedApiErrorMessage(error, '坊市验证码校验失败'));
+        if (!isTencentCaptchaCancelledError(error)) {
+          notifyUnifiedApiError(message, error, '坊市验证码校验失败');
         }
         setSubmitting(false);
         onCancel();

@@ -4,6 +4,7 @@ import {
   changePassword,
   getCharacterInfo,
   getUnifiedApiErrorMessage,
+  notifyUnifiedApiError,
   redeemGiftCode,
   SILENT_API_REQUEST_CONFIG,
   updateCharacterAutoDisassemble,
@@ -232,7 +233,7 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
       setCdk('');
       message.success(result.message || '兑换成功');
     } catch (error) {
-      message.error(getUnifiedApiErrorMessage(error, '兑换失败'));
+      notifyUnifiedApiError(message, error, '兑换失败');
     } finally {
       setCdkRedeeming(false);
     }
@@ -310,7 +311,7 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
       message.success(response.message || '密码修改成功');
       changePasswordForm.resetFields();
     } catch (error) {
-      message.error(getUnifiedApiErrorMessage(error, '修改密码失败'));
+      notifyUnifiedApiError(message, error, '修改密码失败');
     } finally {
       setChangePasswordSaving(false);
     }

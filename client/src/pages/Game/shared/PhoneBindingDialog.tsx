@@ -24,7 +24,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   bindPhoneNumber,
   getCaptcha,
-  getUnifiedApiErrorMessage,
+  notifyUnifiedApiError,
   SILENT_API_REQUEST_CONFIG,
   sendPhoneBindingCode,
 } from '../../../services/api';
@@ -32,7 +32,10 @@ import type { UnifiedCaptchaPayload } from '../../../services/api/auth-character
 import CaptchaChallengeInput from '../../shared/CaptchaChallengeInput';
 import { useCaptchaChallenge } from '../../shared/useCaptchaChallenge';
 import { useCaptchaConfig } from '../../shared/useCaptchaConfig';
-import { useTencentCaptcha } from '../../shared/useTencentCaptcha';
+import {
+  isTencentCaptchaCancelledError,
+  useTencentCaptcha,
+} from '../../shared/useTencentCaptcha';
 import { invalidatePhoneBindingStatus } from './usePhoneBindingStatus';
 import './PhoneBindingDialog.scss';
 
@@ -126,7 +129,7 @@ const PhoneBindingDialog: React.FC<PhoneBindingDialogProps> = ({
       setCountdown(cooldownSeconds);
       message.success('验证码已发送');
     } catch (error) {
-      message.error(getUnifiedApiErrorMessage(error, '发送验证码失败'));
+      notifyUnifiedApiError(message, error, '发送验证码失败');
     } finally {
       if (!isTencent) {
         setCaptchaCode('');
@@ -161,9 +164,8 @@ const PhoneBindingDialog: React.FC<PhoneBindingDialogProps> = ({
       const ticket = await triggerCaptcha();
       await doSendCode({ ticket: ticket.ticket, randstr: ticket.randstr });
     } catch (error) {
-      const err = error as Error;
-      if (err.message !== '用户取消验证') {
-        message.error(err.message);
+      if (!isTencentCaptchaCancelledError(error)) {
+        message.error(error instanceof Error ? error.message : '验证码校验失败');
       }
     }
   };
@@ -186,7 +188,7 @@ const PhoneBindingDialog: React.FC<PhoneBindingDialogProps> = ({
       await onSuccess?.();
       onClose();
     } catch (error) {
-      message.error(getUnifiedApiErrorMessage(error, '手机号绑定失败'));
+      notifyUnifiedApiError(message, error, '手机号绑定失败');
     } finally {
       setBinding(false);
     }

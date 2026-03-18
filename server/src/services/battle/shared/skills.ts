@@ -29,10 +29,10 @@ import {
   toBattleSkillFromSkillData,
 } from "../../../battle/utils/skillConversion.js";
 import type { SkillDefConfig } from "../../staticConfigLoader.js";
-import { characterTechniqueService } from "../../characterTechniqueService.js";
 import {
   buildEffectiveTechniqueSkillData,
 } from "../../shared/techniqueSkillProgression.js";
+import { loadCharacterBattleSkillEntries } from "../../shared/characterBattleSkills.js";
 import { resolveSkillTriggerType } from "../../../shared/skillTriggerType.js";
 import { toNumber, uniqueStringIds } from "./helpers.js";
 import { getEnabledBattleSkillDefinitionMap } from "./staticDefinitionIndex.js";
@@ -94,7 +94,7 @@ export function cloneBattleSkill(skill: BattleSkill): BattleSkill {
  * 加载角色战斗技能数据
  *
  * 数据流：
- * characterTechniqueService.getBattleSkills -> 技能槽位列表
+ * characterBattleSkills.loadCharacterBattleSkillEntries -> 技能槽位列表
  * -> getSkillDefinitions 查静态配置 -> 应用升级规则 -> SkillData[]
  */
 export async function getCharacterBattleSkillData(
@@ -102,11 +102,10 @@ export async function getCharacterBattleSkillData(
 ): Promise<SkillData[]> {
   if (!Number.isFinite(characterId) || characterId <= 0) return [];
 
-  const battleSkillsRes =
-    await characterTechniqueService.getBattleSkills(characterId);
-  if (!battleSkillsRes.success || !battleSkillsRes.data) return [];
+  const battleSkillEntries = await loadCharacterBattleSkillEntries(characterId);
+  if (battleSkillEntries.length <= 0) return [];
 
-  const orderedSkillSlots = battleSkillsRes.data
+  const orderedSkillSlots = battleSkillEntries
     .map((s) => ({
       skillId: String(s?.skillId ?? "").trim(),
       upgradeLevel: Math.max(0, Math.floor(toNumber(s?.upgradeLevel) ?? 0)),

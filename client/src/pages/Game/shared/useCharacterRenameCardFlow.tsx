@@ -21,7 +21,7 @@ import { App } from 'antd';
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 
 import {
-  getUnifiedApiErrorMessage,
+  notifyUnifiedApiError,
   renameCharacterWithCard,
   SILENT_API_REQUEST_CONFIG,
 } from '../../../services/api';
@@ -79,7 +79,7 @@ export const useCharacterRenameCardFlow = ({
       setRenameContext(null);
       onAfterSuccess?.();
     } catch (error) {
-      message.error(getUnifiedApiErrorMessage(error, '改名失败'));
+      notifyUnifiedApiError(message, error, '改名失败');
     } finally {
       setRenameSubmitting(false);
     }

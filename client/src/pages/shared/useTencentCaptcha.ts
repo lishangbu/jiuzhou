@@ -23,6 +23,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const TENCENT_CAPTCHA_JS_URL = 'https://turing.captcha.qcloud.com/TJCaptcha.js';
+export const TENCENT_CAPTCHA_CANCELLED_MESSAGE = '用户取消验证';
 
 let sdkLoadPromise: Promise<void> | null = null;
 
@@ -56,6 +57,10 @@ export interface UseTencentCaptchaResult {
     sdkLoading: boolean;
 }
 
+export const isTencentCaptchaCancelledError = (error: unknown): error is Error => {
+    return error instanceof Error && error.message === TENCENT_CAPTCHA_CANCELLED_MESSAGE;
+};
+
 export const useTencentCaptcha = (appId: number): UseTencentCaptchaResult => {
     const [sdkLoading, setSdkLoading] = useState(false);
     const appIdRef = useRef(appId);
@@ -77,7 +82,7 @@ export const useTencentCaptcha = (appId: number): UseTencentCaptchaResult => {
                             if (result.ret === 0 && result.ticket) {
                                 resolve({ ticket: result.ticket, randstr: result.randstr });
                             } else if (result.ret === 2) {
-                                reject(new Error('用户取消验证'));
+                                reject(new Error(TENCENT_CAPTCHA_CANCELLED_MESSAGE));
                             } else {
                                 reject(
                                     new Error(result.errorMessage ?? '验证码校验失败'),

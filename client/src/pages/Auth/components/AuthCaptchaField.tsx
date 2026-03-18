@@ -31,7 +31,10 @@ import {
 } from '../../../services/api/auth-character';
 import { useCaptchaChallenge } from '../../shared/useCaptchaChallenge';
 import { useCaptchaConfig } from '../../shared/useCaptchaConfig';
-import { useTencentCaptcha } from '../../shared/useTencentCaptcha';
+import {
+  isTencentCaptchaCancelledError,
+  useTencentCaptcha,
+} from '../../shared/useTencentCaptcha';
 
 /**
  * 父组件通过 ref 调用的命令式接口。
@@ -190,9 +193,8 @@ const AuthCaptchaFieldTencent = forwardRef<
         const result = await triggerCaptcha();
         return { ticket: result.ticket, randstr: result.randstr };
       } catch (error) {
-        const err = error as Error;
-        if (err.message !== '用户取消验证') {
-          message.error(err.message);
+        if (!isTencentCaptchaCancelledError(error)) {
+          message.error(error instanceof Error ? error.message : '验证码校验失败');
         }
         return null;
       }

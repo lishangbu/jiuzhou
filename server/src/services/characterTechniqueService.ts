@@ -29,6 +29,7 @@ import {
   loadCharacterAvailableSkillEntries,
   listCharacterAvailableSkillIdSet,
 } from './shared/characterAvailableSkills.js';
+import { loadCharacterBattleSkillEntries } from './shared/characterBattleSkills.js';
 
 // ============================================
 // 类型定义
@@ -864,70 +865,10 @@ class CharacterTechniqueService {
   async getBattleSkills(
     characterId: number
   ): Promise<ServiceResult<{ skillId: string; upgradeLevel: number }[]>> {
-    const slotResult = await query(
-      'SELECT skill_id FROM character_skill_slot WHERE character_id = $1 ORDER BY slot_index',
-      [characterId]
-    );
-
-    if (slotResult.rows.length === 0) {
+    const skills = await loadCharacterBattleSkillEntries(characterId);
+    if (skills.length === 0) {
       return { success: true, message: '无装备技能', data: [] };
     }
-
-    const rawOrderedSkillIds = slotResult.rows
-      .map((row) => (typeof row.skill_id === 'string' ? row.skill_id.trim() : ''))
-      .filter((skillId): skillId is string => skillId.length > 0);
-
-    const availableSkillIds = await listCharacterAvailableSkillIdSet(characterId);
-    const orderedSkillIds = rawOrderedSkillIds.filter((skillId) => availableSkillIds.has(skillId));
-
-    if (orderedSkillIds.length === 0) {
-      return { success: true, message: '无装备技能', data: [] };
-    }
-
-    const uniqueSkillIds = [...new Set(orderedSkillIds)];
-    const skillMap = getEnabledSkillDefMap();
-    const techniqueRows = await query(
-      `
-        SELECT technique_id, current_layer
-        FROM character_technique ct
-        WHERE ct.character_id = $1
-      `,
-      [characterId],
-    );
-
-    const upgradedSkillCountByTechniqueAndSkill = new Map<string, number>();
-    for (const row of techniqueRows.rows as Array<Record<string, unknown>>) {
-      const techniqueId = typeof row.technique_id === 'string' ? row.technique_id : '';
-      if (!techniqueId) continue;
-      const currentLayer = Math.max(0, Math.floor(Number(row.current_layer ?? 0) || 0));
-      if (currentLayer <= 0) continue;
-      const layerRows = getTechniqueLayersByTechniqueIdStatic(techniqueId).filter((entry) => entry.layer <= currentLayer);
-      for (const layerRow of layerRows) {
-        for (const upgradedSkillId of layerRow.upgradeSkillIds) {
-          const key = `${techniqueId}:${upgradedSkillId}`;
-          upgradedSkillCountByTechniqueAndSkill.set(key, (upgradedSkillCountByTechniqueAndSkill.get(key) ?? 0) + 1);
-        }
-      }
-    }
-
-    const upgradeLevelBySkillId = new Map<string, number>();
-    for (const skillId of uniqueSkillIds) {
-      const skillDef = skillMap.get(skillId);
-      if (!skillDef) continue;
-      if (skillDef.source_type !== 'technique' || typeof skillDef.source_id !== 'string' || !skillDef.source_id) {
-        upgradeLevelBySkillId.set(skillId, 0);
-        continue;
-      }
-      const key = `${skillDef.source_id}:${skillId}`;
-      const upgradeLevel = upgradedSkillCountByTechniqueAndSkill.get(key) ?? 0;
-      upgradeLevelBySkillId.set(skillId, upgradeLevel);
-    }
-
-    const skills = orderedSkillIds.map((skillId) => ({
-      skillId,
-      upgradeLevel: upgradeLevelBySkillId.get(skillId) ?? 0,
-    }));
-
     return { success: true, message: '获取成功', data: skills };
   }
 
