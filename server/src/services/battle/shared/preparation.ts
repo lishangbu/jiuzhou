@@ -28,9 +28,12 @@ import {
 } from "../../characterComputedService.js";
 import { idleSessionService } from "../../idle/idleSessionService.js";
 import type { BattleResult } from "../battleTypes.js";
-import { isCharacterInBattle } from "../runtime/state.js";
-import { getBattleStartCooldownRemainingMs } from "../runtime/state.js";
+import { getBattleStartCooldownRemainingMs, isCharacterInBattle } from "../runtime/state.js";
 import { getCharacterBattleLoadoutByCharacterId } from "./profileCache.js";
+import {
+  shouldValidateTeamMemberCooldown,
+  type PveBattleStartPolicy,
+} from "./startPolicy.js";
 
 // ------ 类型 ------
 
@@ -47,7 +50,7 @@ export type TeamBattlePreparationResult =
   | { success: false; result: BattleResult };
 
 export type TeamBattlePreparationOptions = {
-  ignoreMemberCooldown: boolean;
+  startPolicy: PveBattleStartPolicy;
 };
 
 type SyncBattleStartResourcesOptions = {
@@ -247,13 +250,14 @@ export async function prepareTeamBattleParticipants(
     }
   }
 
+  const shouldCheckMemberCooldown = shouldValidateTeamMemberCooldown(options.startPolicy);
   for (const member of teamInfo.members) {
     const memberCharacterId = getTeamBattleMemberCharacterId(member);
     if (memberCharacterId > 0 && isCharacterInBattle(memberCharacterId)) {
       continue;
     }
     if (
-      !options.ignoreMemberCooldown &&
+      shouldCheckMemberCooldown &&
       memberCharacterId > 0 &&
       getBattleStartCooldownRemainingMs(memberCharacterId) > 0
     ) {

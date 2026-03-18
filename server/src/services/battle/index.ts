@@ -25,13 +25,14 @@
  */
 
 // ------ 类型 ------
-export type { BattleResult, StartDungeonPVEBattleOptions } from "./battleTypes.js";
+export type { BattleResult } from "./battleTypes.js";
 
 // ------ 常量 ------
 export { BATTLE_TICK_MS, BATTLE_START_COOLDOWN_MS } from "./runtime/state.js";
 
 // ------ PVE ------
 export { startPVEBattle, startDungeonPVEBattle } from "./pve.js";
+export { startDungeonPVEBattleForDungeonFlow } from "./pve.js";
 
 // ------ PVP ------
 export { startPVPBattle } from "./pvp.js";

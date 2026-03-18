@@ -3,7 +3,7 @@
  *
  * 作用：
  * - 管理所有玩家的战斗冷却定时器
- * - 在冷却结束时通过 WebSocket 推送事件给客户端
+ * - 在冷却开始/结束时通过 WebSocket 推送事件给客户端
  * - 处理取消、重连等边界情况
  *
  * 数据流：
@@ -33,11 +33,17 @@ export function scheduleBattleCooldownPush(
   characterId: number,
   cooldownMs: number
 ): void {
+  const normalizedCooldownMs = Math.max(0, Math.floor(cooldownMs));
   // 清理旧定时器（防止重复设置）
   cancelBattleCooldown(characterId);
 
-  const endTime = Date.now() + cooldownMs;
+  if (normalizedCooldownMs <= 0) {
+    return;
+  }
+
+  const endTime = Date.now() + normalizedCooldownMs;
   cooldownEndTimes.set(characterId, endTime);
+  pushBattleCooldownSync(characterId, normalizedCooldownMs);
 
   // 启动定时器
   const timer = setTimeout(() => {
@@ -46,7 +52,7 @@ export function scheduleBattleCooldownPush(
 
     // 推送冷却结束事件
     pushBattleCooldownReady(characterId);
-  }, cooldownMs);
+  }, normalizedCooldownMs);
 
   cooldownTimers.set(characterId, timer);
 }
@@ -95,6 +101,17 @@ function pushBattleCooldownReady(characterId: number): void {
 
   gameServer.emitToCharacter(characterId, 'battle:cooldown-ready', {
     characterId,
+    timestamp: Date.now(),
+  });
+}
+
+function pushBattleCooldownSync(characterId: number, remainingMs: number): void {
+  const gameServer = getGameServer();
+  if (!gameServer) return;
+
+  gameServer.emitToCharacter(characterId, 'battle:cooldown-sync', {
+    characterId,
+    remainingMs,
     timestamp: Date.now(),
   });
 }

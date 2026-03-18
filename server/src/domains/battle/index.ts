@@ -58,4 +58,4 @@ export {
   BATTLE_START_COOLDOWN_MS,
 } from '../../services/battle/index.js';
 
-export type { BattleResult, StartDungeonPVEBattleOptions } from '../../services/battle/index.js';
+export type { BattleResult } from '../../services/battle/index.js';

@@ -1177,7 +1177,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     const session = activeBattleSession;
     const canControlSession = !inTeam || isTeamLeader;
     const latestBattleCooldown = gameSocket.getLatestBattleCooldown();
-    const isPveAdvanceCoolingDown =
+    const isSessionAdvanceCoolingDown =
       session?.type === 'pve'
       && session.nextAction === 'advance'
       && latestBattleCooldown?.active === true
@@ -1186,7 +1186,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       !session
       || !session.canAdvance
       || !canControlSession
-      || isPveAdvanceCoolingDown
+      || isSessionAdvanceCoolingDown
     ) {
       clearSessionAutoAdvanceTimer();
       lastAutoAdvanceSessionKeyRef.current = '';

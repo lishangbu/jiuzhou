@@ -8,7 +8,7 @@
  *
  * 输入/输出：
  * - 输入：品质、固定 seed。
- * - 输出：文本模型请求参数中的 seed、promptNoiseHash 与 userMessage。
+ * - 输出：文本模型请求参数中的 seed、promptNoiseHash、baseModel 与 userMessage。
  *
  * 数据流/状态流：
  * 固定 seed -> buildPartnerRecruitTextModelRequest -> prompt 输入 JSON -> 文本模型调用。
@@ -25,16 +25,22 @@ import {
 import {
   buildPartnerRecruitPromptNoiseHash,
 } from '../shared/partnerRecruitRules.js';
+import {
+  resolvePartnerRecruitBaseModelBySeed,
+} from '../shared/partnerRecruitBaseModel.js';
 
-test('buildPartnerRecruitTextModelRequest: 应显式传入 seed 并在 prompt 中注入对应扰动 hash', () => {
+test('buildPartnerRecruitTextModelRequest: 应显式传入 seed 并在 prompt 中注入对应扰动 hash 与基础类型', () => {
   const seed = 20260315;
   const request = buildPartnerRecruitTextModelRequest('黄', seed);
   const parsedUserMessage = JSON.parse(request.userMessage) as {
     quality?: string;
     promptNoiseHash?: string;
+    baseModel?: string;
   };
 
   assert.equal(request.seed, seed);
   assert.equal(parsedUserMessage.quality, '黄');
   assert.equal(parsedUserMessage.promptNoiseHash, buildPartnerRecruitPromptNoiseHash(seed));
+  assert.equal(request.baseModel, resolvePartnerRecruitBaseModelBySeed(seed));
+  assert.equal(parsedUserMessage.baseModel, resolvePartnerRecruitBaseModelBySeed(seed));
 });

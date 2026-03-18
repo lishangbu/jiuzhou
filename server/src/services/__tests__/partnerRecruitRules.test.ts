@@ -32,6 +32,8 @@ import {
 } from '../shared/partnerRecruitCreativeDirection.js';
 import { buildPartnerBattleAttrs } from '../shared/partnerRules.js';
 
+const DEFAULT_BASE_MODEL = '狐';
+
 const DEFAULT_BASE_ATTRS: PartnerRecruitDraft['partner']['baseAttrs'] = {
   max_qixue: 230,
   max_lingqi: 90,
@@ -140,7 +142,9 @@ const buildValidDraft = (
 };
 
 test('buildPartnerRecruitPromptInput: 应暴露与常规功法一致的被动预算指南', () => {
-  const promptInput = buildPartnerRecruitPromptInput('黄');
+  const promptInput = buildPartnerRecruitPromptInput('黄', {
+    baseModel: DEFAULT_BASE_MODEL,
+  });
   const guide = promptInput.passiveValueGuideByKey;
 
   assert.deepEqual(guide, {
@@ -156,7 +160,9 @@ test('buildPartnerRecruitPromptInput: 应暴露与常规功法一致的被动预
 });
 
 test('buildPartnerRecruitPromptInput: 应向 AI 注入青木小偶参考模板', () => {
-  const promptInput = buildPartnerRecruitPromptInput('黄');
+  const promptInput = buildPartnerRecruitPromptInput('黄', {
+    baseModel: DEFAULT_BASE_MODEL,
+  });
   const referencePartnerExample = promptInput.referencePartnerExample as {
     partner?: {
       name?: string;
@@ -173,18 +179,22 @@ test('buildPartnerRecruitPromptInput: 应向 AI 注入青木小偶参考模板',
   assert.equal(referencePartnerExample?.partner?.levelAttrGains?.qixue_huifu, 0.2);
 });
 
-test('buildPartnerRecruitPromptInput: 应放开 role 枚举并要求显式提供 combatStyle', () => {
-  const promptInput = buildPartnerRecruitPromptInput('黄') as {
+test('buildPartnerRecruitPromptInput: 应放开 role 枚举并要求显式提供 combatStyle 与基础类型', () => {
+  const promptInput = buildPartnerRecruitPromptInput('黄', {
+    baseModel: DEFAULT_BASE_MODEL,
+  }) as {
     constraints?: string[];
     techniqueCount?: unknown;
     techniqueSlotCount?: unknown;
     allowedRoles?: unknown;
     allowedCombatStyles?: string[];
     partnerRequiredKeys?: string[];
+    baseModel?: string;
   };
 
   assert.equal(promptInput.techniqueCount, 1);
   assert.equal(promptInput.techniqueSlotCount, 3);
+  assert.equal(promptInput.baseModel, DEFAULT_BASE_MODEL);
   assert.equal(promptInput.allowedRoles, undefined);
   assert.deepEqual(promptInput.allowedCombatStyles, ['physical', 'magic']);
   assert.deepEqual(promptInput.partnerRequiredKeys?.includes('maxTechniqueSlots'), false);
@@ -210,11 +220,16 @@ test('buildPartnerRecruitPromptInput: 应放开 role 枚举并要求显式提供
     PARTNER_RECRUIT_FORM_RULES.every((rule) => promptInput.constraints?.includes(rule) === true),
     true,
   );
+  assert.equal(
+    promptInput.constraints?.includes(`本次伙伴基础类型固定为「${DEFAULT_BASE_MODEL}」；伙伴主体形态、种族特征与描述必须围绕该基础类型展开，可做仙侠化变体，但禁止偏离成其他基础类型`),
+    true,
+  );
 });
 
 test('buildPartnerRecruitPromptInput: 应支持注入随机扰动 hash 且禁止显式输出', () => {
   const promptNoiseHash = buildPartnerRecruitPromptNoiseHash(20260315);
   const promptInput = buildPartnerRecruitPromptInput('黄', {
+    baseModel: DEFAULT_BASE_MODEL,
     promptNoiseHash,
   }) as {
     promptNoiseHash?: string;

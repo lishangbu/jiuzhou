@@ -71,6 +71,9 @@ import {
   PARTNER_RECRUIT_FORM_RULES,
 } from './shared/partnerRecruitCreativeDirection.js';
 import {
+  resolvePartnerRecruitBaseModelBySeed,
+} from './shared/partnerRecruitBaseModel.js';
+import {
   buildPartnerRecruitUnlockState,
   type PartnerRecruitUnlockState,
 } from './shared/partnerRecruitUnlock.js';
@@ -410,14 +413,14 @@ const buildPreviewFromPartnerDefinition = (
  *
  * 输入/输出：
  * - 输入：伙伴品质、可选固定 seed（测试用）。
- * - 输出：可直接传给 `callConfiguredTextModel` 的请求参数，以及便于调试的 `promptNoiseHash`。
+ * - 输出：可直接传给 `callConfiguredTextModel` 的请求参数，以及便于调试的 `promptNoiseHash/baseModel`。
  *
  * 数据流/状态流：
  * 品质/seed -> promptNoiseHash -> buildPartnerRecruitPromptInput -> 文本模型调用。
  *
  * 关键边界条件与坑点：
  * 1) promptNoiseHash 必须与 seed 同源，否则“请求看起来有扰动，实际 seed 不是同一次”会让排查失真。
- * 2) 这里只做隐式 prompt 扰动，禁止在这里偷偷塞入伙伴骨架或额外业务约束，避免超出用户当前要求。
+ * 2) 基础类型必须与 seed 绑定，保证同一次招募请求里的创作约束可复现，而不是每次重试又随机成另一种主体。
  */
 export const buildPartnerRecruitTextModelRequest = (
   quality: PartnerRecruitQuality,
@@ -429,19 +432,23 @@ export const buildPartnerRecruitTextModelRequest = (
   seed: number;
   timeoutMs: number;
   promptNoiseHash: string;
+  baseModel: string;
 } => {
   const promptNoiseHash = buildPartnerRecruitPromptNoiseHash(seed);
+  const baseModel = resolvePartnerRecruitBaseModelBySeed(seed);
   const timeoutMs = 300_000;
 
   return {
     responseFormat: buildPartnerRecruitResponseFormat(quality),
     systemMessage: PARTNER_RECRUIT_PROMPT_SYSTEM_MESSAGE,
     userMessage: JSON.stringify(buildPartnerRecruitPromptInput(quality, {
+      baseModel,
       promptNoiseHash,
     })),
     seed,
     timeoutMs,
     promptNoiseHash,
+    baseModel,
   };
 };
 

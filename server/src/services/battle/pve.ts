@@ -4,14 +4,14 @@
  * 作用：处理 PVE 战斗的完整创建流程（校验、准备、创建引擎、注册）。
  *
  * 输入/输出：
- * - startPVEBattle: (userId, monsterIds, options?) -> BattleResult
- * - startDungeonPVEBattle: (userId, monsterDefIds, options?) -> BattleResult
+ * - startPVEBattle: (userId, monsterIds) -> BattleResult
+ * - startDungeonPVEBattle: (userId, monsterDefIds) -> BattleResult
  *
  * 复用点：路由层 / dungeon combat.ts 调用。
  *
  * 边界条件：
  * 1) 普通 PVE 需校验怪物是否在当前房间
- * 2) 会话驱动/秘境驱动的系统续战可显式跳过冷却检查（skipCooldown）
+ * 2) 秘境推进允许由服务端内部入口跳过发起者冷却，但该能力不对外暴露参数
  */
 
 import {
@@ -25,7 +25,7 @@ import {
 } from "../characterComputedService.js";
 import { partnerService } from "../partnerService.js";
 import { getMonthCardActiveMapByCharacterIds } from "../shared/monthCardBenefits.js";
-import type { BattleResult, StartDungeonPVEBattleOptions } from "./battleTypes.js";
+import type { BattleResult } from "./battleTypes.js";
 import {
   BATTLE_START_COOLDOWN_MS,
   buildCharacterInBattleResult,
@@ -41,13 +41,18 @@ import {
   syncBattleStartResourcesForUsers,
   prepareTeamBattleParticipants,
 } from "./shared/preparation.js";
+import {
+  DUNGEON_FLOW_PVE_BATTLE_START_POLICY,
+  PLAYER_DRIVEN_PVE_BATTLE_START_POLICY,
+  shouldValidateBattleStarterCooldown,
+  type PveBattleStartPolicy,
+} from "./shared/startPolicy.js";
 import { uniqueStringIds, randomIntInclusive } from "./shared/helpers.js";
 import { buildBattleSnapshotState } from "./runtime/realtime.js";
 
 export async function startPVEBattle(
   userId: number,
   monsterIds: string[],
-  options?: StartDungeonPVEBattleOptions,
 ): Promise<BattleResult> {
   try {
     const characterBase = await getCharacterComputedByUserId(userId);
@@ -79,7 +84,7 @@ export async function startPVEBattle(
       "角色正在战斗中",
     );
     if (selfInBattleResult) return selfInBattleResult;
-    if (!options?.skipCooldown) {
+    if (shouldValidateBattleStarterCooldown(PLAYER_DRIVEN_PVE_BATTLE_START_POLICY)) {
       const selfCooldown = validateBattleStartCooldown(characterId);
       if (selfCooldown) {
         return buildBattleStartCooldownResult(
@@ -108,7 +113,7 @@ export async function startPVEBattle(
     const preparedTeamPromise = prepareTeamBattleParticipants(
       userId,
       character.id,
-      { ignoreMemberCooldown: Boolean(options?.skipCooldown) },
+      { startPolicy: PLAYER_DRIVEN_PVE_BATTLE_START_POLICY },
     );
 
     const room = await roomPromise;
@@ -209,11 +214,11 @@ export async function startPVEBattle(
   }
 }
 
-export async function startDungeonPVEBattle(
+const startDungeonPVEBattleByPolicy = async (
   userId: number,
   monsterDefIds: string[],
-  options?: StartDungeonPVEBattleOptions,
-): Promise<BattleResult> {
+  startPolicy: PveBattleStartPolicy,
+): Promise<BattleResult> => {
   try {
     const baseCharacter = await getCharacterComputedByUserId(userId);
     if (!baseCharacter) {
@@ -244,7 +249,7 @@ export async function startDungeonPVEBattle(
       "角色正在战斗中",
     );
     if (selfInBattleResult) return selfInBattleResult;
-    if (!options?.skipCooldown) {
+    if (shouldValidateBattleStarterCooldown(startPolicy)) {
       const selfCooldown = validateBattleStartCooldown(characterId);
       if (selfCooldown) {
         return buildBattleStartCooldownResult(
@@ -265,7 +270,7 @@ export async function startDungeonPVEBattle(
     const preparedTeam = await prepareTeamBattleParticipants(
       userId,
       character.id,
-      { ignoreMemberCooldown: Boolean(options?.skipCooldown) },
+      { startPolicy },
     );
     if (!preparedTeam.success) return preparedTeam.result;
     const { validTeamMembers, participantUserIds } = preparedTeam;
@@ -276,7 +281,6 @@ export async function startDungeonPVEBattle(
         enabled: validTeamMembers.length <= 0,
       });
     await syncBattleStartResourcesForUsers(participantUserIds, {
-      queryExecutor: options?.resourceSyncClient,
       context: "同步战前资源（秘境战斗）",
     });
 
@@ -327,4 +331,26 @@ export async function startDungeonPVEBattle(
     console.error("发起秘境战斗失败:", error);
     return { success: false, message: "发起秘境战斗失败" };
   }
+};
+
+export async function startDungeonPVEBattle(
+  userId: number,
+  monsterDefIds: string[],
+): Promise<BattleResult> {
+  return startDungeonPVEBattleByPolicy(
+    userId,
+    monsterDefIds,
+    PLAYER_DRIVEN_PVE_BATTLE_START_POLICY,
+  );
+}
+
+export async function startDungeonPVEBattleForDungeonFlow(
+  userId: number,
+  monsterDefIds: string[],
+): Promise<BattleResult> {
+  return startDungeonPVEBattleByPolicy(
+    userId,
+    monsterDefIds,
+    DUNGEON_FLOW_PVE_BATTLE_START_POLICY,
+  );
 }

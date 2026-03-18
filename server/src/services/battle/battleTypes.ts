@@ -5,24 +5,14 @@
  *
  * 边界条件：
  * 1) BattleResult 是所有战斗接口的统一返回类型
- * 2) StartDungeonPVEBattleOptions 仅 pve.ts 使用，但定义在此避免 pve->state 循环
+ * 2) 战斗开启是否处于冷却中，统一由服务端 runtime/state 判定，禁止调用方透传“跳过冷却”开关
  */
-
-import type { PoolClient } from "pg";
 
 export interface BattleResult {
   success: boolean;
   message: string;
   data?: Record<string, unknown>;
 }
-
-type QueryExecutor = Pick<PoolClient, "query">;
-
-export type StartDungeonPVEBattleOptions = {
-  resourceSyncClient?: QueryExecutor;
-  /** 跳过战斗冷却检查（秘境推进时使用，因为秘境战斗由系统驱动，不应受手动发起的冷却限制） */
-  skipCooldown?: boolean;
-};
 
 export type BattleStartCooldownValidation = {
   message: string;

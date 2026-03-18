@@ -335,9 +335,7 @@ export const advanceBattleSession = async (
       return completeSessionReturnToMap(session);
     }
     const context = session.context as { monsterIds: string[] };
-    const battleRes = await startPVEBattle(userId, context.monsterIds, {
-      skipCooldown: true,
-    });
+    const battleRes = await startPVEBattle(userId, context.monsterIds);
     if (!battleRes.success || !battleRes.data?.battleId) {
       return { success: false, message: battleRes.message || '开启下一场战斗失败' };
     }

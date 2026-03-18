@@ -15,7 +15,7 @@
  */
 
 import { query } from '../../config/database.js';
-import { getBattleState, startDungeonPVEBattle } from '../battle/index.js';
+import { getBattleState, startDungeonPVEBattleForDungeonFlow } from '../battle/index.js';
 import { runDungeonStartFlow } from './shared/startFlow.js';
 import { itemService } from '../itemService.js';
 import { sendSystemMail, type MailAttachItem } from '../mailService.js';
@@ -169,7 +169,7 @@ export const startDungeonInstance = async (
     }
 
   return runDungeonStartFlow({
-    startBattle: () => startDungeonPVEBattle(userId, monsterDefIds, { skipCooldown: true }),
+    startBattle: () => startDungeonPVEBattleForDungeonFlow(userId, monsterDefIds),
     commitOnBattleStarted: async ({ battleId, state }) => {
       for (const p of participants) {
         await incEntryCount(p.characterId, inst.dungeon_id);
@@ -592,7 +592,7 @@ export const nextDungeonInstance = async (
       nextWave,
     ]);
 
-    const battleRes = await startDungeonPVEBattle(userId, monsterDefIds, { skipCooldown: true });
+    const battleRes = await startDungeonPVEBattleForDungeonFlow(userId, monsterDefIds);
     if (!battleRes.success || !battleRes.data?.battleId) return { success: false, message: battleRes.message || '开启战斗失败' };
 
     const battleId = String(battleRes.data.battleId);

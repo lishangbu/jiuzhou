@@ -16,6 +16,7 @@ import {
 import type { BattleRealtimePayload } from '../../../../services/battleRealtime';
 import { gameSocket, type BattleCooldownState } from '../../../../services/gameSocket';
 import PlayerName from '../../shared/PlayerName';
+import { normalizeBattleSessionFromRealtime } from '../../shared/battleSessionRealtime';
 import {
   FAST_BATTLE_LOG_SYSTEM_LINES,
   buildBattleEndLineFast,
@@ -1168,7 +1169,7 @@ const BattleArea: React.FC<BattleAreaProps> = ({
       }
 
       if (kind === 'battle_abandoned') {
-        onSessionChange?.(session);
+        onSessionChange?.(normalizeBattleSessionFromRealtime({ kind, session }));
         syncBattleCooldownMeta(data);
         if (announcedBattleEndIdRef.current !== incomingBattleId) {
           announcedBattleEndIdRef.current = incomingBattleId;

@@ -92,6 +92,7 @@ type TextLengthRange = {
 };
 
 export type PartnerRecruitPromptInputOptions = {
+  baseModel: string;
   promptNoiseHash?: string;
 };
 
@@ -568,7 +569,7 @@ const buildPartnerRecruitReferenceExample = (): Record<string, unknown> | null =
 
 export const buildPartnerRecruitPromptInput = (
   quality: PartnerRecruitQuality,
-  options: PartnerRecruitPromptInputOptions = {},
+  options: PartnerRecruitPromptInputOptions,
 ): Record<string, unknown> => {
   const percentAttrKeys = PARTNER_RECRUIT_BASE_ATTR_KEYS.filter((key) => !PARTNER_INTEGER_ATTR_KEYS.has(key));
   const passiveValueGuideByKey = buildPartnerRecruitPassiveValueGuideByKey(quality);
@@ -579,6 +580,7 @@ export const buildPartnerRecruitPromptInput = (
   return {
     worldview: '中国仙侠世界《九州修仙录》',
     quality,
+    baseModel: options.baseModel,
     allowedElements: [...PARTNER_RECRUIT_ALLOWED_ELEMENTS],
     allowedCombatStyles: [...PARTNER_RECRUIT_ALLOWED_COMBAT_STYLES],
     allowedTechniqueKinds: [...PARTNER_RECRUIT_ALLOWED_TECHNIQUE_KINDS],
@@ -600,6 +602,7 @@ export const buildPartnerRecruitPromptInput = (
       '必须返回严格 JSON 对象，禁止额外解释文本',
       '顶层字段必须且只能使用 requiredTopLevelKeys，禁止使用 forbiddenAliasKeys 中的别名字段',
       ...PARTNER_RECRUIT_FORM_RULES,
+      `本次伙伴基础类型固定为「${options.baseModel}」；伙伴主体形态、种族特征与描述必须围绕该基础类型展开，可做仙侠化变体，但禁止偏离成其他基础类型`,
       `伙伴名字 ${PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.partnerName.min}-${PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.partnerName.max} 个中文字符，不得包含标点或空格`,
       `伙伴描述 ${PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.partnerDescription.min}-${PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.partnerDescription.max} 个中文字符`,
       `伙伴角色 role 为自由发挥的中文职业称谓，长度 ${PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.partnerRole.min}-${PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.partnerRole.max} 个中文字符`,
