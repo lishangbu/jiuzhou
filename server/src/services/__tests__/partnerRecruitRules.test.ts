@@ -24,6 +24,7 @@ import {
   buildPartnerRecruitPromptNoiseHash,
   buildPartnerRecruitPromptInput,
   fillPartnerRecruitBaseAttrs,
+  resolvePartnerRecruitTechniqueSlotCount,
   validatePartnerRecruitDraft,
 } from '../shared/partnerRecruitRules.js';
 import {
@@ -93,6 +94,13 @@ const DEFAULT_LEVEL_ATTR_GAINS: PartnerRecruitDraft['partner']['levelAttrGains']
   lingqi_huifu: 1,
 };
 
+test('resolvePartnerRecruitTechniqueSlotCount: 应按品质返回固定功法槽数', () => {
+  assert.equal(resolvePartnerRecruitTechniqueSlotCount('黄'), 3);
+  assert.equal(resolvePartnerRecruitTechniqueSlotCount('玄'), 4);
+  assert.equal(resolvePartnerRecruitTechniqueSlotCount('地'), 5);
+  assert.equal(resolvePartnerRecruitTechniqueSlotCount('天'), 6);
+});
+
 const buildValidDraft = (
   overrides?: Omit<Partial<PartnerRecruitDraft['partner']>, 'baseAttrs' | 'levelAttrGains'> & {
     baseAttrs?: Partial<PartnerRecruitDraft['partner']['baseAttrs']>;
@@ -105,27 +113,31 @@ const buildValidDraft = (
     passiveKey: 'wufang' as const,
     passiveValue: 0.1,
   }],
-): PartnerRecruitDraft => ({
-  partner: {
-    name: '岩迟',
-    description: '出身边荒的少年行脚客，沉稳寡言，惯以厚重步伐护住同伴，在乱战中稳稳撑起前线。',
-    quality: '黄' as const,
-    attributeElement: 'tu' as const,
-    role: '护卫',
-    combatStyle: 'physical',
-    maxTechniqueSlots: 2,
-    ...overrides,
-    baseAttrs: {
-      ...DEFAULT_BASE_ATTRS,
-      ...overrides?.baseAttrs,
+): PartnerRecruitDraft => {
+  const quality = overrides?.quality ?? '黄';
+
+  return {
+    partner: {
+      name: '岩迟',
+      description: '出身边荒的少年行脚客，沉稳寡言，惯以厚重步伐护住同伴，在乱战中稳稳撑起前线。',
+      quality,
+      attributeElement: 'tu' as const,
+      role: '护卫',
+      combatStyle: 'physical',
+      maxTechniqueSlots: resolvePartnerRecruitTechniqueSlotCount(quality),
+      ...overrides,
+      baseAttrs: {
+        ...DEFAULT_BASE_ATTRS,
+        ...overrides?.baseAttrs,
+      },
+      levelAttrGains: {
+        ...DEFAULT_LEVEL_ATTR_GAINS,
+        ...overrides?.levelAttrGains,
+      },
     },
-    levelAttrGains: {
-      ...DEFAULT_LEVEL_ATTR_GAINS,
-      ...overrides?.levelAttrGains,
-    },
-  },
-  innateTechniques,
-});
+    innateTechniques,
+  };
+};
 
 test('buildPartnerRecruitPromptInput: 应暴露与常规功法一致的被动预算指南', () => {
   const promptInput = buildPartnerRecruitPromptInput('黄');
@@ -165,13 +177,17 @@ test('buildPartnerRecruitPromptInput: 应放开 role 枚举并要求显式提供
   const promptInput = buildPartnerRecruitPromptInput('黄') as {
     constraints?: string[];
     techniqueCount?: unknown;
+    techniqueSlotCount?: unknown;
     allowedRoles?: unknown;
     allowedCombatStyles?: string[];
+    partnerRequiredKeys?: string[];
   };
 
   assert.equal(promptInput.techniqueCount, 1);
+  assert.equal(promptInput.techniqueSlotCount, 3);
   assert.equal(promptInput.allowedRoles, undefined);
   assert.deepEqual(promptInput.allowedCombatStyles, ['physical', 'magic']);
+  assert.deepEqual(promptInput.partnerRequiredKeys?.includes('maxTechniqueSlots'), false);
   assert.equal(
     promptInput.constraints?.includes(
       '品质高低顺序固定为 黄 < 玄 < 地 < 天；referencePartnerExample 中青木小偶的 quality=黄，表示它是最低品质参考模板，最终强度与风格仍必须以当前 quality 字段为准',
@@ -180,6 +196,10 @@ test('buildPartnerRecruitPromptInput: 应放开 role 枚举并要求显式提供
   );
   assert.equal(
     promptInput.constraints?.includes('innateTechniques 必须且只能生成 1 门天生功法，禁止多生成'),
+    true,
+  );
+  assert.equal(
+    promptInput.constraints?.includes('伙伴可学习功法槽位由 quality 固定决定，本次槽数见 techniqueSlotCount；禁止输出 partner.maxTechniqueSlots，服务端会按 quality 自动补齐'),
     true,
   );
   assert.equal(
@@ -223,6 +243,20 @@ test('validatePartnerRecruitDraft: 应允许自由发挥的 role 文本', () => 
   });
 
   assert.notEqual(validatePartnerRecruitDraft(draft), null);
+});
+
+test('validatePartnerRecruitDraft: 应按品质自动补齐固定功法槽数', () => {
+  const draft = buildValidDraft({
+    quality: '天',
+    maxTechniqueSlots: 1,
+  });
+  const { maxTechniqueSlots: _ignoredMaxTechniqueSlots, ...partnerWithoutSlots } = draft.partner;
+  const parsed = validatePartnerRecruitDraft({
+    partner: partnerWithoutSlots,
+    innateTechniques: draft.innateTechniques,
+  });
+
+  assert.equal(parsed?.partner.maxTechniqueSlots, 6);
 });
 
 test('validatePartnerRecruitDraft: 多于一门天生功法应被拒绝', () => {

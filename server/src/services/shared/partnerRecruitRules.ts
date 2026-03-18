@@ -169,7 +169,6 @@ const PARTNER_RECRUIT_PARTNER_REQUIRED_KEYS = [
   'attributeElement',
   'role',
   'combatStyle',
-  'maxTechniqueSlots',
   'baseAttrs',
   'levelAttrGains',
 ] as const;
@@ -187,6 +186,12 @@ const PARTNER_RECRUIT_QUALITY_SCHEMA_NAME_SEGMENT: Record<PartnerRecruitQuality,
   玄: 'xuan',
   地: 'di',
   天: 'tian',
+};
+const PARTNER_RECRUIT_TECHNIQUE_SLOT_COUNT_BY_QUALITY: Record<PartnerRecruitQuality, number> = {
+  黄: 3,
+  玄: 4,
+  地: 5,
+  天: 6,
 };
 
 const getPartnerRecruitPassiveValueConstraint = (
@@ -531,6 +536,12 @@ export const getPartnerRecruitTechniqueMaxLayer = (
   return 6;
 };
 
+export const resolvePartnerRecruitTechniqueSlotCount = (
+  quality: PartnerRecruitQuality,
+): number => {
+  return PARTNER_RECRUIT_TECHNIQUE_SLOT_COUNT_BY_QUALITY[quality];
+};
+
 const PARTNER_RECRUIT_REFERENCE_PARTNER_ID = 'partner-qingmu-xiaoou';
 
 export const buildPartnerRecruitPromptNoiseHash = (seed: number): string => {
@@ -548,7 +559,6 @@ const buildPartnerRecruitReferenceExample = (): Record<string, unknown> | null =
       attributeElement: definition.attribute_element ?? 'none',
       role: definition.role ?? '伙伴',
       combatStyle: 'physical',
-      maxTechniqueSlots: Math.max(1, Number(definition.max_technique_slots) || 1),
       baseAttrs: fillPartnerRecruitBaseAttrs(definition.base_attrs),
       levelAttrGains: fillPartnerRecruitBaseAttrs(definition.level_attr_gains),
     },
@@ -564,6 +574,7 @@ export const buildPartnerRecruitPromptInput = (
   const passiveValueGuideByKey = buildPartnerRecruitPassiveValueGuideByKey(quality);
   const referencePartnerExample = buildPartnerRecruitReferenceExample();
   const promptNoiseHash = normalizeTextModelPromptNoiseHash(options.promptNoiseHash);
+  const techniqueSlotCount = resolvePartnerRecruitTechniqueSlotCount(quality);
 
   return {
     worldview: '中国仙侠世界《九州修仙录》',
@@ -574,6 +585,7 @@ export const buildPartnerRecruitPromptInput = (
     allowedPassiveKeys: [...PARTNER_RECRUIT_ALLOWED_PASSIVE_KEYS],
     techniqueCount: PARTNER_RECRUIT_INNATE_TECHNIQUE_COUNT,
     techniqueMaxLayer: getPartnerRecruitTechniqueMaxLayer(quality),
+    techniqueSlotCount,
     requiredTopLevelKeys: [...PARTNER_RECRUIT_TOP_LEVEL_REQUIRED_KEYS],
     partnerRequiredKeys: [...PARTNER_RECRUIT_PARTNER_REQUIRED_KEYS],
     innateTechniqueRequiredKeys: [...PARTNER_RECRUIT_INNATE_TECHNIQUE_REQUIRED_KEYS],
@@ -594,6 +606,7 @@ export const buildPartnerRecruitPromptInput = (
       'partner.combatStyle 必须严格从 allowedCombatStyles 中选择，用于决定攻击型天生功法走武技还是法诀；physical 表示偏武道，magic 表示偏术法',
       `每个天生功法名字 ${PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.techniqueName.min}-${PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.techniqueName.max} 个中文字符，描述 ${PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.techniqueDescription.min}-${PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.techniqueDescription.max} 个中文字符`,
       `innateTechniques 必须且只能生成 ${PARTNER_RECRUIT_INNATE_TECHNIQUE_COUNT} 门天生功法，禁止多生成`,
+      '伙伴可学习功法槽位由 quality 固定决定，本次槽数见 techniqueSlotCount；禁止输出 partner.maxTechniqueSlots，服务端会按 quality 自动补齐',
       'partner 必须完整包含 partnerRequiredKeys；每个 innateTechniques 项必须完整包含 innateTechniqueRequiredKeys',
       'partner.baseAttrs 与 partner.levelAttrGains 必须完整包含 requiredAttrKeys 中的全部字段，禁止缺项',
       '每个天生功法 passiveValue 必须 > 0，且不得超过 passiveValueGuideByKey[passiveKey].maxTotal；百分比继续使用小数表示，例如 0.18 表示 18%',
@@ -642,7 +655,7 @@ export const validatePartnerRecruitDraft = (
   });
   if (!baseAttrs || !levelAttrGains) return null;
 
-  const maxTechniqueSlots = asInt(partner.maxTechniqueSlots);
+  const maxTechniqueSlots = resolvePartnerRecruitTechniqueSlotCount(quality);
   if (!validateBaseAttrs(baseAttrs, {
     attrSource: 'baseAttrs',
     requirePositiveCoreAttrs: true,
@@ -650,9 +663,6 @@ export const validatePartnerRecruitDraft = (
     attrSource: 'levelAttrGains',
     requirePositiveCoreAttrs: false,
   })) {
-    return null;
-  }
-  if (!Number.isInteger(maxTechniqueSlots) || maxTechniqueSlots < 1) {
     return null;
   }
 
