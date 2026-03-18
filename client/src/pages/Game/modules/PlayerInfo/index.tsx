@@ -6,6 +6,7 @@ import { gameSocket, type CharacterData } from '../../../../services/gameSocket'
 import {
   resolveAvatarUrl,
   getRealmOverview,
+  SILENT_API_REQUEST_CONFIG,
   uploadAvatar,
   addAttributePoint,
   removeAttributePoint,
@@ -22,8 +23,6 @@ import './index.scss';
 
 const CHARACTER_REFRESH_INTERVAL_MS = 30_000;
 const PLAYER_INFO_AUX_REQUEST_DELAY_MS = 800;
-const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
-
 interface PlayerInfoProps {
   initialRealmOverview?: RealmOverviewDto | null;
   suspendInitialRealmOverviewLoad?: boolean;
@@ -93,7 +92,7 @@ const PlayerInfo: React.FC<PlayerInfoProps> = ({
     const requestSeq = realmOverviewRequestSeqRef.current + 1;
     realmOverviewRequestSeqRef.current = requestSeq;
     try {
-      const res = await getRealmOverview(SILENT_REQUEST_CONFIG);
+      const res = await getRealmOverview(SILENT_API_REQUEST_CONFIG);
       if (realmOverviewRequestSeqRef.current !== requestSeq) return;
       if (res?.success && res.data) {
         setRealmOverview(res.data);

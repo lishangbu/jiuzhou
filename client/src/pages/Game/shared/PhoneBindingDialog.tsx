@@ -25,6 +25,7 @@ import {
   bindPhoneNumber,
   getCaptcha,
   getUnifiedApiErrorMessage,
+  SILENT_API_REQUEST_CONFIG,
   sendPhoneBindingCode,
 } from '../../../services/api';
 import type { UnifiedCaptchaPayload } from '../../../services/api/auth-character';
@@ -34,8 +35,6 @@ import { useCaptchaConfig } from '../../shared/useCaptchaConfig';
 import { useTencentCaptcha } from '../../shared/useTencentCaptcha';
 import { invalidatePhoneBindingStatus } from './usePhoneBindingStatus';
 import './PhoneBindingDialog.scss';
-
-const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
 
 interface PhoneBindingDialogProps {
   open: boolean;
@@ -118,7 +117,7 @@ const PhoneBindingDialog: React.FC<PhoneBindingDialogProps> = ({
       const response = await sendPhoneBindingCode(
         phoneNumber.trim(),
         captchaPayload,
-        SILENT_REQUEST_CONFIG,
+        SILENT_API_REQUEST_CONFIG,
       );
       const cooldownSeconds = response.data?.cooldownSeconds;
       if (typeof cooldownSeconds !== 'number') {
@@ -181,7 +180,7 @@ const PhoneBindingDialog: React.FC<PhoneBindingDialogProps> = ({
 
     setBinding(true);
     try {
-      await bindPhoneNumber(phoneNumber.trim(), verificationCode.trim(), SILENT_REQUEST_CONFIG);
+      await bindPhoneNumber(phoneNumber.trim(), verificationCode.trim(), SILENT_API_REQUEST_CONFIG);
       invalidatePhoneBindingStatus();
       message.success('手机号绑定成功');
       await onSuccess?.();

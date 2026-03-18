@@ -11,6 +11,7 @@ import {
   getInfoTargetDetail,
   getMapDetail,
   getRoomObjects,
+  SILENT_API_REQUEST_CONFIG,
 } from '../../../../services/api';
 import { useIsMobile } from '../../shared/responsive';
 import { getRealmRankFromLiteral as getRealmRank, normalizeRealmText } from '../../shared/realm';
@@ -69,8 +70,6 @@ const dungeonDifficultyFallbackLabels: Record<number, string> = {
   2: '困难',
   3: '噩梦',
 };
-const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
-
 const getDungeonDetailCacheKey = (dungeonId: string, rank: number): string => `${dungeonId}@@${rank}`;
 
 interface MapModalProps {
@@ -127,8 +126,8 @@ const MapModal: React.FC<MapModalProps> = ({
     let cancelled = false;
     setListLoading(true);
     Promise.all([
-      getEnabledMaps(SILENT_REQUEST_CONFIG),
-      getDungeonList(undefined, SILENT_REQUEST_CONFIG).catch(() => ({ success: false } as { success: boolean; data?: { dungeons: DungeonDefLite[] } })),
+      getEnabledMaps(SILENT_API_REQUEST_CONFIG),
+      getDungeonList(undefined, SILENT_API_REQUEST_CONFIG).catch(() => ({ success: false } as { success: boolean; data?: { dungeons: DungeonDefLite[] } })),
     ])
       .then(([mapRes, dungeonRes]) => {
         if (cancelled) return;
@@ -232,7 +231,7 @@ const MapModal: React.FC<MapModalProps> = ({
       try {
         const optionByRank = new Map<number, DungeonDifficultyOption>();
         for (const rank of DUNGEON_DIFFICULTY_CANDIDATES) {
-          const res = await getDungeonPreview(dungeonId, rank, SILENT_REQUEST_CONFIG).catch(() => null);
+          const res = await getDungeonPreview(dungeonId, rank, SILENT_API_REQUEST_CONFIG).catch(() => null);
           const difficulty = res?.success ? (res.data?.difficulty ?? null) : null;
           if (!difficulty) continue;
           const parsedRank =
@@ -280,7 +279,7 @@ const MapModal: React.FC<MapModalProps> = ({
     setDetailLoading(true);
 
     if (isDungeon) {
-      getDungeonPreview(safeActiveId, activeDungeonRank, SILENT_REQUEST_CONFIG)
+      getDungeonPreview(safeActiveId, activeDungeonRank, SILENT_API_REQUEST_CONFIG)
         .then((detailRes) => {
           if (cancelled) return;
           const monsters = detailRes?.success && detailRes.data?.monsters ? detailRes.data.monsters : [];
@@ -316,7 +315,7 @@ const MapModal: React.FC<MapModalProps> = ({
       };
     }
 
-    getMapDetail(safeActiveId, SILENT_REQUEST_CONFIG)
+    getMapDetail(safeActiveId, SILENT_API_REQUEST_CONFIG)
       .then(async (detailRes) => {
         if (cancelled) return;
 
@@ -335,7 +334,7 @@ const MapModal: React.FC<MapModalProps> = ({
 
         const objectsByRoom = await Promise.all(
           rooms.map((r) =>
-            getRoomObjects(safeActiveId, r.id, SILENT_REQUEST_CONFIG)
+            getRoomObjects(safeActiveId, r.id, SILENT_API_REQUEST_CONFIG)
               .then((res) => (res?.success && res.data?.objects ? res.data.objects : []))
               .catch(() => []),
           ),
@@ -371,7 +370,7 @@ const MapModal: React.FC<MapModalProps> = ({
 
         const monsterDropsByIdEntries = await Promise.all(
           monsterObjs.map(async (m) => {
-            const infoRes = await getInfoTargetDetail('monster', m.id, SILENT_REQUEST_CONFIG).catch(() => null);
+            const infoRes = await getInfoTargetDetail('monster', m.id, SILENT_API_REQUEST_CONFIG).catch(() => null);
             const target = infoRes?.success ? infoRes.data?.target ?? null : null;
             if (!target || target.type !== 'monster') return [m.id, []] as const;
             const drops = (target.drops ?? []).map((d) => ({

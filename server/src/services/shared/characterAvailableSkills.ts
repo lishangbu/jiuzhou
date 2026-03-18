@@ -25,6 +25,7 @@ import {
   resolveSkillTriggerType,
 } from '../../shared/skillTriggerType.js';
 import { getSkillDefinitions, getTechniqueDefinitions, type SkillDefConfig } from '../staticConfigLoader.js';
+import { createStaticDefinitionIndexGetter } from './staticDefinitionIndex.js';
 import { buildEffectiveTechniqueSkillData } from './techniqueSkillProgression.js';
 import { isCharacterVisibleTechniqueDefinition } from './techniqueUsageScope.js';
 import {
@@ -66,22 +67,15 @@ export type CharacterAvailableSkillEntry = {
   effects: NonNullable<SkillDefConfig['effects']>;
 };
 
-export const getCharacterVisibleTechniqueDefMap = () => {
-  return new Map(
-    getTechniqueDefinitions()
-      .filter((entry) => entry.enabled !== false)
-      .filter((entry) => isCharacterVisibleTechniqueDefinition(entry))
-      .map((entry) => [entry.id, entry] as const),
-  );
-};
+export const getCharacterVisibleTechniqueDefMap = createStaticDefinitionIndexGetter({
+  loadDefinitions: getTechniqueDefinitions,
+  include: (entry) => entry.enabled !== false && isCharacterVisibleTechniqueDefinition(entry),
+});
 
-export const getEnabledSkillDefMap = () => {
-  return new Map(
-    getSkillDefinitions()
-      .filter((entry) => entry.enabled !== false)
-      .map((entry) => [entry.id, entry] as const),
-  );
-};
+export const getEnabledSkillDefMap = createStaticDefinitionIndexGetter({
+  loadDefinitions: getSkillDefinitions,
+  include: (entry) => entry.enabled !== false,
+});
 
 const loadEquippedTechniqueLite = async (characterId: number): Promise<EquippedTechniqueLite[]> => {
   const result = await query(

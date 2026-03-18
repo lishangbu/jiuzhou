@@ -51,6 +51,7 @@ import {
   getDungeonInstanceByBattleId,
   getGameHomeOverview,
   pickupRoomItem,
+  SILENT_API_REQUEST_CONFIG,
   getInventoryItems,
   npcTalk,
   getSignInOverview,
@@ -146,7 +147,6 @@ const EQUIP_QUALITY_COLOR: Record<string, string> = {
   玄: 'var(--rarity-xuan)',
   黄: 'var(--rarity-huang)',
 };
-const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
 const TECHNIQUE_RESEARCH_ENABLED = !import.meta.env.PROD;
 
 const EQUIP_QUALITY_TEXT: Record<string, string> = {
@@ -1400,7 +1400,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const refreshTeamData = useCallback(async () => {
     if (!characterId) return;
     try {
-      const res = await getMyTeam(characterId, SILENT_REQUEST_CONFIG);
+      const res = await getMyTeam(characterId, SILENT_API_REQUEST_CONFIG);
       if (!res.success) {
         applyTeamOverview({ info: null, role: null, applications: [] });
         return;
@@ -1416,7 +1416,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
         return;
       }
 
-      const appsRes = await getTeamApplications(nextTeamId, characterId, SILENT_REQUEST_CONFIG);
+      const appsRes = await getTeamApplications(nextTeamId, characterId, SILENT_API_REQUEST_CONFIG);
       if (!appsRes.success) {
         applyTeamOverview({
           info: res.data ?? null,
@@ -1590,7 +1590,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     const nextMapId = String(mapId || '').trim();
     const nextRoomId = String(roomId || '').trim();
     if (!nextMapId || !nextRoomId) return;
-    void updateCharacterPosition(nextMapId, nextRoomId, SILENT_REQUEST_CONFIG).catch(() => undefined);
+    void updateCharacterPosition(nextMapId, nextRoomId, SILENT_API_REQUEST_CONFIG).catch(() => undefined);
   }, []);
 
   const flushPendingPosition = useCallback((keepalive: boolean) => {
@@ -1612,7 +1612,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       lastKeepalivePositionKeyRef.current = key;
       updateCharacterPositionKeepalive(nextMapId, nextRoomId);
     }
-    else void updateCharacterPosition(nextMapId, nextRoomId, SILENT_REQUEST_CONFIG).catch(() => undefined);
+    else void updateCharacterPosition(nextMapId, nextRoomId, SILENT_API_REQUEST_CONFIG).catch(() => undefined);
   }, []);
 
   const scheduleSavePosition = useCallback((mapId: string, roomId: string) => {

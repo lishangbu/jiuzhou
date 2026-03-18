@@ -19,7 +19,12 @@
  */
 
 import type { AxiosRequestConfig } from 'axios';
-import { claimMailAttachments, getMailList, type MailDto } from '../../../../services/api';
+import {
+  claimMailAttachments,
+  getMailList,
+  SILENT_API_REQUEST_META,
+  type MailDto,
+} from '../../../../services/api';
 import { getUnifiedApiErrorMessage } from '../../../../services/api/error';
 import {
   collectMailClaimCurrencyDelta,
@@ -29,8 +34,6 @@ import {
 } from './mailCharacterCurrency';
 
 const MAIL_BATCH_PAGE_SIZE = 100;
-const SILENT_BATCH_REQUEST_META = { autoErrorToast: false } as const;
-
 type MailBatchClaimProgress = {
   total: number;
   current: number;
@@ -63,7 +66,7 @@ const hasUnclaimedAttachments = (mail: MailDto): boolean => {
 const buildBatchRequestConfig = (signal: AbortSignal): AxiosRequestConfig => {
   return {
     signal,
-    meta: SILENT_BATCH_REQUEST_META,
+    meta: SILENT_API_REQUEST_META,
   };
 };
 

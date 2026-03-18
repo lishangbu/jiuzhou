@@ -8,6 +8,7 @@ import {
   getInfoTargetDetail,
   publishBounty,
   searchBountyItemDefs,
+  SILENT_API_REQUEST_CONFIG,
   type BountyBoardRowDto,
   type BountyItemDefSearchRowDto,
 } from '../../../../services/api';
@@ -84,8 +85,6 @@ interface InfoModalProps {
   onAction?: (action: string, target: InfoTarget) => void;
 }
 
-const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
-
 const InfoModal: React.FC<InfoModalProps> = ({ open, target, onClose, onAction }) => {
   const { message } = App.useApp();
   const typeTextMap: Record<InfoTargetType, string> = {
@@ -154,7 +153,7 @@ const InfoModal: React.FC<InfoModalProps> = ({ open, target, onClose, onAction }
     }
 
     setLoading(true);
-    getInfoTargetDetail(target.type, target.id, SILENT_REQUEST_CONFIG)
+    getInfoTargetDetail(target.type, target.id, SILENT_API_REQUEST_CONFIG)
       .then((res) => {
         if (cancelled) return;
         if (requestSeqRef.current !== seq) return;
@@ -193,7 +192,7 @@ const InfoModal: React.FC<InfoModalProps> = ({ open, target, onClose, onAction }
     setBoardPool('daily');
     setBoardTabKey('daily');
     setBoardLoading(true);
-    getBountyBoard('daily', SILENT_REQUEST_CONFIG)
+    getBountyBoard('daily', SILENT_API_REQUEST_CONFIG)
       .then((res) => {
         if (cancelled) return;
         if (!res?.success) return;
@@ -228,7 +227,7 @@ const InfoModal: React.FC<InfoModalProps> = ({ open, target, onClose, onAction }
   const fetchBoard = async (pool: 'daily' | 'player') => {
     setBoardLoading(true);
     try {
-      const res = await getBountyBoard(pool, SILENT_REQUEST_CONFIG);
+      const res = await getBountyBoard(pool, SILENT_API_REQUEST_CONFIG);
       if (!res?.success) return;
       setBoardRows(Array.isArray(res.data?.bounties) ? res.data!.bounties : []);
     } finally {
@@ -247,7 +246,7 @@ const InfoModal: React.FC<InfoModalProps> = ({ open, target, onClose, onAction }
       }
       setItemSearching(true);
       try {
-        const res = await searchBountyItemDefs(lastItemKeywordRef.current, 20, SILENT_REQUEST_CONFIG);
+        const res = await searchBountyItemDefs(lastItemKeywordRef.current, 20, SILENT_API_REQUEST_CONFIG);
         if (!res?.success) return;
         setItemOptions(Array.isArray(res.data?.items) ? res.data!.items : []);
       } finally {

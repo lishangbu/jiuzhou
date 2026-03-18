@@ -18,6 +18,7 @@ import {
   getPartnerOverview,
   getMarketTradeRecords,
   getMyMarketListings,
+  SILENT_API_REQUEST_CONFIG,
 } from '../../../../services/api';
 import type {
   MarketListingDto,
@@ -93,12 +94,6 @@ type MarketTooltipPlacement = 'rightTop' | 'right' | 'rightBottom';
 type MobileListingPreviewSource = 'market' | 'my';
 
 const MARKET_SEARCH_DEBOUNCE_MS = 450;
-const MARKET_PURCHASE_REQUEST_CONFIG = {
-  meta: {
-    autoErrorToast: false,
-  },
-} as const;
-
 type MobileListingPreview = {
   source: MobileListingPreviewSource;
   listingId: number;
@@ -1222,7 +1217,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
       const res = await buyMarketListing(
         listingId,
         buyQty,
-        MARKET_PURCHASE_REQUEST_CONFIG,
+        SILENT_API_REQUEST_CONFIG,
       );
       if (!res.success) throw new Error(res.message || '购买失败');
       messageRef.current.success('购买成功');
@@ -1250,7 +1245,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
     async (listingId: number) => {
       const res = await buyPartnerMarketListing(
         listingId,
-        MARKET_PURCHASE_REQUEST_CONFIG,
+        SILENT_API_REQUEST_CONFIG,
       );
       if (!res.success) throw new Error(res.message || '购买失败');
       messageRef.current.success(res.message || '购买成功');

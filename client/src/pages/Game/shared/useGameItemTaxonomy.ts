@@ -1,5 +1,9 @@
 import { useEffect, useReducer } from 'react';
-import { getGameItemTaxonomy, getUnifiedApiErrorMessage } from '../../../services/api';
+import {
+  getGameItemTaxonomy,
+  getUnifiedApiErrorMessage,
+  SILENT_API_REQUEST_CONFIG,
+} from '../../../services/api';
 import { applyGameItemTaxonomy } from './itemTaxonomy';
 
 /**
@@ -25,8 +29,6 @@ import { applyGameItemTaxonomy } from './itemTaxonomy';
 let taxonomyReady = false;
 let inflight: Promise<void> | null = null;
 const listeners = new Set<() => void>();
-const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
-
 const emitTaxonomyUpdated = (): void => {
   for (const listener of listeners) {
     listener();
@@ -38,7 +40,7 @@ const ensureGameItemTaxonomyLoaded = async (): Promise<void> => {
   if (inflight) return inflight;
   inflight = (async () => {
     try {
-      const res = await getGameItemTaxonomy(SILENT_REQUEST_CONFIG);
+      const res = await getGameItemTaxonomy(SILENT_API_REQUEST_CONFIG);
       if (!res.data?.taxonomy) return;
       applyGameItemTaxonomy(res.data.taxonomy);
       taxonomyReady = true;

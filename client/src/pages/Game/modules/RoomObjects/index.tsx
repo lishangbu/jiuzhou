@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Tag } from 'antd';
 import type { InfoTarget } from '../InfoModal';
-import { getRoomObjects, type MapObjectDto } from '../../../../services/api';
-import { getUnifiedApiErrorMessage } from '../../../../services/api';
+import {
+  getRoomObjects,
+  getUnifiedApiErrorMessage,
+  SILENT_API_REQUEST_CONFIG,
+  type MapObjectDto,
+} from '../../../../services/api';
 import { gameSocket, type GameTimeSyncPayload } from '../../../../services/gameSocket';
 import { renderRoomObjectName } from './renderRoomObjectName';
 import './index.scss';
@@ -24,8 +28,6 @@ const typeLabel: Record<RoomObjectType, { text: string; color: string }> = {
 };
 
 const typeOrder: Record<RoomObjectType, number> = { npc: 0, monster: 1, item: 2, player: 3 };
-const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
-
 const calcShichen = (hour: number): string => {
   const h = Math.floor(hour);
   if (h === 23 || (h >= 0 && h < 1)) return '子时';
@@ -138,7 +140,7 @@ const RoomObjects: React.FC<RoomObjectsProps> = ({ mapId, roomId, onSelect }) =>
       if (cancelled) return;
       setLoading(true);
       setError('');
-      getRoomObjects(mapId, roomId, SILENT_REQUEST_CONFIG)
+      getRoomObjects(mapId, roomId, SILENT_API_REQUEST_CONFIG)
         .then((res) => {
           if (cancelled) return;
           if (!res?.success || !res.data) {

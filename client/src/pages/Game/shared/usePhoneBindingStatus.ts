@@ -2,6 +2,7 @@ import { useEffect, useReducer, useState } from 'react';
 import {
   getPhoneBindingStatus,
   getUnifiedApiErrorMessage,
+  SILENT_API_REQUEST_CONFIG,
   type PhoneBindingStatusDto,
 } from '../../../services/api';
 
@@ -24,8 +25,6 @@ import {
  * 1. 状态是账号级共享数据，多个使用方必须共用一份缓存，否则绑定成功后会出现不同面板显示不一致。
  * 2. 读取失败时不能默认为“功能关闭”，否则会把真实配置错误误显示成正常状态。
  */
-
-const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
 
 let cachedStatus: PhoneBindingStatusDto | null = null;
 let inflight: Promise<PhoneBindingStatusDto> | null = null;
@@ -58,7 +57,7 @@ const loadPhoneBindingStatusInternal = async (forceRefresh: boolean): Promise<Ph
   }
 
   inflight = (async () => {
-    const response = await getPhoneBindingStatus(SILENT_REQUEST_CONFIG);
+    const response = await getPhoneBindingStatus(SILENT_API_REQUEST_CONFIG);
     if (!response.success || !response.data) {
       throw new Error(getUnifiedApiErrorMessage(response, '读取手机号绑定状态失败'));
     }

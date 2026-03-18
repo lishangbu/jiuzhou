@@ -24,57 +24,26 @@ import {
   type MonsterDefConfig,
   type SkillDefConfig,
 } from "../../staticConfigLoader.js";
+import { createStaticDefinitionIndexGetter } from "../../shared/staticDefinitionIndex.js";
 
-type EnabledStaticDefinition = {
-  id: string;
-  enabled?: boolean;
+const isEnabledDefinition = <T extends { enabled?: boolean }>(definition: T): boolean => {
+  return definition.enabled !== false;
 };
 
-type DefinitionIndexSnapshot<T extends EnabledStaticDefinition> = {
-  source: readonly T[];
-  enabledById: ReadonlyMap<string, T>;
-};
+const getEnabledBattleSkillDefinitionMapInternal = createStaticDefinitionIndexGetter<SkillDefConfig>({
+  loadDefinitions: getSkillDefinitions,
+  include: isEnabledDefinition,
+});
 
-let skillDefinitionSnapshot: DefinitionIndexSnapshot<SkillDefConfig> | null = null;
-let monsterDefinitionSnapshot: DefinitionIndexSnapshot<MonsterDefConfig> | null = null;
-
-const buildEnabledDefinitionMap = <T extends EnabledStaticDefinition>(
-  definitions: readonly T[],
-): ReadonlyMap<string, T> => {
-  const enabledById = new Map<string, T>();
-  for (const definition of definitions) {
-    if (definition.enabled === false) continue;
-    enabledById.set(definition.id, definition);
-  }
-  return enabledById;
-};
-
-const getOrCreateDefinitionSnapshot = <T extends EnabledStaticDefinition>(
-  definitions: readonly T[],
-  currentSnapshot: DefinitionIndexSnapshot<T> | null,
-): DefinitionIndexSnapshot<T> => {
-  if (currentSnapshot?.source === definitions) {
-    return currentSnapshot;
-  }
-
-  return {
-    source: definitions,
-    enabledById: buildEnabledDefinitionMap(definitions),
-  };
-};
+const getEnabledBattleMonsterDefinitionMapInternal = createStaticDefinitionIndexGetter<MonsterDefConfig>({
+  loadDefinitions: getMonsterDefinitions,
+  include: isEnabledDefinition,
+});
 
 export const getEnabledBattleSkillDefinitionMap = (): ReadonlyMap<string, SkillDefConfig> => {
-  skillDefinitionSnapshot = getOrCreateDefinitionSnapshot(
-    getSkillDefinitions(),
-    skillDefinitionSnapshot,
-  );
-  return skillDefinitionSnapshot.enabledById;
+  return getEnabledBattleSkillDefinitionMapInternal();
 };
 
 export const getEnabledBattleMonsterDefinitionMap = (): ReadonlyMap<string, MonsterDefConfig> => {
-  monsterDefinitionSnapshot = getOrCreateDefinitionSnapshot(
-    getMonsterDefinitions(),
-    monsterDefinitionSnapshot,
-  );
-  return monsterDefinitionSnapshot.enabledById;
+  return getEnabledBattleMonsterDefinitionMapInternal();
 };

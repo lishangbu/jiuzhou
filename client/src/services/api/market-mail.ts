@@ -1,5 +1,6 @@
 import type { AxiosRequestConfig } from 'axios';
 import api from './core';
+import { SILENT_API_REQUEST_CONFIG } from './requestConfig';
 import type {
   CaptchaResponse,
   UnifiedCaptchaPayload,
@@ -196,8 +197,6 @@ export const getPartnerMarketTradeRecords = (params?: {
   return api.get('/market/partner-records', { params });
 };
 
-const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
-
 export interface MarketPurchaseCaptchaVerifyResponse {
   success: boolean;
   message?: string;
@@ -207,13 +206,13 @@ export interface MarketPurchaseCaptchaVerifyResponse {
 }
 
 export const getMarketPurchaseCaptcha = (): Promise<CaptchaResponse> => {
-  return api.get('/market/captcha', SILENT_REQUEST_CONFIG);
+  return api.get('/market/captcha', SILENT_API_REQUEST_CONFIG);
 };
 
 export const verifyMarketPurchaseCaptcha = (
   payload: UnifiedCaptchaPayload,
 ): Promise<MarketPurchaseCaptchaVerifyResponse> => {
-  return api.post('/market/captcha/verify', payload, SILENT_REQUEST_CONFIG);
+  return api.post('/market/captcha/verify', payload, SILENT_API_REQUEST_CONFIG);
 };
 
 

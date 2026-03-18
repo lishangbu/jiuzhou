@@ -20,11 +20,13 @@
 import { App } from 'antd';
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 
-import { getUnifiedApiErrorMessage, renameCharacterWithCard } from '../../../services/api';
+import {
+  getUnifiedApiErrorMessage,
+  renameCharacterWithCard,
+  SILENT_API_REQUEST_CONFIG,
+} from '../../../services/api';
 import { gameSocket } from '../../../services/gameSocket';
 import CharacterRenameModal from './CharacterRenameModal';
-
-const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
 
 interface CharacterRenameCardContext {
   itemInstanceId: number;
@@ -69,7 +71,7 @@ export const useCharacterRenameCardFlow = ({
       const result = await renameCharacterWithCard(
         renameContext.itemInstanceId,
         nickname,
-        SILENT_REQUEST_CONFIG,
+        SILENT_API_REQUEST_CONFIG,
       );
       message.success(result.message || '改名成功');
       await refresh();

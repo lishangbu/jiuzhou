@@ -18,5 +18,6 @@ export * from './api/partner';
 export * from './api/gameHome';
 export * from './api/gemSynthesis';
 export * from './api/error';
+export * from './api/requestConfig';
 export * from './api/captchaConfig';
 export * from './api/redeemCode';

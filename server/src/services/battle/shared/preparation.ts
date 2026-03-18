@@ -61,6 +61,14 @@ const normalizeCharacterId = (value: unknown): number => {
   return characterId;
 };
 
+const getTeamBattleMemberCharacterId = (member: TeamBattleMember): number => {
+  return normalizeCharacterId(member.data.id);
+};
+
+const getTeamBattleMemberNickname = (member: TeamBattleMember): string => {
+  return String(member.data.nickname || '').trim();
+};
+
 // ------ 挂机检查 ------
 
 /**
@@ -220,15 +228,15 @@ export async function prepareTeamBattleParticipants(
   }
 
   const teamMemberCharacterIds = teamInfo.members
-    .map((member) => normalizeCharacterId((member.data as unknown as Record<string, unknown>)?.id))
+    .map(getTeamBattleMemberCharacterId)
     .filter((characterId) => characterId > 0);
   const activeIdleCharacterIdSet = await idleSessionService.getActiveIdleCharacterIdSet(teamMemberCharacterIds);
   if (activeIdleCharacterIdSet.size > 0) {
     for (const member of teamInfo.members) {
-      const memberCharacterId = normalizeCharacterId((member.data as unknown as Record<string, unknown>)?.id);
+      const memberCharacterId = getTeamBattleMemberCharacterId(member);
       if (memberCharacterId <= 0) continue;
       if (!activeIdleCharacterIdSet.has(memberCharacterId)) continue;
-      const memberNickname = String((member.data as unknown as Record<string, unknown>)?.nickname || "").trim();
+      const memberNickname = getTeamBattleMemberNickname(member);
       const memberLabel = memberNickname.length > 0
         ? `队伍成员【${memberNickname}】`
         : `队伍成员(角色ID:${memberCharacterId})`;
@@ -240,7 +248,7 @@ export async function prepareTeamBattleParticipants(
   }
 
   for (const member of teamInfo.members) {
-    const memberCharacterId = normalizeCharacterId((member.data as unknown as Record<string, unknown>)?.id);
+    const memberCharacterId = getTeamBattleMemberCharacterId(member);
     if (memberCharacterId > 0 && isCharacterInBattle(memberCharacterId)) {
       continue;
     }

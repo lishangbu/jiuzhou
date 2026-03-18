@@ -95,10 +95,6 @@ const asStringArray = (raw: unknown): string[] => {
     .filter((entry): entry is string => entry.length > 0);
 };
 
-const getTechniqueDefMap = () => getCharacterVisibleTechniqueDefMap();
-
-const getSkillDefMap = () => getEnabledSkillDefMap();
-
 type SkillSlotLite = {
   slotIndex: number;
   skillId: string;
@@ -118,7 +114,7 @@ const filterSkillSlotsByAvailableSkillSet = (
 };
 
 const buildReconciledSkillSlots = (slots: SkillSlotLite[]): ReconciledSkillSlot[] => {
-  const skillMap = getSkillDefMap();
+  const skillMap = getEnabledSkillDefMap();
   return slots
     .map((slot) => {
       const def = skillMap.get(slot.skillId);
@@ -198,7 +194,7 @@ class CharacterTechniqueService {
       `,
       [characterId],
     );
-    const techniqueMap = getTechniqueDefMap();
+    const techniqueMap = getCharacterVisibleTechniqueDefMap();
     const rowsWithRank: Array<CharacterTechnique & { __quality_rank: number }> = [];
     for (const row of result.rows as Array<Record<string, unknown>>) {
       const techniqueId = typeof row.technique_id === 'string' ? row.technique_id : '';
@@ -280,7 +276,7 @@ class CharacterTechniqueService {
     }
 
     // 检查功法是否存在
-    const techniqueDef = getTechniqueDefMap().get(techniqueId) ?? null;
+    const techniqueDef = getCharacterVisibleTechniqueDefMap().get(techniqueId) ?? null;
     if (!techniqueDef) {
       return { success: false, message: '功法不存在' };
     }
@@ -337,7 +333,7 @@ class CharacterTechniqueService {
     const currentLayer = ctResult.rows[0].current_layer;
 
     // 获取功法最大层数
-    const techniqueDef = getTechniqueDefMap().get(techniqueId) ?? null;
+    const techniqueDef = getCharacterVisibleTechniqueDefMap().get(techniqueId) ?? null;
     if (!techniqueDef) {
       return { success: false, message: '功法不存在' };
     }
@@ -395,7 +391,7 @@ class CharacterTechniqueService {
     const ctId = ctResult.rows[0].id;
 
     // 获取功法最大层数
-    const techniqueDef = getTechniqueDefMap().get(techniqueId) ?? null;
+    const techniqueDef = getCharacterVisibleTechniqueDefMap().get(techniqueId) ?? null;
     if (!techniqueDef) {
       return { success: false, message: '功法不存在' };
     }
@@ -569,7 +565,7 @@ class CharacterTechniqueService {
 
     // 如果装备了主功法，更新角色属性类型
     if (slotType === 'main') {
-      const techniqueDef = getTechniqueDefMap().get(techniqueId) ?? null;
+      const techniqueDef = getCharacterVisibleTechniqueDefMap().get(techniqueId) ?? null;
       if (techniqueDef) {
         await query(
           'UPDATE characters SET attribute_type = $1, attribute_element = $2, updated_at = NOW() WHERE id = $3',
@@ -586,7 +582,7 @@ class CharacterTechniqueService {
       );
       if (mainResult.rows.length > 0) {
         const mainTechniqueId = typeof mainResult.rows[0].technique_id === 'string' ? mainResult.rows[0].technique_id : '';
-        const mainDef = getTechniqueDefMap().get(mainTechniqueId) ?? null;
+        const mainDef = getCharacterVisibleTechniqueDefMap().get(mainTechniqueId) ?? null;
         await query(
           'UPDATE characters SET attribute_type = $1, attribute_element = $2, updated_at = NOW() WHERE id = $3',
           [mainDef?.attribute_type ?? 'physical', mainDef?.attribute_element ?? 'none', characterId]
@@ -718,7 +714,7 @@ class CharacterTechniqueService {
       })
       .filter((entry): entry is SkillSlotLite => Boolean(entry));
 
-    const skillMap = getSkillDefMap();
+    const skillMap = getEnabledSkillDefMap();
     const rows = slots.map((slot) => {
       const def = skillMap.get(slot.skillId);
       return {
@@ -889,7 +885,7 @@ class CharacterTechniqueService {
     }
 
     const uniqueSkillIds = [...new Set(orderedSkillIds)];
-    const skillMap = getSkillDefMap();
+    const skillMap = getEnabledSkillDefMap();
     const techniqueRows = await query(
       `
         SELECT technique_id, current_layer
@@ -989,7 +985,7 @@ class CharacterTechniqueService {
       })
       .filter((entry): entry is SkillSlotLite => Boolean(entry));
     const filteredSlots = filterSkillSlotsByAvailableSkillSet(equippedSkillSlots, availableSkillIdSet);
-    const skillMap = getSkillDefMap();
+    const skillMap = getEnabledSkillDefMap();
     const filteredEquippedSkills: CharacterSkillSlot[] = filteredSlots.map((entry) => {
       const def = skillMap.get(entry.skillId);
       return {

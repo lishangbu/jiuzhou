@@ -1,6 +1,7 @@
 import type { AxiosRequestConfig } from 'axios';
 import api from './core';
 import { API_BASE } from '../runtimeUrls';
+import { SILENT_API_REQUEST_CONFIG } from './requestConfig';
 
 export interface CaptchaChallenge {
   captchaId: string;
@@ -87,10 +88,8 @@ export interface AutoDisassembleRuleDto {
 
 export type AutoDisassembleRulesDto = AutoDisassembleRuleDto[];
 
-const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
-
 export const getCaptcha = (): Promise<CaptchaResponse> => {
-  return api.get('/auth/captcha', SILENT_REQUEST_CONFIG);
+  return api.get('/auth/captcha', SILENT_API_REQUEST_CONFIG);
 };
 
 // 登录

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { getMapDetail, type MapRoom } from '../../../../services/api';
+import { getMapDetail, SILENT_API_REQUEST_CONFIG, type MapRoom } from '../../../../services/api';
 import './index.scss';
 
 interface GameMapProps {
@@ -17,8 +17,6 @@ type RoomNode = {
   y: number;
   connections: Array<{ targetRoomId: string; targetMapId?: string }>;
 };
-const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
-
 const normalizeRooms = (rooms: MapRoom[]): RoomNode[] => {
   const withPos = rooms.map((r, idx) => {
     const x = typeof r.position?.x === 'number' ? r.position.x : idx;
@@ -63,7 +61,7 @@ const GameMap: React.FC<GameMapProps> = ({ currentMapId, currentRoomId, trackedR
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    getMapDetail(currentMapId, SILENT_REQUEST_CONFIG)
+    getMapDetail(currentMapId, SILENT_API_REQUEST_CONFIG)
       .then((res) => {
         if (cancelled) return;
         if (!res?.success || !res.data) {

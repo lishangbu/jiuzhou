@@ -3,13 +3,14 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   changePassword,
   getCharacterInfo,
+  getUnifiedApiErrorMessage,
   redeemGiftCode,
+  SILENT_API_REQUEST_CONFIG,
   updateCharacterAutoDisassemble,
   updateCharacterDungeonNoStaminaCost,
   type AutoDisassembleRuleDto,
   type AutoDisassembleRulesDto,
 } from '../../../../services/api';
-import { getUnifiedApiErrorMessage } from '../../../../services/api';
 import { commitThemeModeSelection, getStoredThemeMode, type ThemeMode } from '../../../../constants/theme';
 import {
   ACCOUNT_PASSWORD_MIN_LENGTH,
@@ -59,8 +60,6 @@ interface ChangePasswordFormValues {
   newPassword: string;
   confirmPassword: string;
 }
-
-const SILENT_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
 
 const createDefaultAutoDisassembleRuleDraftContent = (): AutoDisassembleRuleDraftContent => {
   return {
@@ -229,7 +228,7 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
 
     setCdkRedeeming(true);
     try {
-      const result = await redeemGiftCode(code, SILENT_REQUEST_CONFIG);
+      const result = await redeemGiftCode(code, SILENT_API_REQUEST_CONFIG);
       setCdk('');
       message.success(result.message || '兑换成功');
     } catch (error) {
@@ -306,7 +305,7 @@ const SettingModal: React.FC<SettingModalProps> = ({ open, onClose }) => {
       const response = await changePassword(
         values.currentPassword,
         values.newPassword,
-        SILENT_REQUEST_CONFIG,
+        SILENT_API_REQUEST_CONFIG,
       );
       message.success(response.message || '密码修改成功');
       changePasswordForm.resetFields();

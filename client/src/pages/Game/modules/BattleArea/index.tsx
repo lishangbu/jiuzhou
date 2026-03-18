@@ -5,6 +5,7 @@ import {
   battleAction,
   getBattleState,
   getUnifiedApiErrorMessage,
+  SILENT_API_REQUEST_CONFIG,
   toUnifiedApiError,
   startPVEBattle,
   type BattleStartResponse,
@@ -264,9 +265,6 @@ const TRANSIENT_BATTLE_ACTION_ERRORS = new Set([
   '目标不是有效的敌方单位',
   '目标不是有效的友方单位',
 ]);
-
-const SILENT_BATTLE_ACTION_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
-const SILENT_BATTLE_START_REQUEST_CONFIG = { meta: { autoErrorToast: false } } as const;
 
 const isTransientBattleActionError = (msg: unknown): boolean => {
   const text = String(msg ?? '').trim();
@@ -787,7 +785,7 @@ const BattleArea: React.FC<BattleAreaProps> = ({
       }
 
       try {
-        const res = await startPVEBattle(monsterIds, SILENT_BATTLE_START_REQUEST_CONFIG);
+        const res = await startPVEBattle(monsterIds, SILENT_API_REQUEST_CONFIG);
         syncBattleCooldownMeta(res?.data);
         if (!res?.success || !res.data?.battleId || !res.data?.state) {
           const failMessage = getUnifiedApiErrorMessage(res, '发起战斗失败');
@@ -1285,7 +1283,7 @@ const BattleArea: React.FC<BattleAreaProps> = ({
       }
 
       const actualSkillId = skillId === 'basic_attack' ? 'skill-normal-attack' : skillId;
-      const res = await battleAction(id, actualSkillId, targets, SILENT_BATTLE_ACTION_REQUEST_CONFIG).catch((error) => {
+      const res = await battleAction(id, actualSkillId, targets, SILENT_API_REQUEST_CONFIG).catch((error) => {
         const errorText = getUnifiedApiErrorMessage(error, '行动失败');
         if (isBattleMissingError(errorText)) {
           handleMissingBattle(errorText);
