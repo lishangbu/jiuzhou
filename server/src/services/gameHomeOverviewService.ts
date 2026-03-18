@@ -13,10 +13,10 @@ import {
   type TeamInfo,
 } from './teamService.js';
 import {
-  getBountyTaskOverview,
-  getTaskOverview,
-  type BountyTaskOverviewDto,
-  type TaskOverviewDto,
+  getBountyTaskOverviewSummary,
+  getTaskOverviewSummary,
+  type BountyTaskOverviewSummaryDto,
+  type TaskOverviewSummaryDto,
 } from './taskService.js';
 
 /**
@@ -60,8 +60,8 @@ export interface GameHomeOverviewDto {
     applications: TeamApplicationListItem[];
   };
   task: {
-    tasks: TaskOverviewDto[];
-    bountyTasks: BountyTaskOverviewDto[];
+    tasks: TaskOverviewSummaryDto[];
+    bountyTasks: BountyTaskOverviewSummaryDto[];
   };
   mainQuest: MainQuestProgressDto;
 }
@@ -137,8 +137,8 @@ export const getGameHomeOverview = async (
     inventoryService.getInventoryItemsWithDefs(characterId, 'equipped', 1, 200),
     idleSessionService.getActiveIdleSession(characterId),
     loadTeamOverview(characterId),
-    getTaskOverview(characterId),
-    getBountyTaskOverview(characterId),
+    getTaskOverviewSummary(characterId),
+    getBountyTaskOverviewSummary(characterId),
     getMainQuestProgress(characterId),
   ]);
 

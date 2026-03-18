@@ -5,7 +5,9 @@ import {
   acceptTaskFromNpc,
   claimTaskReward,
   getBountyTaskOverview,
+  getBountyTaskOverviewSummary,
   getTaskOverview,
+  getTaskOverviewSummary,
   npcTalk,
   setTaskTracked,
   submitTask,
@@ -29,11 +31,27 @@ router.get('/overview', requireCharacter, asyncHandler(async (req, res) => {
     return sendSuccess(res, data);
 }));
 
+router.get('/overview/summary', requireCharacter, asyncHandler(async (req, res) => {
+    const characterId = req.characterId!;
+
+    const categoryValue = getSingleQueryValue(req.query.category);
+    const category = categoryValue ? (categoryValue as TaskCategory) : undefined;
+    const data = await getTaskOverviewSummary(characterId, category);
+    return sendSuccess(res, data);
+}));
+
 router.get('/bounty/overview', requireCharacter, asyncHandler(async (req, res) => {
     const userId = req.userId!;
     const characterId = req.characterId!;
 
     const data = await getBountyTaskOverview(characterId);
+    return sendSuccess(res, data);
+}));
+
+router.get('/bounty/overview/summary', requireCharacter, asyncHandler(async (req, res) => {
+    const characterId = req.characterId!;
+
+    const data = await getBountyTaskOverviewSummary(characterId);
     return sendSuccess(res, data);
 }));
 

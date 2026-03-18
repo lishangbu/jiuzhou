@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import type {
-  BountyTaskOverviewRowDto,
-  TaskOverviewRowDto,
+  BountyTaskOverviewSummaryRowDto,
+  TaskOverviewSummaryRowDto,
 } from '../../../../services/api';
 import {
   buildTaskCategoryIndicatorMap,
@@ -20,7 +20,7 @@ describe('taskIndicator', () => {
       { id: 'side-1', category: 'side', status: 'turnin' },
       { id: 'daily-1', category: 'daily', status: 'claimable' },
       { id: 'event-1', category: 'event', status: 'ongoing' },
-    ] as TaskOverviewRowDto[];
+    ] as TaskOverviewSummaryRowDto[];
 
     expect(countCompletableTaskOverviewRows(tasks)).toBe(2);
   });
@@ -32,7 +32,7 @@ describe('taskIndicator', () => {
       { id: 'bounty-2', status: 'claimable', sourceType: 'daily', expiresAt: '2026-03-17T12:30:00.000Z' },
       { id: 'bounty-3', status: 'claimable', sourceType: 'daily', expiresAt: '2026-03-17T11:59:59.000Z' },
       { id: 'bounty-4', status: 'completed', sourceType: 'player', expiresAt: null },
-    ] as BountyTaskOverviewRowDto[];
+    ] as BountyTaskOverviewSummaryRowDto[];
 
     expect(countCompletableBountyTaskOverviewRows(tasks, nowTs)).toBe(2);
   });
@@ -49,7 +49,7 @@ describe('taskIndicator', () => {
       { id: 'bounty-2', sourceType: 'daily', expiresAt: '2026-03-17T12:05:00.000Z' },
       { id: 'bounty-3', sourceType: 'player', expiresAt: null },
       { id: 'bounty-4', sourceType: 'daily', expiresAt: '2026-03-17T11:55:00.000Z' },
-    ] as BountyTaskOverviewRowDto[];
+    ] as BountyTaskOverviewSummaryRowDto[];
 
     expect(getNextBountyTaskExpiryTs(tasks, nowTs)).toBe(Date.parse('2026-03-17T12:05:00.000Z'));
   });
@@ -60,7 +60,7 @@ describe('taskIndicator', () => {
       { id: 'bounty-1', sourceType: 'daily', expiresAt: '2026-03-17T12:05:00.000Z' },
       { id: 'bounty-2', sourceType: 'daily', expiresAt: '2026-03-17T11:59:59.000Z' },
       { id: 'bounty-3', sourceType: 'player', expiresAt: null },
-    ] as BountyTaskOverviewRowDto[];
+    ] as BountyTaskOverviewSummaryRowDto[];
 
     expect(hasPendingBountyTaskExpiry(tasks, nowTs)).toBe(true);
     expect(hasPendingBountyTaskExpiry(tasks, Date.parse('2026-03-17T12:06:00.000Z'))).toBe(false);
@@ -73,11 +73,11 @@ describe('taskIndicator', () => {
       { id: 'side-1', category: 'side', status: 'turnin' },
       { id: 'daily-1', category: 'daily', status: 'ongoing' },
       { id: 'event-1', category: 'event', status: 'claimable' },
-    ] as TaskOverviewRowDto[];
+    ] as TaskOverviewSummaryRowDto[];
     const bountyRows = [
       { id: 'bounty-1', status: 'claimable', sourceType: 'daily', expiresAt: '2026-03-17T11:59:59.000Z' },
       { id: 'bounty-2', status: 'turnin', sourceType: 'player', expiresAt: null },
-    ] as BountyTaskOverviewRowDto[];
+    ] as BountyTaskOverviewSummaryRowDto[];
 
     expect(buildTaskCategoryIndicatorMap(taskRows, bountyRows, nowTs)).toEqual({
       main: false,

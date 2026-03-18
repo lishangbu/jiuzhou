@@ -5,7 +5,10 @@ import type { IdleSessionDto } from '../../pages/Game/modules/IdleBattle/types';
 import type { InventoryItemDto } from './inventory';
 import type { PhoneBindingStatusDto } from './phoneBinding';
 import type { RealmOverviewDto } from './combat-realm';
-import type { BountyTaskOverviewRowDto, TaskOverviewRowDto } from './task-achievement';
+import type {
+  BountyTaskOverviewSummaryRowDto,
+  TaskOverviewSummaryRowDto,
+} from './task-achievement';
 
 /**
  * 首页概览接口模块
@@ -45,8 +48,8 @@ export interface GameHomeOverviewDto {
     applications: TeamApplication[];
   };
   task: {
-    tasks: TaskOverviewRowDto[];
-    bountyTasks: BountyTaskOverviewRowDto[];
+    tasks: TaskOverviewSummaryRowDto[];
+    bountyTasks: BountyTaskOverviewSummaryRowDto[];
   };
   mainQuest: MainQuestProgressDto;
 }

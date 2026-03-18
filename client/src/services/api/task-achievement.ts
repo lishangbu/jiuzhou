@@ -36,6 +36,11 @@ export type TaskOverviewRowDto = {
   rewards: TaskRewardDto[];
 };
 
+export type TaskOverviewSummaryRowDto = Pick<
+  TaskOverviewRowDto,
+  'id' | 'category' | 'mapId' | 'roomId' | 'status' | 'tracked'
+>;
+
 export type TaskOverviewResponse = {
   success: boolean;
   message: string;
@@ -44,6 +49,16 @@ export type TaskOverviewResponse = {
 
 export const getTaskOverview = (category?: TaskCategory): Promise<TaskOverviewResponse> => {
   return api.get('/task/overview', { params: { category } });
+};
+
+export type TaskOverviewSummaryResponse = {
+  success: boolean;
+  message: string;
+  data?: { tasks: TaskOverviewSummaryRowDto[] };
+};
+
+export const getTaskOverviewSummary = (category?: TaskCategory): Promise<TaskOverviewSummaryResponse> => {
+  return api.get('/task/overview/summary', { params: { category } });
 };
 
 export type BountyTaskSourceType = 'daily' | 'player';
@@ -56,6 +71,11 @@ export type BountyTaskOverviewRowDto = Omit<TaskOverviewRowDto, 'category'> & {
   remainingSeconds: number | null;
 };
 
+export type BountyTaskOverviewSummaryRowDto = Pick<
+  BountyTaskOverviewRowDto,
+  'id' | 'status' | 'sourceType' | 'expiresAt' | 'remainingSeconds'
+>;
+
 export type BountyTaskOverviewResponse = {
   success: boolean;
   message: string;
@@ -64,6 +84,16 @@ export type BountyTaskOverviewResponse = {
 
 export const getBountyTaskOverview = (): Promise<BountyTaskOverviewResponse> => {
   return api.get('/task/bounty/overview');
+};
+
+export type BountyTaskOverviewSummaryResponse = {
+  success: boolean;
+  message: string;
+  data?: { tasks: BountyTaskOverviewSummaryRowDto[] };
+};
+
+export const getBountyTaskOverviewSummary = (): Promise<BountyTaskOverviewSummaryResponse> => {
+  return api.get('/task/bounty/overview/summary');
 };
 
 export type SetTaskTrackedResponse = {

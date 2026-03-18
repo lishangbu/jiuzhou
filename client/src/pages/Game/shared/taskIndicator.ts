@@ -19,17 +19,17 @@
  * 3. “可完成”只认 `turnin/claimable`，不能把 `ongoing` 视作红点，否则会误导玩家把进行中任务当成可领奖。
  */
 import type {
-  BountyTaskOverviewRowDto,
-  TaskOverviewRowDto,
+  BountyTaskOverviewSummaryRowDto,
+  TaskOverviewSummaryRowDto,
   TaskStatus,
 } from '../../../services/api';
 
 export type TaskIndicatorListCategory = Extract<
-  TaskOverviewRowDto['category'],
+  TaskOverviewSummaryRowDto['category'],
   'side' | 'daily' | 'event'
 >;
 
-export type TaskIndicatorCategory = TaskOverviewRowDto['category'] | 'bounty';
+export type TaskIndicatorCategory = TaskOverviewSummaryRowDto['category'] | 'bounty';
 
 export type TaskCategoryIndicatorMap = Record<TaskIndicatorCategory, boolean>;
 
@@ -40,7 +40,7 @@ type TaskIndicatorTaskRow = {
 
 type BountyTaskIndicatorRow = {
   status: TaskStatus;
-  sourceType?: BountyTaskOverviewRowDto['sourceType'];
+  sourceType?: BountyTaskOverviewSummaryRowDto['sourceType'];
   expiresAt?: string | null;
 };
 

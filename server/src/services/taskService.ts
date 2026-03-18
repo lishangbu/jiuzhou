@@ -74,11 +74,24 @@ export type TaskOverviewDto = {
   rewards: TaskRewardDto[];
 };
 
+export type TaskOverviewSummaryDto = Pick<
+  TaskOverviewDto,
+  'id' | 'category' | 'mapId' | 'roomId' | 'status' | 'tracked'
+>;
+
 export type BountyTaskSourceType = 'daily' | 'player';
 
 export type BountyTaskOverviewDto = Omit<TaskOverviewDto, 'category'> & {
   category: 'bounty';
   bountyInstanceId: number;
+  sourceType: BountyTaskSourceType;
+  expiresAt: string | null;
+  remainingSeconds: number | null;
+};
+
+export type BountyTaskOverviewSummaryDto = {
+  id: string;
+  status: TaskStatus;
   sourceType: BountyTaskSourceType;
   expiresAt: string | null;
   remainingSeconds: number | null;
@@ -121,6 +134,39 @@ type BountyClaimRewardRow = {
   claim_id: number | string | null;
   spirit_stones_reward: number | string | null;
   silver_reward: number | string | null;
+};
+
+type TaskProgressRecord = Record<string, number>;
+
+type TaskOverviewSourceRow = {
+  id: string;
+  category: TaskCategory;
+  title: string;
+  realm: string;
+  giverNpcId: string | null;
+  mapId: string | null;
+  roomId: string | null;
+  description: string;
+  objectives: RawObjective[];
+  rewards: RawReward[];
+  progressStatus: string | null;
+  tracked: boolean;
+  progress: TaskProgressRecord | null;
+};
+
+type BountyTaskOverviewSourceRow = {
+  taskId: string;
+  bountyInstanceId: number;
+  sourceType: BountyTaskSourceType;
+  title: string;
+  description: string;
+  expiresAt: string | null;
+  extraSpiritStonesReward: number;
+  extraSilverReward: number;
+  progressStatus: string | null;
+  tracked: boolean;
+  progress: TaskProgressRecord | null;
+  taskDef: TaskDefinition;
 };
 
 const asNonEmptyString = (v: unknown): string | null => {
@@ -331,11 +377,19 @@ const toTaskRewardDto = (
   };
 };
 
-const getProgressValue = (progress: unknown, objectiveId: string): number => {
+const toTaskProgressRecord = (value: unknown): TaskProgressRecord | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record: TaskProgressRecord = {};
+  for (const [key, entryValue] of Object.entries(value as Record<string, unknown>)) {
+    record[key] = asFiniteNonNegativeInt(entryValue, 0);
+  }
+  return record;
+};
+
+const getProgressValue = (progress: TaskProgressRecord | null | undefined, objectiveId: string): number => {
   if (!objectiveId) return 0;
-  if (!progress || typeof progress !== 'object') return 0;
-  const record = progress as Record<string, unknown>;
-  return asFiniteNonNegativeInt(record[objectiveId], 0);
+  if (!progress) return 0;
+  return asFiniteNonNegativeInt(progress[objectiveId], 0);
 };
 
 const computeRemainingSeconds = (expiresAt: unknown): number | null => {
@@ -343,6 +397,49 @@ const computeRemainingSeconds = (expiresAt: unknown): number | null => {
   const ms = expiresAt instanceof Date ? expiresAt.getTime() : typeof expiresAt === 'string' ? Date.parse(expiresAt) : NaN;
   if (!Number.isFinite(ms)) return null;
   return Math.max(0, Math.floor((ms - Date.now()) / 1000));
+};
+
+const buildTaskObjectiveDtos = (
+  objectives: RawObjective[],
+  progress: TaskProgressRecord | null,
+): TaskObjectiveDto[] => {
+  return objectives
+    .map((objective) => {
+      const objectiveId = asNonEmptyString(objective.id) ?? '';
+      const text = String(objective.text ?? '');
+      const target = Math.max(1, asFiniteNonNegativeInt(objective.target, 1));
+      const done = Math.min(target, getProgressValue(progress, objectiveId));
+      const type = String(objective.type ?? 'unknown');
+      const paramsValue = objective.params;
+      const params = paramsValue && typeof paramsValue === 'object'
+        ? (paramsValue as Record<string, unknown>)
+        : undefined;
+      const objectiveMapName = resolveObjectiveMapName(params);
+      return {
+        id: objectiveId,
+        type,
+        text,
+        done,
+        target,
+        mapName: objectiveMapName?.name ?? null,
+        mapNameType: objectiveMapName?.type ?? null,
+        ...(params ? { params } : {}),
+      };
+    })
+    .filter((objective) => objective.text);
+};
+
+const buildTaskRewardDtos = (
+  rewards: RawReward[],
+  itemMeta: Map<string, RewardItemDisplayMeta>,
+): TaskRewardDto[] => {
+  return rewards
+    .map((reward) => toTaskRewardDto(reward, itemMeta))
+    .filter((reward): reward is TaskRewardDto => reward !== null && reward.amount > 0);
+};
+
+const normalizeBountyTaskSourceType = (value: unknown): BountyTaskSourceType => {
+  return asNonEmptyString(value) === 'player' ? 'player' : 'daily';
 };
 
 const loadCharacterTaskRealmState = async (
@@ -527,22 +624,21 @@ const resetRecurringTaskProgressIfNeeded = async (
   await request;
 };
 
-export const getTaskOverview = async (
+const buildTaskOverviewSourceRows = async (
   characterId: number,
-  category?: TaskCategory
-): Promise<{ tasks: TaskOverviewDto[] }> => {
+  category?: TaskCategory,
+): Promise<TaskOverviewSourceRow[]> => {
   const cid = Number(characterId);
-  if (!Number.isFinite(cid) || cid <= 0) return { tasks: [] };
+  if (!Number.isFinite(cid) || cid <= 0) return [];
   const characterRealmState = await loadCharacterTaskRealmState(cid);
-  if (!characterRealmState) return { tasks: [] };
+  if (!characterRealmState) return [];
   await resetRecurringTaskProgressIfNeeded(cid, undefined, characterRealmState);
 
   const resolvedCategory = normalizeTaskCategory(category);
   const defs = getStaticTaskDefinitions().filter((entry) => {
     if (!entry.enabled) return false;
     if (resolvedCategory && entry.category !== resolvedCategory) return false;
-    if (!isTaskDefinitionUnlockedForCharacter(entry, characterRealmState)) return false;
-    return true;
+    return isTaskDefinitionUnlockedForCharacter(entry, characterRealmState);
   });
 
   const taskIds = defs.map((entry) => entry.id);
@@ -559,86 +655,90 @@ export const getTaskOverview = async (
           [cid, taskIds],
         );
 
-  const progressByTaskId = new Map<string, { progress_status: unknown; tracked: unknown; progress: unknown }>();
+  const progressByTaskId = new Map<string, {
+    progressStatus: string | null;
+    tracked: boolean;
+    progress: TaskProgressRecord | null;
+  }>();
   for (const row of progressRes.rows as Array<Record<string, unknown>>) {
     const taskId = asNonEmptyString(row.task_id);
     if (!taskId) continue;
     progressByTaskId.set(taskId, {
-      progress_status: row.progress_status,
-      tracked: row.tracked,
-      progress: row.progress,
+      progressStatus: asNonEmptyString(row.progress_status),
+      tracked: row.tracked === true,
+      progress: toTaskProgressRecord(row.progress),
     });
   }
 
-  const rows = defs
+  return defs
     .sort((left, right) => left.category.localeCompare(right.category) || right.sort_weight - left.sort_weight || left.id.localeCompare(right.id))
     .map((def) => {
       const progress = progressByTaskId.get(def.id);
       return {
         id: def.id,
-        category: def.category,
-        title: def.title,
-        realm: def.realm,
-        giver_npc_id: def.giver_npc_id,
-        map_id: def.map_id,
-        room_id: def.room_id,
-        description: def.description,
-        objectives: def.objectives,
-        rewards: def.rewards,
-        progress_status: progress?.progress_status,
-        tracked: progress?.tracked,
-        progress: progress?.progress,
+        category: normalizeTaskCategory(def.category) ?? 'main',
+        title: String(def.title ?? def.id),
+        realm: asNonEmptyString(def.realm) ?? '凡人',
+        giverNpcId: asNonEmptyString(def.giver_npc_id),
+        mapId: asNonEmptyString(def.map_id),
+        roomId: asNonEmptyString(def.room_id),
+        description: String(def.description ?? ''),
+        objectives: parseObjectives(def.objectives),
+        rewards: parseRewards(def.rewards),
+        progressStatus: progress?.progressStatus ?? null,
+        tracked: progress?.tracked === true,
+        progress: progress?.progress ?? null,
       };
     });
-
-  const itemMeta = toTaskRewardItemMetaMap(
-    collectRewardItemDefIds(rows.map((row) => parseRewards(row.rewards))),
-  );
-
-  const tasks: TaskOverviewDto[] = rows
-    .map((r) => {
-      const id = asNonEmptyString(r.id) ?? '';
-      const category = normalizeTaskCategory(r.category) ?? 'main';
-      const title = String(r.title ?? id);
-      const realm = asNonEmptyString(r.realm) ?? '凡人';
-      const giverNpcId = asNonEmptyString(r.giver_npc_id);
-      const mapId = asNonEmptyString(r.map_id);
-      const mapName = resolveMapName(mapId);
-      const roomId = asNonEmptyString(r.room_id);
-      const description = String(r.description ?? '');
-      const tracked = r.tracked === true;
-      const status = mapProgressStatusToUiStatus(r.progress_status);
-
-      const objectives = parseObjectives(r.objectives)
-        .map((o) => {
-          const oid = asNonEmptyString(o?.id) ?? '';
-          const text = String(o?.text ?? '');
-          const target = Math.max(1, asFiniteNonNegativeInt(o?.target, 1));
-          const done = Math.min(target, getProgressValue(r.progress, oid));
-          const type = String(o?.type ?? 'unknown');
-          const paramsValue = o?.params;
-          const params = paramsValue && typeof paramsValue === 'object' ? (paramsValue as Record<string, unknown>) : undefined;
-          const objMapName = resolveObjectiveMapName(params);
-          return { id: oid, type, text, done, target, mapName: objMapName?.name ?? null, mapNameType: objMapName?.type ?? null, ...(params ? { params } : {}) };
-        })
-        .filter((x) => x.text);
-
-      const rewards = parseRewards(r.rewards)
-        .map((rw) => toTaskRewardDto(rw, itemMeta))
-        .filter((x): x is TaskRewardDto => x !== null && x.amount > 0);
-
-      return { id, category, title, realm, giverNpcId, mapId, mapName, roomId, status, tracked, description, objectives, rewards };
-    })
-    .filter((t) => t.id);
-
-  return { tasks };
 };
 
-export const getBountyTaskOverview = async (characterId: number): Promise<{ tasks: BountyTaskOverviewDto[] }> => {
+const buildTaskOverviewRewardMeta = (
+  rows: TaskOverviewSourceRow[],
+): Map<string, RewardItemDisplayMeta> => {
+  return toTaskRewardItemMetaMap(collectRewardItemDefIds(rows.map((row) => row.rewards)));
+};
+
+const mapTaskOverviewDetail = (
+  row: TaskOverviewSourceRow,
+  itemMeta: Map<string, RewardItemDisplayMeta>,
+): TaskOverviewDto => {
+  return {
+    id: row.id,
+    category: row.category,
+    title: row.title,
+    realm: row.realm,
+    giverNpcId: row.giverNpcId,
+    mapId: row.mapId,
+    mapName: resolveMapName(row.mapId),
+    roomId: row.roomId,
+    status: mapProgressStatusToUiStatus(row.progressStatus),
+    tracked: row.tracked,
+    description: row.description,
+    objectives: buildTaskObjectiveDtos(row.objectives, row.progress),
+    rewards: buildTaskRewardDtos(row.rewards, itemMeta),
+  };
+};
+
+const mapTaskOverviewSummary = (
+  row: TaskOverviewSourceRow,
+): TaskOverviewSummaryDto => {
+  return {
+    id: row.id,
+    category: row.category,
+    mapId: row.mapId,
+    roomId: row.roomId,
+    status: mapProgressStatusToUiStatus(row.progressStatus),
+    tracked: row.tracked,
+  };
+};
+
+const buildBountyTaskOverviewSourceRows = async (
+  characterId: number,
+): Promise<BountyTaskOverviewSourceRow[]> => {
   const cid = Number(characterId);
-  if (!Number.isFinite(cid) || cid <= 0) return { tasks: [] };
+  if (!Number.isFinite(cid) || cid <= 0) return [];
   const characterRealmState = await loadCharacterTaskRealmState(cid);
-  if (!characterRealmState) return { tasks: [] };
+  if (!characterRealmState) return [];
   await resetRecurringTaskProgressIfNeeded(cid, undefined, characterRealmState);
 
   const res = await query(
@@ -682,117 +782,142 @@ export const getBountyTaskOverview = async (characterId: number): Promise<{ task
     [cid],
   );
 
-  const rows = (res.rows ?? []) as Array<{
-    bounty_instance_id: unknown;
-    source_type: unknown;
-    task_id: unknown;
-    bounty_title: unknown;
-    bounty_description: unknown;
-    expires_at: unknown;
-    spirit_stones_reward: unknown;
-    silver_reward: unknown;
-    progress_status: unknown;
-    tracked: unknown;
-    progress: unknown;
-  }>;
-
+  const queryRows = (res.rows ?? []) as Array<Record<string, unknown>>;
   const taskDefMap = await getTaskDefinitionsByIds(
-    rows
+    queryRows
       .map((row) => asNonEmptyString(row.task_id))
       .filter((taskId): taskId is string => Boolean(taskId)),
   );
 
-  const itemMeta = toTaskRewardItemMetaMap(
-    collectRewardItemDefIds(
-      rows.map((row) => {
-        const taskId = asNonEmptyString(row.task_id);
-        if (!taskId) return [];
-        const taskDef = taskDefMap.get(taskId);
-        return taskDef ? parseRewards(taskDef.rewards) : [];
-      }),
-    ),
+  return queryRows.flatMap((row) => {
+    const taskId = asNonEmptyString(row.task_id);
+    if (!taskId) return [];
+    const taskDef = taskDefMap.get(taskId);
+    if (!taskDef) return [];
+
+    const bountyInstanceIdRaw = typeof row.bounty_instance_id === 'number'
+      ? row.bounty_instance_id
+      : Number(row.bounty_instance_id);
+    const bountyInstanceId = Number.isFinite(bountyInstanceIdRaw) ? Math.trunc(bountyInstanceIdRaw) : 0;
+    const expiresAt = row.expires_at ? new Date(String(row.expires_at)).toISOString() : null;
+
+    return [{
+      taskId,
+      bountyInstanceId,
+      sourceType: normalizeBountyTaskSourceType(row.source_type),
+      title: String(row.bounty_title ?? taskId),
+      description: String(row.bounty_description ?? ''),
+      expiresAt,
+      extraSpiritStonesReward: asFiniteNonNegativeInt(row.spirit_stones_reward, 0),
+      extraSilverReward: asFiniteNonNegativeInt(row.silver_reward, 0),
+      progressStatus: asNonEmptyString(row.progress_status),
+      tracked: row.tracked === true,
+      progress: toTaskProgressRecord(row.progress),
+      taskDef,
+    }];
+  });
+};
+
+const buildBountyTaskOverviewRewardMeta = (
+  rows: BountyTaskOverviewSourceRow[],
+): Map<string, RewardItemDisplayMeta> => {
+  return toTaskRewardItemMetaMap(
+    collectRewardItemDefIds(rows.map((row) => parseRewards(row.taskDef.rewards))),
   );
+};
 
-  const tasks: BountyTaskOverviewDto[] = rows
-    .map((r) => {
-      const taskId = asNonEmptyString(r.task_id) ?? '';
-      if (!taskId) return null;
+const mapBountyTaskOverviewDetail = (
+  row: BountyTaskOverviewSourceRow,
+  itemMeta: Map<string, RewardItemDisplayMeta>,
+): BountyTaskOverviewDto => {
+  const rewardOut: TaskRewardDto[] = [];
+  if (row.extraSilverReward > 0) {
+    rewardOut.push({
+      type: 'silver',
+      name: getRewardCurrencyDisplayName('silver'),
+      amount: row.extraSilverReward,
+    });
+  }
+  if (row.extraSpiritStonesReward > 0) {
+    rewardOut.push({
+      type: 'spirit_stones',
+      name: getRewardCurrencyDisplayName('spirit_stones'),
+      amount: row.extraSpiritStonesReward,
+    });
+  }
+  rewardOut.push(...buildTaskRewardDtos(parseRewards(row.taskDef.rewards), itemMeta));
 
-      const bountyInstanceIdRaw = typeof r.bounty_instance_id === 'number' ? r.bounty_instance_id : Number(r.bounty_instance_id);
-      const bountyInstanceId = Number.isFinite(bountyInstanceIdRaw) ? Math.trunc(bountyInstanceIdRaw) : 0;
-      const sourceType = (asNonEmptyString(r.source_type) ?? 'daily') as BountyTaskSourceType;
-      const expiresAt = r.expires_at ? new Date(String(r.expires_at)).toISOString() : null;
-      const remainingSeconds = computeRemainingSeconds(expiresAt);
+  return {
+    id: row.taskId,
+    category: 'bounty',
+    title: row.title,
+    realm: asNonEmptyString(row.taskDef.realm) ?? '凡人',
+    giverNpcId: asNonEmptyString(row.taskDef.giver_npc_id),
+    mapId: asNonEmptyString(row.taskDef.map_id),
+    mapName: resolveMapName(asNonEmptyString(row.taskDef.map_id)),
+    roomId: asNonEmptyString(row.taskDef.room_id),
+    status: mapProgressStatusToUiStatus(row.progressStatus),
+    tracked: row.tracked,
+    description: row.description,
+    objectives: buildTaskObjectiveDtos(parseObjectives(row.taskDef.objectives), row.progress),
+    rewards: rewardOut,
+    bountyInstanceId: row.bountyInstanceId,
+    sourceType: row.sourceType,
+    expiresAt: row.expiresAt,
+    remainingSeconds: computeRemainingSeconds(row.expiresAt),
+  };
+};
 
-      const title = String(r.bounty_title ?? taskId);
-      const taskDef = taskDefMap.get(taskId);
-      if (!taskDef) return null;
-      const realm = taskDef.realm ?? '凡人';
-      const giverNpcId = asNonEmptyString(taskDef.giver_npc_id);
-      const mapId = taskDef.map_id;
-      const mapName = resolveMapName(mapId);
-      const roomId = taskDef.room_id;
-      const description = String(r.bounty_description ?? '');
-      const tracked = r.tracked === true;
-      const status = mapProgressStatusToUiStatus(r.progress_status);
+const mapBountyTaskOverviewSummary = (
+  row: BountyTaskOverviewSourceRow,
+): BountyTaskOverviewSummaryDto => {
+  return {
+    id: row.taskId,
+    status: mapProgressStatusToUiStatus(row.progressStatus),
+    sourceType: row.sourceType,
+    expiresAt: row.expiresAt,
+    remainingSeconds: computeRemainingSeconds(row.expiresAt),
+  };
+};
 
-      const objectives = parseObjectives(taskDef.objectives)
-        .map((o) => {
-          const oid = asNonEmptyString(o?.id) ?? '';
-          const text = String(o?.text ?? '');
-          const target = Math.max(1, asFiniteNonNegativeInt(o?.target, 1));
-          const done = Math.min(target, getProgressValue(r.progress, oid));
-          const type = String(o?.type ?? 'unknown');
-          const paramsValue = o?.params;
-          const params = paramsValue && typeof paramsValue === 'object' ? (paramsValue as Record<string, unknown>) : undefined;
-          const objMapName = resolveObjectiveMapName(params);
-          return { id: oid, type, text, done, target, mapName: objMapName?.name ?? null, mapNameType: objMapName?.type ?? null, ...(params ? { params } : {}) };
-        })
-        .filter((x) => x.text);
+export const getTaskOverview = async (
+  characterId: number,
+  category?: TaskCategory,
+): Promise<{ tasks: TaskOverviewDto[] }> => {
+  const rows = await buildTaskOverviewSourceRows(characterId, category);
+  const itemMeta = buildTaskOverviewRewardMeta(rows);
+  return {
+    tasks: rows.map((row) => mapTaskOverviewDetail(row, itemMeta)),
+  };
+};
 
-      const rewardOut: TaskRewardDto[] = [];
-      const extraSpirit = asFiniteNonNegativeInt(r.spirit_stones_reward, 0);
-      const extraSilver = asFiniteNonNegativeInt(r.silver_reward, 0);
-      if (extraSilver > 0) {
-        rewardOut.push({ type: 'silver', name: getRewardCurrencyDisplayName('silver'), amount: extraSilver });
-      }
-      if (extraSpirit > 0) {
-        rewardOut.push({
-          type: 'spirit_stones',
-          name: getRewardCurrencyDisplayName('spirit_stones'),
-          amount: extraSpirit,
-        });
-      }
+export const getTaskOverviewSummary = async (
+  characterId: number,
+  category?: TaskCategory,
+): Promise<{ tasks: TaskOverviewSummaryDto[] }> => {
+  const rows = await buildTaskOverviewSourceRows(characterId, category);
+  return {
+    tasks: rows.map(mapTaskOverviewSummary),
+  };
+};
 
-      const taskRewards = parseRewards(taskDef.rewards)
-        .map((rw) => toTaskRewardDto(rw, itemMeta))
-        .filter((x): x is TaskRewardDto => x !== null && x.amount > 0);
+export const getBountyTaskOverview = async (
+  characterId: number,
+): Promise<{ tasks: BountyTaskOverviewDto[] }> => {
+  const rows = await buildBountyTaskOverviewSourceRows(characterId);
+  const itemMeta = buildBountyTaskOverviewRewardMeta(rows);
+  return {
+    tasks: rows.map((row) => mapBountyTaskOverviewDetail(row, itemMeta)),
+  };
+};
 
-      rewardOut.push(...taskRewards);
-
-      return {
-        id: taskId,
-        category: 'bounty',
-        title,
-        realm,
-        giverNpcId,
-        mapId,
-        mapName,
-        roomId,
-        status,
-        tracked,
-        description,
-        objectives,
-        rewards: rewardOut,
-        bountyInstanceId,
-        sourceType,
-        expiresAt,
-        remainingSeconds,
-      };
-    })
-    .filter((x): x is BountyTaskOverviewDto => x !== null);
-
-  return { tasks };
+export const getBountyTaskOverviewSummary = async (
+  characterId: number,
+): Promise<{ tasks: BountyTaskOverviewSummaryDto[] }> => {
+  const rows = await buildBountyTaskOverviewSourceRows(characterId);
+  return {
+    tasks: rows.map(mapBountyTaskOverviewSummary),
+  };
 };
 
 export const setTaskTracked = async (

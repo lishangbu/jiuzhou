@@ -1,8 +1,12 @@
 import {
   getBountyTaskOverview,
+  getBountyTaskOverviewSummary,
   getTaskOverview,
+  getTaskOverviewSummary,
   type BountyTaskOverviewResponse,
+  type BountyTaskOverviewSummaryResponse,
   type TaskOverviewResponse,
+  type TaskOverviewSummaryResponse,
 } from '../../../services/api';
 
 /**
@@ -29,6 +33,8 @@ import {
 type TaskOverviewRequestScopeState = {
   taskOverviewInflight: Promise<TaskOverviewResponse> | null;
   bountyTaskOverviewInflight: Promise<BountyTaskOverviewResponse> | null;
+  taskOverviewSummaryInflight: Promise<TaskOverviewSummaryResponse> | null;
+  bountyTaskOverviewSummaryInflight: Promise<BountyTaskOverviewSummaryResponse> | null;
 };
 
 type SharedTaskOverviewLoadOptions = {
@@ -40,6 +46,8 @@ const taskOverviewRequestScopeStateMap = new Map<string, TaskOverviewRequestScop
 const createEmptyTaskOverviewRequestScopeState = (): TaskOverviewRequestScopeState => ({
   taskOverviewInflight: null,
   bountyTaskOverviewInflight: null,
+  taskOverviewSummaryInflight: null,
+  bountyTaskOverviewSummaryInflight: null,
 });
 
 const getTaskOverviewRequestScopeState = (
@@ -56,7 +64,12 @@ const getTaskOverviewRequestScopeState = (
 const clearTaskOverviewRequestScopeIfIdle = (scopeKey: string): void => {
   const state = taskOverviewRequestScopeStateMap.get(scopeKey);
   if (!state) return;
-  if (state.taskOverviewInflight || state.bountyTaskOverviewInflight) return;
+  if (
+    state.taskOverviewInflight
+    || state.bountyTaskOverviewInflight
+    || state.taskOverviewSummaryInflight
+    || state.bountyTaskOverviewSummaryInflight
+  ) return;
   taskOverviewRequestScopeStateMap.delete(scopeKey);
 };
 
@@ -116,5 +129,35 @@ export const loadSharedBountyTaskOverview = (
       state.bountyTaskOverviewInflight = request;
     },
     requestFactory: () => getBountyTaskOverview(),
+  });
+};
+
+export const loadSharedTaskOverviewSummary = (
+  scopeKey: string,
+  options?: SharedTaskOverviewLoadOptions,
+): Promise<TaskOverviewSummaryResponse> => {
+  return runScopedTaskOverviewRequest({
+    scopeKey,
+    forceRefresh: options?.forceRefresh,
+    getInflight: (state) => state.taskOverviewSummaryInflight,
+    setInflight: (state, request) => {
+      state.taskOverviewSummaryInflight = request;
+    },
+    requestFactory: () => getTaskOverviewSummary(),
+  });
+};
+
+export const loadSharedBountyTaskOverviewSummary = (
+  scopeKey: string,
+  options?: SharedTaskOverviewLoadOptions,
+): Promise<BountyTaskOverviewSummaryResponse> => {
+  return runScopedTaskOverviewRequest({
+    scopeKey,
+    forceRefresh: options?.forceRefresh,
+    getInflight: (state) => state.bountyTaskOverviewSummaryInflight,
+    setInflight: (state, request) => {
+      state.bountyTaskOverviewSummaryInflight = request;
+    },
+    requestFactory: () => getBountyTaskOverviewSummary(),
   });
 };

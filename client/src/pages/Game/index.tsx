@@ -67,13 +67,13 @@ import {
 } from '../../services/api';
 import { getUnifiedApiErrorMessage } from '../../services/api';
 import type {
-  BountyTaskOverviewRowDto,
+  BountyTaskOverviewSummaryRowDto,
   GameHomeOverviewDto,
   InventoryItemDto,
   NpcTalkResponse,
   NpcTalkTaskOption,
   RealmOverviewDto,
-  TaskOverviewRowDto,
+  TaskOverviewSummaryRowDto,
   TechniqueResearchResultStatusDto,
   BattleSessionSnapshotDto,
 } from '../../services/api';
@@ -114,8 +114,8 @@ import {
 } from './shared/taskIndicator';
 import {
   clearTaskOverviewRequestScope,
-  loadSharedBountyTaskOverview,
-  loadSharedTaskOverview,
+  loadSharedBountyTaskOverviewSummary,
+  loadSharedTaskOverviewSummary,
 } from './shared/taskOverviewRequests';
 import { hydratePhoneBindingStatus, invalidatePhoneBindingStatus } from './shared/usePhoneBindingStatus';
 import { useRealtimeMemberPresence } from './shared/useRealtimeMemberPresence';
@@ -289,7 +289,7 @@ const countUnreadTeamApplications = (
 
 const resolveTrackedRoomIdsForMap = (
   currentMapId: string,
-  taskList: TaskOverviewRowDto[],
+  taskList: TaskOverviewSummaryRowDto[],
   mainQuestProgress: MainQuestProgressDto | null,
 ): string[] => {
   if (!currentMapId) return [];
@@ -309,8 +309,8 @@ const resolveTrackedRoomIdsForMap = (
 };
 
 const resolveTaskIndicatorSnapshot = (
-  taskRows: TaskOverviewRowDto[],
-  bountyTasks: BountyTaskOverviewRowDto[],
+  taskRows: TaskOverviewSummaryRowDto[],
+  bountyTasks: BountyTaskOverviewSummaryRowDto[],
   nowTs: number,
 ): { count: number; nextExpiryTs: number | null } => {
   const taskCount = countCompletableTaskOverviewRows(taskRows);
@@ -742,7 +742,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const teamBattleAutoCloseTimerRef = useRef<number | null>(null);
   const taskIndicatorQueuedRefreshTimerRef = useRef<number | null>(null);
   const taskIndicatorExpiryTimerRef = useRef<number | null>(null);
-  const latestBountyOverviewTasksRef = useRef<BountyTaskOverviewRowDto[]>([]);
+  const latestBountyOverviewTasksRef = useRef<BountyTaskOverviewSummaryRowDto[]>([]);
   const activeBattleSessionRef = useRef<BattleSessionSnapshotDto | null>(null);
   const reconnectBattleIdRef = useRef<string | null>(null);
   const viewModeRef = useRef<'map' | 'battle'>('map');
@@ -1073,8 +1073,8 @@ const Game: FC<GameProps> = ({ onLogout }) => {
 
   const loadTrackedRoomIdsByMap = useCallback(async (mapId: string) => {
     try {
-      // 复用首页任务总览共享请求层，避免地图追踪与任务角标首屏重复命中同一接口。
-      const taskRes = await loadSharedTaskOverview(taskOverviewRequestScopeKeyRef.current);
+      // 复用首页任务摘要共享请求层，避免地图追踪与任务角标首屏重复命中详情接口。
+      const taskRes = await loadSharedTaskOverviewSummary(taskOverviewRequestScopeKeyRef.current);
       const taskList = taskRes?.success && taskRes.data?.tasks ? taskRes.data.tasks : [];
 
       // 获取主线任务追踪的房间
@@ -1821,8 +1821,8 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   }, []);
 
   const applyTaskIndicatorSnapshot = useCallback((
-    taskRows: TaskOverviewRowDto[],
-    bountyTasks: BountyTaskOverviewRowDto[],
+    taskRows: TaskOverviewSummaryRowDto[],
+    bountyTasks: BountyTaskOverviewSummaryRowDto[],
     onExpiry: () => void,
   ) => {
     const nowTs = Date.now();
@@ -1848,8 +1848,8 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     }
 
     const [taskResult, bountyResult] = await Promise.allSettled([
-      loadSharedTaskOverview(taskOverviewRequestScopeKeyRef.current),
-      loadSharedBountyTaskOverview(taskOverviewRequestScopeKeyRef.current),
+      loadSharedTaskOverviewSummary(taskOverviewRequestScopeKeyRef.current),
+      loadSharedBountyTaskOverviewSummary(taskOverviewRequestScopeKeyRef.current),
     ]);
 
     const taskRows = taskResult.status === 'fulfilled' && taskResult.value.success && taskResult.value.data
