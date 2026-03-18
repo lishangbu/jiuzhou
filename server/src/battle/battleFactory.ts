@@ -7,14 +7,13 @@ import type {
   BattleState, 
   BattleUnit, 
   BattleAttrs,
-  BattleSkill,
   BattleStats,
   BattleSetBonusEffect,
-  MonsterAIProfile,
-  SkillEffect
+  MonsterAIProfile
 } from './types.js';
 import { generateBattleSeed, getNextRandom } from './utils/random.js';
 import { getNormalAttack } from './modules/skill.js';
+import { toBattleSkillFromSkillData, type BattleSkillDataInput } from './utils/skillConversion.js';
 import { normalizeRealmKeepingUnknown } from '../services/shared/realmRules.js';
 import type { PartnerSkillPolicySlotDto } from '../services/shared/partnerSkillPolicy.js';
 import { CHARACTER_RATIO_ATTR_KEY_SET } from '../services/shared/characterAttrRegistry.js';
@@ -191,21 +190,7 @@ function applyMonsterEncounterScaling(state: BattleState, base: BattleAttrs, mon
 }
 
 // 技能数据接口
-export interface SkillData {
-  id: string;
-  name: string;
-  cost_lingqi: number;
-  cost_lingqi_rate: number;
-  cost_qixue: number;
-  cost_qixue_rate: number;
-  cooldown: number;
-  target_type: string;
-  target_count: number;
-  damage_type: string;
-  element: string;
-  effects: SkillEffect[];
-  ai_priority: number;
-}
+export interface SkillData extends BattleSkillDataInput {}
 
 /**
  * 创建PVE战斗状态（支持单人或组队多人）
@@ -361,7 +346,7 @@ function createCharacterUnit(
   if (type === 'partner') {
     attrs.realm = undefined;
   }
-  const battleSkills = skills.map(convertSkillData);
+  const battleSkills = skills.map(toBattleSkillFromSkillData);
   
   // 确保有普通攻击
   const hasNormalAttack = battleSkills.some(s => s.id === 'skill-normal-attack');
@@ -403,7 +388,7 @@ function createCharacterUnit(
 function createMonsterUnit(state: BattleState, data: MonsterData, skills: SkillData[], index: number): BattleUnit {
   const attrs = extractMonsterAttrs(data);
   const finalAttrs = applyMonsterEncounterScaling(state, attrs, data);
-  const battleSkills = skills.map(convertSkillData);
+  const battleSkills = skills.map(toBattleSkillFromSkillData);
   
   // 确保有普通攻击
   const hasNormalAttack = battleSkills.some(s => s.id === 'skill-normal-attack');
@@ -516,31 +501,6 @@ function extractMonsterAttrs(data: MonsterData): BattleAttrs {
     lingqi_huifu: toNumber(attrs.lingqi_huifu, 0),
     realm: data.realm || '凡人',
     element: data.element || 'none',
-  };
-}
-
-/**
- * 转换技能数据
- */
-function convertSkillData(data: SkillData): BattleSkill {
-  return {
-    id: data.id,
-    name: data.name,
-    source: 'innate',
-    cost: {
-      lingqi: data.cost_lingqi || 0,
-      lingqiRate: data.cost_lingqi_rate || 0,
-      qixue: data.cost_qixue || 0,
-      qixueRate: data.cost_qixue_rate || 0,
-    },
-    cooldown: data.cooldown || 0,
-    targetType: (data.target_type || 'single_enemy') as any,
-    targetCount: data.target_count || 1,
-    damageType: data.damage_type as any,
-    element: data.element || 'none',
-    effects: data.effects || [],
-    triggerType: 'active',
-    aiPriority: data.ai_priority || 50,
   };
 }
 

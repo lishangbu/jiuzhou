@@ -107,6 +107,7 @@ function battleSkillsToSkillData(
     damage_type: s.damageType ?? 'none',
     element: s.element,
     effects: s.effects,
+    trigger_type: s.triggerType,
     ai_priority: s.aiPriority,
   }));
 }

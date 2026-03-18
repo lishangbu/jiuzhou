@@ -25,50 +25,24 @@ import type {
   BattleSkill,
 } from "../../../battle/types.js";
 import type { SkillData } from "../../../battle/battleFactory.js";
+import {
+  normalizeSkillTriggerType,
+  toBattleSkillFromSkillData,
+} from "../../../battle/utils/skillConversion.js";
 import type { SkillDefConfig } from "../../staticConfigLoader.js";
 import { getSkillDefinitions } from "../../staticConfigLoader.js";
 import { characterTechniqueService } from "../../characterTechniqueService.js";
 import {
   buildEffectiveTechniqueSkillData,
 } from "../../shared/techniqueSkillProgression.js";
-import {
-  toNumber,
-  toText,
-  uniqueStringIds,
-} from "./helpers.js";
+import { toNumber, uniqueStringIds } from "./helpers.js";
 
 export {
   applySkillUpgradeChanges,
   cloneSkillEffectList,
 } from "../../shared/techniqueSkillProgression.js";
 
-// ------ 常量 ------
-
-const MONSTER_SKILL_TARGET_TYPE_SET = new Set<BattleSkill["targetType"]>([
-  "self",
-  "single_enemy",
-  "single_ally",
-  "all_enemy",
-  "all_ally",
-  "random_enemy",
-  "random_ally",
-]);
-
 // ------ 基础转换 ------
-
-export function normalizeSkillTargetType(raw: unknown): BattleSkill["targetType"] {
-  const target = toText(raw);
-  return MONSTER_SKILL_TARGET_TYPE_SET.has(target as BattleSkill["targetType"])
-    ? (target as BattleSkill["targetType"])
-    : "single_enemy";
-}
-
-export function normalizeSkillDamageType(raw: unknown): BattleSkill["damageType"] {
-  const value = toText(raw);
-  if (value === "physical" || value === "magic" || value === "true")
-    return value;
-  return undefined;
-}
 
 /** 静态配置行 -> 战斗用 SkillData */
 export function toBattleSkillData(row: SkillDefConfig): SkillData {
@@ -86,31 +60,14 @@ export function toBattleSkillData(row: SkillDefConfig): SkillData {
     damage_type: String(row.damage_type || "none"),
     element: String(row.element || "none"),
     effects: effective.effects,
+    trigger_type: normalizeSkillTriggerType(row.trigger_type),
     ai_priority: effective.ai_priority,
   };
 }
 
 /** SkillData -> 战斗引擎 BattleSkill */
 export function toBattleSkill(skill: SkillData): BattleSkill {
-  return {
-    id: skill.id,
-    name: skill.name,
-    source: "innate",
-    cost: {
-      lingqi: skill.cost_lingqi,
-      lingqiRate: skill.cost_lingqi_rate,
-      qixue: skill.cost_qixue,
-      qixueRate: skill.cost_qixue_rate,
-    },
-    cooldown: skill.cooldown,
-    targetType: normalizeSkillTargetType(skill.target_type),
-    targetCount: Math.max(1, Math.floor(skill.target_count || 1)),
-    damageType: normalizeSkillDamageType(skill.damage_type),
-    element: String(skill.element || "none"),
-    effects: skill.effects.map((effect) => ({ ...effect })),
-    triggerType: "active",
-    aiPriority: Math.max(0, Math.floor(skill.ai_priority || 0)),
-  };
+  return toBattleSkillFromSkillData(skill);
 }
 
 export function cloneBattleSkill(skill: BattleSkill): BattleSkill {
@@ -182,6 +139,7 @@ export async function getCharacterBattleSkillData(
       damage_type: String(row.damage_type || "none"),
       element: String(row.element || "none"),
       effects: skillData.effects,
+      trigger_type: normalizeSkillTriggerType(row.trigger_type),
       ai_priority: skillData.ai_priority,
     });
   }

@@ -25,6 +25,7 @@ import type {
   BattleState,
   BattleUnit,
 } from '../../battle/types.js';
+import type { CharacterData, MonsterData } from '../../battle/battleFactory.js';
 
 const BASE_ATTRS: BattleAttrs = {
   max_qixue: 1200,
@@ -68,6 +69,100 @@ export const createAttrs = (overrides: Partial<BattleAttrs> = {}): BattleAttrs =
   ...BASE_ATTRS,
   ...overrides,
 });
+
+/**
+ * 为 battleFactory 构造最小合法角色数据。
+ *
+ * 复用点：
+ * - 供 battleFactory / BattleEngine 联调用例复用，避免每个测试文件各写一份 CharacterData 样板。
+ * - 高频变化点集中在 overrides，后续若基础属性口径调整，只需改这一处。
+ */
+export const createCharacterData = (
+  id: number,
+  overrides: Partial<CharacterData> = {},
+): CharacterData => ({
+  user_id: id,
+  id,
+  nickname: `角色${id}`,
+  realm: '炼气一层',
+  sub_realm: null,
+  attribute_element: 'none',
+  qixue: BASE_ATTRS.max_qixue,
+  max_qixue: BASE_ATTRS.max_qixue,
+  lingqi: BASE_ATTRS.max_lingqi,
+  max_lingqi: BASE_ATTRS.max_lingqi,
+  wugong: BASE_ATTRS.wugong,
+  fagong: BASE_ATTRS.fagong,
+  wufang: BASE_ATTRS.wufang,
+  fafang: BASE_ATTRS.fafang,
+  sudu: BASE_ATTRS.sudu,
+  mingzhong: BASE_ATTRS.mingzhong,
+  shanbi: BASE_ATTRS.shanbi,
+  zhaojia: BASE_ATTRS.zhaojia,
+  baoji: BASE_ATTRS.baoji,
+  baoshang: BASE_ATTRS.baoshang,
+  jianbaoshang: BASE_ATTRS.jianbaoshang,
+  jianfantan: BASE_ATTRS.jianfantan,
+  kangbao: BASE_ATTRS.kangbao,
+  zengshang: BASE_ATTRS.zengshang,
+  zhiliao: BASE_ATTRS.zhiliao,
+  jianliao: BASE_ATTRS.jianliao,
+  xixue: BASE_ATTRS.xixue,
+  lengque: BASE_ATTRS.lengque,
+  kongzhi_kangxing: BASE_ATTRS.kongzhi_kangxing,
+  jin_kangxing: BASE_ATTRS.jin_kangxing,
+  mu_kangxing: BASE_ATTRS.mu_kangxing,
+  shui_kangxing: BASE_ATTRS.shui_kangxing,
+  huo_kangxing: BASE_ATTRS.huo_kangxing,
+  tu_kangxing: BASE_ATTRS.tu_kangxing,
+  qixue_huifu: BASE_ATTRS.qixue_huifu,
+  lingqi_huifu: BASE_ATTRS.lingqi_huifu,
+  setBonusEffects: [],
+  ...overrides,
+});
+
+/**
+ * 为 battleFactory 构造最小合法怪物数据。
+ *
+ * 复用点：
+ * - 供需要直接调用 createPVEBattle 的测试复用，统一最小 MonsterData 口径。
+ * - 通过 base_attrs 局部覆盖控制怪物强度，避免测试文件各自拼接 base_attrs 结构。
+ */
+export const createMonsterData = (
+  id: string,
+  overrides: Partial<MonsterData> & { base_attrs?: Partial<MonsterData['base_attrs']> } = {},
+): MonsterData => {
+  const { base_attrs: baseAttrsOverrides, ...restOverrides } = overrides;
+  return {
+    id,
+    name: `怪物${id}`,
+    realm: '凡人',
+    element: 'none',
+    base_attrs: {
+      max_qixue: 500,
+      max_lingqi: 0,
+      wugong: 60,
+      fagong: 0,
+      wufang: 30,
+      fafang: 30,
+      sudu: 80,
+      mingzhong: 0.85,
+      shanbi: 0,
+      zhaojia: 0,
+      baoji: 0,
+      baoshang: 1.5,
+      jianbaoshang: 0,
+      jianfantan: 0,
+      kangbao: 0,
+      ...baseAttrsOverrides,
+    },
+    ai_profile: { skillIds: [], skillWeights: {}, phaseTriggers: [] },
+    exp_reward: 100,
+    silver_reward_min: 50,
+    silver_reward_max: 100,
+    ...restOverrides,
+  };
+};
 
 export const createUnit = (args: {
   id: string;
