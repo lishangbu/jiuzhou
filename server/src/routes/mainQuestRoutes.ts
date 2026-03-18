@@ -14,6 +14,7 @@ import {
 import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
 import { sendSuccess, sendResult } from '../middleware/response.js';
 import { BusinessError } from '../middleware/BusinessError.js';
+import { getSingleParam, parseNonEmptyText } from '../services/shared/httpParam.js';
 
 const router = Router();
 
@@ -37,21 +38,22 @@ router.get('/chapters', requireCharacter, asyncHandler(async (req, res) => {
 
 // 获取章节下的任务节列表
 router.get('/chapters/:chapterId/sections', requireCharacter, asyncHandler(async (req, res) => {
-  const userId = req.userId!;
   const characterId = req.characterId!;
 
-  const chapterId = typeof req.params.chapterId === 'string' ? req.params.chapterId : '';
+  const chapterId = parseNonEmptyText(getSingleParam(req.params.chapterId));
+  if (!chapterId) {
+    throw new BusinessError('章节ID不能为空');
+  }
   const data = await getSectionList(characterId, chapterId);
   return sendSuccess(res, data);
 }));
 
 // 开始对话
 router.post('/dialogue/start', requireCharacter, asyncHandler(async (req, res) => {
-  const userId = req.userId!;
   const characterId = req.characterId!;
 
   const body = req.body as { dialogueId?: string };
-  const dialogueId = typeof body?.dialogueId === 'string' ? body.dialogueId : undefined;
+  const dialogueId = parseNonEmptyText(body?.dialogueId) ?? undefined;
 
   const result = await startDialogue(characterId, dialogueId);
   return sendResult(res, result);
@@ -75,7 +77,7 @@ router.post('/dialogue/choice', requireCharacter, asyncHandler(async (req, res) 
   const characterId = req.characterId!;
 
   const body = req.body as { choiceId?: string };
-  const choiceId = typeof body?.choiceId === 'string' ? body.choiceId : '';
+  const choiceId = parseNonEmptyText(body?.choiceId);
 
   if (!choiceId) {
     throw new BusinessError('选项ID不能为空');

@@ -180,6 +180,88 @@ type RealmBreakthroughConfigFile = {
   breakthroughs: BreakthroughConfig[];
 };
 
+type EquippedMainTechniqueRow = {
+  technique_id: string | null;
+  current_layer: number | string | null;
+};
+
+type EquippedSubTechniqueRow = {
+  technique_id: string | null;
+  current_layer: number | string | null;
+  slot_index: number | string | null;
+};
+
+type CharacterRealmRow = {
+  id: number | string | null;
+  realm: string | null;
+  sub_realm: string | null;
+  exp: number | string | null;
+  spirit_stones: number | string | null;
+  attribute_points: number | string | null;
+};
+
+const isExpMinRequirement = (
+  requirement: BreakthroughRequirement,
+): requirement is ExpMinRequirement =>
+  requirement.type === "exp_min" && "min" in requirement;
+
+const isSpiritStonesMinRequirement = (
+  requirement: BreakthroughRequirement,
+): requirement is SpiritStonesMinRequirement =>
+  requirement.type === "spirit_stones_min" && "min" in requirement;
+
+const isTechniqueLayerMinRequirement = (
+  requirement: BreakthroughRequirement,
+): requirement is TechniqueLayerMinRequirement =>
+  requirement.type === "technique_layer_min" && "techniqueId" in requirement;
+
+const isMainTechniqueLayerMinRequirement = (
+  requirement: BreakthroughRequirement,
+): requirement is MainTechniqueLayerMinRequirement =>
+  requirement.type === "main_technique_layer_min" && "minLayer" in requirement;
+
+const isMainAndSubTechniqueLayerMinRequirement = (
+  requirement: BreakthroughRequirement,
+): requirement is MainAndSubTechniqueLayerMinRequirement =>
+  requirement.type === "main_and_sub_technique_layer_min" &&
+  "minLayer" in requirement;
+
+const isTechniquesCountMinLayerRequirement = (
+  requirement: BreakthroughRequirement,
+): requirement is TechniquesCountMinLayerRequirement =>
+  requirement.type === "techniques_count_min_layer" &&
+  "minCount" in requirement &&
+  "minLayer" in requirement;
+
+const isItemQtyMinRequirement = (
+  requirement: BreakthroughRequirement,
+): requirement is ItemQtyMinRequirement =>
+  requirement.type === "item_qty_min" && "itemDefId" in requirement;
+
+const isDungeonClearMinRequirement = (
+  requirement: BreakthroughRequirement,
+): requirement is DungeonClearMinRequirement =>
+  requirement.type === "dungeon_clear_min" && "minCount" in requirement;
+
+const isMainQuestChapterCompletedRequirement = (
+  requirement: BreakthroughRequirement,
+): requirement is MainQuestChapterCompletedRequirement =>
+  requirement.type === "main_quest_chapter_completed" && "chapterId" in requirement;
+
+const isVersionLockedRequirement = (
+  requirement: BreakthroughRequirement,
+): requirement is VersionLockedRequirement =>
+  requirement.type === "version_locked";
+
+const isExpCost = (cost: BreakthroughCost): cost is CostExp =>
+  cost.type === "exp" && "amount" in cost;
+
+const isSpiritStonesCost = (cost: BreakthroughCost): cost is CostSpiritStones =>
+  cost.type === "spirit_stones" && "amount" in cost;
+
+const isItemsCost = (cost: BreakthroughCost): cost is CostItems =>
+  cost.type === "items" && "items" in cost;
+
 let cachedConfig: RealmBreakthroughConfigFile | null = null;
 let cachedConfigPath: string | null = null;
 
@@ -357,7 +439,7 @@ const getEquippedMainTechnique = async (
       .filter((entry) => entry.enabled !== false)
       .map((entry) => [entry.id, String(entry.name || entry.id)] as const),
   );
-  const res = await query(
+  const res = await query<EquippedMainTechniqueRow>(
     `
       SELECT ct.technique_id, ct.current_layer
       FROM character_technique ct
@@ -367,7 +449,7 @@ const getEquippedMainTechnique = async (
     [characterId],
   );
   if (res.rows.length === 0) return null;
-  const row = res.rows[0] as any;
+  const row = res.rows[0];
   const techniqueId = String(row.technique_id || "").trim();
   const name = nameByTechniqueId.get(techniqueId) || techniqueId || "主功法";
   const layer = Number(row.current_layer ?? 0) || 0;
@@ -385,7 +467,7 @@ const getEquippedSubTechniques = async (
       .filter((entry) => entry.enabled !== false)
       .map((entry) => [entry.id, String(entry.name || entry.id)] as const),
   );
-  const res = await query(
+  const res = await query<EquippedSubTechniqueRow>(
     `
       SELECT ct.technique_id, ct.current_layer, ct.slot_index
       FROM character_technique ct
@@ -394,13 +476,13 @@ const getEquippedSubTechniques = async (
     `,
     [characterId],
   );
-  return (res.rows as any[])
+  return res.rows
     .map((row) => {
-      const techniqueId = String(row?.technique_id || "").trim();
+      const techniqueId = String(row.technique_id || "").trim();
       const name =
         nameByTechniqueId.get(techniqueId) || techniqueId || "副功法";
-      const layer = Number(row?.current_layer ?? 0) || 0;
-      const slotIndex = Number(row?.slot_index ?? 0) || 0;
+      const layer = Number(row.current_layer ?? 0) || 0;
+      const slotIndex = Number(row.slot_index ?? 0) || 0;
       if (!techniqueId || slotIndex <= 0) return null;
       return { techniqueId, name, layer, slotIndex };
     })
@@ -508,13 +590,15 @@ const evaluateRequirements = async (args: {
   const dungeonIds: string[] = [];
   const difficultyIds: string[] = [];
   for (const r of reqs) {
-    if (r && (r as any).type === "item_qty_min")
-      itemIds.push(String((r as any).itemDefId || ""));
-    if (r && (r as any).type === "technique_layer_min")
-      techniqueIds.push(String((r as any).techniqueId || ""));
-    if (r && (r as any).type === "dungeon_clear_min") {
-      dungeonIds.push(String((r as any).dungeonId || ""));
-      difficultyIds.push(String((r as any).difficultyId || ""));
+    if (isItemQtyMinRequirement(r)) {
+      itemIds.push(String(r.itemDefId || ""));
+    }
+    if (isTechniqueLayerMinRequirement(r)) {
+      techniqueIds.push(String(r.techniqueId || ""));
+    }
+    if (isDungeonClearMinRequirement(r)) {
+      dungeonIds.push(String(r.dungeonId || ""));
+      difficultyIds.push(String(r.difficultyId || ""));
     }
   }
   const itemMap = await getItemDefMap(itemIds);
@@ -552,12 +636,11 @@ const evaluateRequirements = async (args: {
   };
 
   for (const r of reqs) {
-    const id = String((r as any)?.id || "");
-    const title = String((r as any)?.title || "条件");
-    const type = String((r as any)?.type || "");
+    const id = String(r.id || "");
+    const title = String(r.title || "条件");
 
-    if (type === "exp_min") {
-      const min = Number((r as any).min ?? 0) || 0;
+    if (isExpMinRequirement(r)) {
+      const min = Number(r.min ?? 0) || 0;
       const ok = exp >= min;
       out.push({
         id: id || `exp-${min}`,
@@ -568,8 +651,8 @@ const evaluateRequirements = async (args: {
       continue;
     }
 
-    if (type === "spirit_stones_min") {
-      const min = Number((r as any).min ?? 0) || 0;
+    if (isSpiritStonesMinRequirement(r)) {
+      const min = Number(r.min ?? 0) || 0;
       const ok = spiritStones >= min;
       out.push({
         id: id || `ss-${min}`,
@@ -580,9 +663,9 @@ const evaluateRequirements = async (args: {
       continue;
     }
 
-    if (type === "technique_layer_min") {
-      const techniqueId = String((r as any).techniqueId || "").trim();
-      const minLayer = Number((r as any).minLayer ?? 0) || 0;
+    if (isTechniqueLayerMinRequirement(r)) {
+      const techniqueId = String(r.techniqueId || "").trim();
+      const minLayer = Number(r.minLayer ?? 0) || 0;
       const layer = techniqueId
         ? await getTechniqueLayer(characterId, techniqueId)
         : 0;
@@ -597,8 +680,8 @@ const evaluateRequirements = async (args: {
       continue;
     }
 
-    if (type === "main_technique_layer_min") {
-      const minLayer = Number((r as any).minLayer ?? 0) || 0;
+    if (isMainTechniqueLayerMinRequirement(r)) {
+      const minLayer = Number(r.minLayer ?? 0) || 0;
       const layer = mainTech?.layer ?? 0;
       const ok = layer >= minLayer;
       if (!mainTech) {
@@ -619,8 +702,8 @@ const evaluateRequirements = async (args: {
       continue;
     }
 
-    if (type === "main_and_sub_technique_layer_min") {
-      const minLayer = Number((r as any).minLayer ?? 0) || 0;
+    if (isMainAndSubTechniqueLayerMinRequirement(r)) {
+      const minLayer = Number(r.minLayer ?? 0) || 0;
       if (!mainTech) {
         out.push({
           id: id || `main-sub-${minLayer}`,
@@ -656,9 +739,9 @@ const evaluateRequirements = async (args: {
       continue;
     }
 
-    if (type === "techniques_count_min_layer") {
-      const minLayer = Number((r as any).minLayer ?? 0) || 0;
-      const minCount = Number((r as any).minCount ?? 0) || 0;
+    if (isTechniquesCountMinLayerRequirement(r)) {
+      const minLayer = Number(r.minLayer ?? 0) || 0;
+      const minCount = Number(r.minCount ?? 0) || 0;
       const cnt = await getTechniquesCountMinLayer(
         characterId,
         minLayer,
@@ -673,9 +756,9 @@ const evaluateRequirements = async (args: {
       continue;
     }
 
-    if (type === "item_qty_min") {
-      const itemDefId = String((r as any).itemDefId || "").trim();
-      const qtyNeed = Number((r as any).qty ?? 0) || 0;
+    if (isItemQtyMinRequirement(r)) {
+      const itemDefId = String(r.itemDefId || "").trim();
+      const qtyNeed = Number(r.qty ?? 0) || 0;
       const qtyHave = itemDefId
         ? await getItemQtyInBag(characterId, itemDefId)
         : 0;
@@ -691,10 +774,10 @@ const evaluateRequirements = async (args: {
       continue;
     }
 
-    if (type === "dungeon_clear_min") {
-      const minCount = Math.max(1, Number((r as any).minCount ?? 0) || 1);
-      const dungeonId = String((r as any).dungeonId || "").trim();
-      const difficultyId = String((r as any).difficultyId || "").trim();
+    if (isDungeonClearMinRequirement(r)) {
+      const minCount = Math.max(1, Number(r.minCount ?? 0) || 1);
+      const dungeonId = String(r.dungeonId || "").trim();
+      const difficultyId = String(r.difficultyId || "").trim();
       const clearCount = await getCachedDungeonClearCount(
         dungeonId,
         difficultyId,
@@ -731,8 +814,8 @@ const evaluateRequirements = async (args: {
       continue;
     }
 
-    if (type === "main_quest_chapter_completed") {
-      const chapterId = String((r as any).chapterId || "").trim();
+    if (isMainQuestChapterCompletedRequirement(r)) {
+      const chapterId = String(r.chapterId || "").trim();
       if (!completedChapterSet) {
         completedChapterSet = await getCompletedMainQuestChapterSet(
           characterId,
@@ -753,9 +836,9 @@ const evaluateRequirements = async (args: {
       continue;
     }
 
-    if (type === "version_locked") {
+    if (isVersionLockedRequirement(r)) {
       const reason =
-        String((r as any).reason || "").trim() || "当前版本暂未开放";
+        String(r.reason || "").trim() || "当前版本暂未开放";
       out.push({
         id: id || `version-locked-${Math.random().toString(36).slice(2)}`,
         title,
@@ -800,18 +883,15 @@ const buildCostsView = async (args: {
   const costItems: { itemDefId: string; qty: number }[] = [];
 
   for (const c of costs) {
-    const type = String((c as any)?.type || "");
-    if (type === "exp")
-      costExp += Math.max(0, Number((c as any).amount ?? 0) || 0);
-    else if (type === "spirit_stones")
-      costSpiritStones += Math.max(0, Number((c as any).amount ?? 0) || 0);
-    else if (type === "items") {
-      const items = Array.isArray((c as any).items)
-        ? ((c as any).items as any[])
-        : [];
+    if (isExpCost(c)) {
+      costExp += Math.max(0, Number(c.amount ?? 0) || 0);
+    } else if (isSpiritStonesCost(c)) {
+      costSpiritStones += Math.max(0, Number(c.amount ?? 0) || 0);
+    } else if (isItemsCost(c)) {
+      const items = Array.isArray(c.items) ? c.items : [];
       for (const it of items) {
-        const itemDefId = String(it?.itemDefId || "").trim();
-        const qty = Math.max(0, Number(it?.qty ?? 0) || 0);
+        const itemDefId = String(it.itemDefId || "").trim();
+        const qty = Math.max(0, Number(it.qty ?? 0) || 0);
         if (!itemDefId || qty <= 0) continue;
         costItems.push({ itemDefId, qty });
       }
@@ -893,8 +973,11 @@ const buildRewardsView = (rewards?: RewardConfig): RealmRewardView[] => {
   const pct = r.pct || {};
   const addPercent = r.addPercent || {};
 
-  const addPctRow = (key: string, title: string) => {
-    const v = Number((pct as any)[key] ?? 0) || 0;
+  const addPctRow = (
+    key: keyof NonNullable<RewardConfig["pct"]>,
+    title: string,
+  ) => {
+    const v = Number(pct[key] ?? 0) || 0;
     if (v !== 0) {
       const pctText = (v * 100).toFixed(2).replace(/\.?0+$/, "");
       out.push({
@@ -912,7 +995,7 @@ const buildRewardsView = (rewards?: RewardConfig): RealmRewardView[] => {
   addPctRow("wufang", "物防");
   addPctRow("fafang", "法防");
 
-  const kk = Number((addPercent as any).kongzhi_kangxing ?? 0) || 0;
+  const kk = Number(addPercent.kongzhi_kangxing ?? 0) || 0;
   if (kk !== 0) {
     const kkText = (kk * 100).toFixed(2).replace(/\.?0+$/, "");
     out.push({
@@ -1080,7 +1163,7 @@ class RealmService {
   async breakthroughToNextRealm(userId: number): Promise<RealmBreakthroughResult> {
     const cfg = await loadConfig();
 
-    const charRes = await query(
+    const charRes = await query<CharacterRealmRow>(
       `SELECT
          id, realm, sub_realm, exp, spirit_stones, attribute_points
        FROM characters
@@ -1091,7 +1174,7 @@ class RealmService {
     if (charRes.rows.length === 0)
       return { success: false, message: "角色不存在" };
 
-    const row = charRes.rows[0] as any;
+    const row = charRes.rows[0];
     const characterId = Number(row.id ?? 0) || 0;
     const realm = typeof row.realm === "string" ? row.realm.trim() : "凡人";
     const subRealm =

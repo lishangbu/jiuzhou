@@ -48,6 +48,7 @@ import {
   MIN_IDLE_DURATION_MS,
   resolveIdleDurationLimitByCharacter,
 } from '../services/shared/idleDurationLimits.js';
+import { getSingleParam, parseNonEmptyText } from '../services/shared/httpParam.js';
 import { toIdleSessionView } from '../services/idle/idleSessionView.js';
 
 // ============================================
@@ -198,7 +199,7 @@ router.get('/history', requireCharacter, asyncHandler(async (req, res) => {
 
 router.get('/history/:id/batches', requireCharacter, asyncHandler(async (req, res) => {
   const characterId = req.characterId!;
-  const sessionId = String(req.params.id || '');
+  const sessionId = parseNonEmptyText(getSingleParam(req.params.id));
 
   if (!sessionId) {
     throw new BusinessError('缺少 sessionId');
@@ -214,8 +215,8 @@ router.get('/history/:id/batches', requireCharacter, asyncHandler(async (req, re
 
 router.get('/history/:id/batches/:batchId', requireCharacter, asyncHandler(async (req, res) => {
   const characterId = req.characterId!;
-  const sessionId = String(req.params.id || '');
-  const batchId = String(req.params.batchId || '');
+  const sessionId = parseNonEmptyText(getSingleParam(req.params.id));
+  const batchId = parseNonEmptyText(getSingleParam(req.params.batchId));
 
   if (!sessionId) {
     throw new BusinessError('缺少 sessionId');
@@ -234,7 +235,7 @@ router.get('/history/:id/batches/:batchId', requireCharacter, asyncHandler(async
 
 router.post('/history/:id/viewed', requireCharacter, asyncHandler(async (req, res) => {
   const characterId = req.characterId!;
-  const sessionId = String(req.params.id || '');
+  const sessionId = parseNonEmptyText(getSingleParam(req.params.id));
 
   if (!sessionId) {
     throw new BusinessError('缺少 sessionId');

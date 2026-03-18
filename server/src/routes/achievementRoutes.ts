@@ -13,28 +13,29 @@ import { notifyAchievementUpdate } from '../services/achievementPush.js';
 import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
 import { sendSuccess, sendResult } from '../middleware/response.js';
 import { BusinessError } from '../middleware/BusinessError.js';
+import { getSingleParam, getSingleQueryValue, parseNonEmptyText, parsePositiveInt } from '../services/shared/httpParam.js';
 
 const router = Router();
 
 
 router.get('/list', requireCharacter, asyncHandler(async (req, res) => {
-  const userId = req.userId!;
   const characterId = req.characterId!;
 
-  const category = typeof req.query.category === 'string' ? req.query.category : undefined;
-  const status = typeof req.query.status === 'string' ? (req.query.status as AchievementListStatusFilter) : undefined;
-  const page = typeof req.query.page === 'string' ? Number(req.query.page) : undefined;
-  const limit = typeof req.query.limit === 'string' ? Number(req.query.limit) : undefined;
+  const category = parseNonEmptyText(getSingleQueryValue(req.query.category)) ?? undefined;
+  const statusRaw = getSingleQueryValue(req.query.status);
+  const status = statusRaw ? (statusRaw as AchievementListStatusFilter) : undefined;
+  const page = parsePositiveInt(getSingleQueryValue(req.query.page)) ?? undefined;
+  const limit = parsePositiveInt(getSingleQueryValue(req.query.limit)) ?? undefined;
 
   const data = await getAchievementList(characterId, { category, status, page, limit });
   return sendSuccess(res, data);
 }));
 
 router.get('/:achievementId', requireCharacter, asyncHandler(async (req, res) => {
-  const userId = req.userId!;
   const characterId = req.characterId!;
 
-  const achievementId = typeof req.params.achievementId === 'string' ? req.params.achievementId : '';
+  const achievementId = parseNonEmptyText(getSingleParam(req.params.achievementId));
+  if (!achievementId) throw new BusinessError('成就ID无效');
   const achievement = await getAchievementDetail(characterId, achievementId);
   if (!achievement) throw new BusinessError('成就不存在', 404);
 
@@ -46,12 +47,14 @@ router.post('/claim', requireCharacter, asyncHandler(async (req, res) => {
   const characterId = req.characterId!;
 
   const body = req.body as { achievementId?: unknown; achievement_id?: unknown };
-  const achievementId =
+  const achievementId = parseNonEmptyText(
     typeof body?.achievementId === 'string'
       ? body.achievementId
       : typeof body?.achievement_id === 'string'
         ? body.achievement_id
-        : '';
+        : undefined,
+  );
+  if (!achievementId) throw new BusinessError('成就ID无效');
 
   const result = await claimAchievement(userId, characterId, achievementId);
   if (!result.success) return sendResult(res, result);
@@ -63,7 +66,6 @@ router.post('/claim', requireCharacter, asyncHandler(async (req, res) => {
 }));
 
 router.get('/points/rewards', requireCharacter, asyncHandler(async (req, res) => {
-  const userId = req.userId!;
   const characterId = req.characterId!;
 
   const data = await getAchievementPointsRewards(characterId);

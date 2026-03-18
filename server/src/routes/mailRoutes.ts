@@ -7,14 +7,13 @@ import { requireCharacter } from '../middleware/auth.js';
 import { mailService } from '../services/mailService.js';
 import { sendSuccess, sendResult } from '../middleware/response.js';
 import { BusinessError } from '../middleware/BusinessError.js';
+import { getSingleQueryValue, parsePositiveInt } from '../services/shared/httpParam.js';
 
 const router = Router();
 
 // 兼容前端把 BIGINT 主键当成字符串传回来的情况
 const parseMailId = (raw: unknown): number | null => {
-  const n = Number(raw);
-  if (!Number.isInteger(n) || n <= 0) return null;
-  return n;
+  return parsePositiveInt(raw);
 };
 
 const parseAutoDisassemble = (raw: unknown): boolean => {
@@ -32,8 +31,8 @@ router.get('/list', asyncHandler(async (req, res) => {
     const userId = req.userId!;
     const characterId = req.characterId!;
 
-    const page = parseInt(req.query.page as string) || 1;
-    const pageSize = Math.min(parseInt(req.query.pageSize as string) || 50, 100);
+    const page = parsePositiveInt(getSingleQueryValue(req.query.page)) ?? 1;
+    const pageSize = Math.min(parsePositiveInt(getSingleQueryValue(req.query.pageSize)) ?? 50, 100);
 
     const result = await mailService.getMailList(userId, characterId, page, pageSize);
 

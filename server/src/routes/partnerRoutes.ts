@@ -27,23 +27,12 @@ import { notifyPartnerRecruitStatus } from '../services/partnerRecruitPush.js';
 import { partnerRecruitService } from '../services/partnerRecruitService.js';
 import { partnerService } from '../services/partnerService.js';
 import { getItemDefinitionById } from '../services/staticConfigLoader.js';
+import { getSingleParam, getSingleQueryValue, parseNonEmptyText, parsePositiveInt } from '../services/shared/httpParam.js';
 import { resolveTechniqueBookLearning } from '../services/shared/techniqueBookRules.js';
 
 const router = Router();
 
 router.use(requireCharacter);
-
-const parsePositiveInt = (value: unknown): number | null => {
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) return null;
-  return parsed;
-};
-
-const parseNonEmptyText = (value: unknown): string | null => {
-  if (typeof value !== 'string') return null;
-  const normalized = value.trim();
-  return normalized.length > 0 ? normalized : null;
-};
 
 const parsePartnerSkillPolicySlots = (
   value: Array<{ skillId?: string; priority?: number; enabled?: boolean }> | undefined,
@@ -146,7 +135,7 @@ router.post('/recruit/generate', asyncHandler(async (req, res) => {
 router.post('/recruit/:generationId/confirm', asyncHandler(async (req, res) => {
   const userId = req.userId!;
   const characterId = req.characterId!;
-  const generationId = parseNonEmptyText(req.params?.generationId);
+  const generationId = parseNonEmptyText(getSingleParam(req.params?.generationId));
   if (!generationId) {
     sendResult(res, { success: false, message: 'generationId 参数无效' });
     return;
@@ -162,7 +151,7 @@ router.post('/recruit/:generationId/confirm', asyncHandler(async (req, res) => {
 
 router.post('/recruit/:generationId/discard', asyncHandler(async (req, res) => {
   const characterId = req.characterId!;
-  const generationId = parseNonEmptyText(req.params?.generationId);
+  const generationId = parseNonEmptyText(getSingleParam(req.params?.generationId));
   if (!generationId) {
     sendResult(res, { success: false, message: 'generationId 参数无效' });
     return;
@@ -245,10 +234,7 @@ router.post('/learn-technique', asyncHandler(async (req, res) => {
   const itemDef = getItemDefinitionById(String(itemInstance.itemDefId || ''));
   const learnableTechniqueBook = resolveTechniqueBookLearning({
     itemDef,
-    metadata:
-      itemInstance && typeof itemInstance === 'object' && itemInstance.metadata && typeof itemInstance.metadata === 'object'
-        ? (itemInstance.metadata as object)
-        : null,
+    metadata: itemInstance.metadata,
   });
   if (!learnableTechniqueBook) {
     sendResult(res, { success: false, message: '该道具不是可供伙伴学习的功法书' });
@@ -272,7 +258,7 @@ router.post('/learn-technique', asyncHandler(async (req, res) => {
 router.get('/technique-upgrade-cost', asyncHandler(async (req, res) => {
   const characterId = req.characterId!;
   const partnerId = parsePositiveInt(req.query?.partnerId);
-  const techniqueId = parseNonEmptyText(req.query?.techniqueId);
+  const techniqueId = parseNonEmptyText(getSingleQueryValue(req.query?.techniqueId));
   if (!partnerId) {
     sendResult(res, { success: false, message: 'partnerId 参数无效' });
     return;
@@ -290,7 +276,7 @@ router.post('/upgrade-technique', asyncHandler(async (req, res) => {
   const userId = req.userId!;
   const characterId = req.characterId!;
   const partnerId = parsePositiveInt(req.body?.partnerId);
-  const techniqueId = parseNonEmptyText(req.body?.techniqueId);
+  const techniqueId = parseNonEmptyText(typeof req.body?.techniqueId === 'string' ? req.body.techniqueId : undefined);
   if (!partnerId) {
     sendResult(res, { success: false, message: 'partnerId 参数无效' });
     return;

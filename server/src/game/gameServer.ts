@@ -67,9 +67,25 @@ interface OnlinePlayersDeltaPayload {
   updated: OnlinePlayerDto[];
 }
 
+type SocketTaskArg = string | number | boolean | null | undefined | object;
+type ChatSendPayload = {
+  channel?: string | null;
+  content?: string | number | boolean | null;
+  clientId?: string | null;
+  pmTargetCharacterId?: string | number | null;
+};
+
+const assignCharacterDelta = <TKey extends keyof CharacterAttributes>(
+  target: Partial<CharacterAttributes>,
+  key: TKey,
+  value: CharacterAttributes[TKey],
+): void => {
+  target[key] = value;
+};
+
 const ONLINE_PLAYERS_EMIT_INTERVAL_MS = 3000;
 const CHARACTER_PUSH_DEBOUNCE_MS = 80;
-type AsyncSocketHandler<TArgs extends unknown[]> = (...args: TArgs) => Promise<void>;
+type AsyncSocketHandler<TArgs extends SocketTaskArg[]> = (...args: TArgs) => Promise<void>;
 
 // 游戏服务器类
 class GameServer {
@@ -233,12 +249,7 @@ class GameServer {
 
       socket.on(
         "chat:send",
-        this.createSocketTask(async (payload: {
-          channel?: unknown;
-          content?: unknown;
-          clientId?: unknown;
-          pmTargetCharacterId?: unknown;
-        }) => {
+        this.createSocketTask(async (payload: ChatSendPayload) => {
           const session = this.sessions.get(socket.id);
           if (!session?.character) {
             socket.emit("chat:error", { message: "未认证" });
@@ -457,7 +468,7 @@ class GameServer {
     });
   }
 
-  private createSocketTask<TArgs extends unknown[]>(
+  private createSocketTask<TArgs extends SocketTaskArg[]>(
     handler: AsyncSocketHandler<TArgs>,
   ): (...args: TArgs) => void {
     return (...args: TArgs) => {
@@ -656,7 +667,7 @@ class GameServer {
       const monthCardActiveMap = await getMonthCardActiveMapByCharacterIds([computed.id]);
       const characterWithUnlockedFeatures = await withUnlockedFeatures(
         {
-          ...(computed as unknown as Record<string, unknown> & { id: number }),
+          ...computed,
           month_card_active: monthCardActiveMap.get(computed.id) ?? false,
         },
       );
@@ -814,7 +825,7 @@ class GameServer {
   ): Partial<CharacterAttributes> | null {
     if (!prev || !next) return null;
     const keys = Object.keys(next) as (keyof CharacterAttributes)[];
-    const delta: Record<string, unknown> = {};
+    const delta: Partial<CharacterAttributes> = {};
     let changed = false;
     for (const k of keys) {
       const prevValue = prev[k];
@@ -828,7 +839,7 @@ class GameServer {
         continue;
       }
       if (prevValue !== nextValue) {
-        delta[k] = next[k];
+        assignCharacterDelta(delta, k, nextValue);
         changed = true;
       }
     }
@@ -917,7 +928,7 @@ class GameServer {
     return players;
   }
 
-  public emitToUser<T = any>(userId: number, event: string, data: T): boolean {
+  public emitToUser<T>(userId: number, event: string, data: T): boolean {
     if (this.shutdownGate.isShuttingDown()) return false;
     const socketId = this.userSocketMap.get(userId);
     if (!socketId) return false;
@@ -947,7 +958,7 @@ class GameServer {
    *
    * 用于冷却管理器等服务向特定角色推送消息
    */
-  public emitToCharacter<T = any>(
+  public emitToCharacter<T>(
     characterId: number,
     event: string,
     data: T,

@@ -1,5 +1,6 @@
 import type { AxiosRequestConfig } from 'axios';
 import api from './core';
+import { withRequestParams } from './requestConfig';
 
 type RequestConfig = AxiosRequestConfig;
 
@@ -235,10 +236,7 @@ export const getDungeonList = (params?: {
   q?: string;
   realm?: string;
 }, requestConfig?: RequestConfig): Promise<DungeonListResponse> => {
-  return api.get('/dungeon/list', {
-    ...requestConfig,
-    params: { ...(requestConfig?.params ?? {}), ...params },
-  });
+  return api.get('/dungeon/list', withRequestParams(requestConfig, params ?? {}));
 };
 
 export interface DungeonPreviewResponse {
@@ -293,10 +291,7 @@ export interface DungeonPreviewResponse {
 }
 
 export const getDungeonPreview = (dungeonId: string, rank?: number, requestConfig?: RequestConfig): Promise<DungeonPreviewResponse> => {
-  return api.get(`/dungeon/preview/${dungeonId}`, {
-    ...requestConfig,
-    params: { ...(requestConfig?.params ?? {}), rank },
-  });
+  return api.get(`/dungeon/preview/${dungeonId}`, withRequestParams(requestConfig, { rank }));
 };
 
 export type DungeonInstanceStatus = 'preparing' | 'running' | 'cleared' | 'failed' | 'abandoned';

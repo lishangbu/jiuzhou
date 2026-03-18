@@ -7,6 +7,27 @@ import { computeRankPower } from './shared/rankPower.js';
 const MAX_DAILY_CHALLENGES = 20;
 const DEFAULT_RATING = 1000;
 
+type ArenaRatingRow = {
+  rating: number | string | null;
+  win_count: number | string | null;
+  lose_count: number | string | null;
+};
+
+type ArenaBattleRecordRow = {
+  battle_id: string | null;
+  created_at: string | Date | null;
+  result: string | null;
+  delta_score: number | string | null;
+  score_after: number | string | null;
+  opponent_id: number | string | null;
+  opponent_name: string | null;
+  opponent_realm: string | null;
+};
+
+const normalizeArenaResult = (value: string | null): ArenaRecord['result'] => {
+  return value === 'win' || value === 'lose' || value === 'draw' ? value : 'draw';
+};
+
 const ensureRatingRow = async (characterId: number): Promise<void> => {
   const id = Number(characterId);
   if (!Number.isFinite(id) || id <= 0) return;
@@ -49,13 +70,13 @@ export const getArenaStatus = async (
   if (!Number.isFinite(id) || id <= 0) return { success: false, message: '无效的角色ID' };
 
   await ensureRatingRow(id);
-  const ratingRes = await query(
+  const ratingRes = await query<ArenaRatingRow>(
     `SELECT rating, win_count, lose_count FROM arena_rating WHERE character_id = $1`,
     [id]
   );
   if (ratingRes.rows.length === 0) return { success: false, message: '竞技场数据异常' };
 
-  const row = ratingRes.rows[0] as any;
+  const row = ratingRes.rows[0];
   const score = Number(row.rating ?? DEFAULT_RATING) || DEFAULT_RATING;
   const winCount = Number(row.win_count ?? 0) || 0;
   const loseCount = Number(row.lose_count ?? 0) || 0;
@@ -228,7 +249,7 @@ export const getArenaRecords = async (
   if (!Number.isFinite(id) || id <= 0) return { success: false, message: '无效的角色ID' };
 
   const l = Math.max(1, Math.min(200, Math.floor(Number(limit) || 50)));
-  const res = await query(
+  const res = await query<ArenaBattleRecordRow>(
     `
       SELECT
         ab.battle_id,
@@ -254,21 +275,21 @@ export const getArenaRecords = async (
     .filter((x) => Number.isFinite(x) && x > 0);
   const computedMap = await getCharacterComputedBatchByCharacterIds(opponentIds);
 
-  const data: ArenaRecord[] = res.rows.map((r: any) => ({
-    id: String(r.battle_id),
-    ts: new Date(r.created_at).getTime(),
-    opponentName: String(r.opponent_name ?? ''),
-    opponentRealm: String(r.opponent_realm ?? '凡人'),
+  const data: ArenaRecord[] = res.rows.map((row) => ({
+    id: String(row.battle_id ?? ''),
+    ts: new Date(String(row.created_at ?? '')).getTime(),
+    opponentName: String(row.opponent_name ?? ''),
+    opponentRealm: String(row.opponent_realm ?? '凡人'),
     opponentPower: (() => {
-      const cid = Number(r.opponent_id);
+      const cid = Number(row.opponent_id);
       if (!Number.isFinite(cid) || cid <= 0) return 0;
       const computed = computedMap.get(cid);
       if (!computed) return 0;
       return Math.max(0, computeRankPower(computed));
     })(),
-    result: (r.result === 'win' || r.result === 'lose' || r.result === 'draw' ? r.result : 'draw') as any,
-    deltaScore: Number(r.delta_score ?? 0) || 0,
-    scoreAfter: Number(r.score_after ?? DEFAULT_RATING) || DEFAULT_RATING,
+    result: normalizeArenaResult(row.result),
+    deltaScore: Number(row.delta_score ?? 0) || 0,
+    scoreAfter: Number(row.score_after ?? DEFAULT_RATING) || DEFAULT_RATING,
   }));
 
   return { success: true, message: 'ok', data };

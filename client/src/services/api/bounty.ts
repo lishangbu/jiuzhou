@@ -1,5 +1,6 @@
 import type { AxiosRequestConfig } from 'axios';
 import api from './core';
+import { withRequestParams } from './requestConfig';
 
 type RequestConfig = AxiosRequestConfig;
 
@@ -38,10 +39,7 @@ export const getBountyBoard = (
   pool: 'daily' | 'player' | 'all' = 'daily',
   requestConfig?: RequestConfig,
 ): Promise<BountyBoardResponse> => {
-  return api.get('/bounty/board', {
-    ...requestConfig,
-    params: { ...(requestConfig?.params ?? {}), pool },
-  });
+  return api.get('/bounty/board', withRequestParams(requestConfig, { pool }));
 };
 
 export const claimBounty = (
@@ -71,10 +69,7 @@ export const searchBountyItemDefs = (
   limit: number = 20,
   requestConfig?: RequestConfig,
 ): Promise<{ success: boolean; message?: string; data?: { items: BountyItemDefSearchRowDto[] } }> => {
-  return api.get('/bounty/items/search', {
-    ...requestConfig,
-    params: { ...(requestConfig?.params ?? {}), keyword, limit },
-  });
+  return api.get('/bounty/items/search', withRequestParams(requestConfig, { keyword, limit }));
 };
 
 export const submitBountyMaterials = (

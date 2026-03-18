@@ -12,7 +12,7 @@ import {
   itemService,
 } from '../domains/inventory/index.js';
 import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
-import { parsePositiveInt } from '../services/shared/httpParam.js';
+import { getSingleQueryValue, parseNonEmptyText, parsePositiveInt } from '../services/shared/httpParam.js';
 import { getCharacterComputedByCharacterId } from '../services/characterComputedService.js';
 import { sendSuccess, sendResult } from '../middleware/response.js';
 import { BusinessError } from '../middleware/BusinessError.js';
@@ -112,13 +112,12 @@ router.get('/bag/snapshot', asyncHandler(async (req, res) => {
 router.get('/items', asyncHandler(async (req, res) => {
     const characterId = req.characterId!;
 
-    const locationQuery = req.query.location;
-    const location = locationQuery === undefined ? 'bag' : locationQuery;
+    const location = parseNonEmptyText(getSingleQueryValue(req.query.location)) ?? 'bag';
     if (!isAllowedLocation(location)) {
       throw new BusinessError('location参数错误');
     }
-    const page = parseInt(req.query.page as string) || 1;
-    const pageSize = Math.min(parseInt(req.query.pageSize as string) || 100, 200);
+    const page = parsePositiveInt(getSingleQueryValue(req.query.page)) ?? 1;
+    const pageSize = Math.min(parsePositiveInt(getSingleQueryValue(req.query.pageSize)) ?? 100, 200);
 
     const result = await inventoryService.getInventoryItemsWithDefs(characterId, location, page, pageSize);
 
@@ -136,7 +135,7 @@ router.get('/items', asyncHandler(async (req, res) => {
 // ============================================
 router.get('/craft/recipes', asyncHandler(async (req, res) => {
     const userId = req.userId!;
-    const recipeType = typeof req.query.recipeType === 'string' ? req.query.recipeType : undefined;
+    const recipeType = parseNonEmptyText(getSingleQueryValue(req.query.recipeType)) ?? undefined;
     const result = await craftService.getCraftRecipeList(userId, { recipeType });
     return sendResult(res, result);
 }));
@@ -148,14 +147,14 @@ router.get('/craft/recipes', asyncHandler(async (req, res) => {
 // ============================================
 router.post('/craft/execute', asyncHandler(async (req, res) => {
     const userId = req.userId!;
-    const recipeId = typeof req.body?.recipeId === 'string' ? req.body.recipeId : '';
-    const timesRaw = req.body?.times;
-    const times = timesRaw === undefined || timesRaw === null ? undefined : Number(timesRaw);
+    const recipeId = parseNonEmptyText(typeof req.body?.recipeId === 'string' ? req.body.recipeId : undefined);
+    const parsedTimes = req.body?.times === undefined || req.body?.times === null ? undefined : parsePositiveInt(req.body.times);
+    const times = parsedTimes ?? undefined;
 
-    if (!recipeId.trim()) {
+    if (!recipeId) {
       throw new BusinessError('recipeId参数错误');
     }
-    if (times !== undefined && (!Number.isInteger(times) || times <= 0)) {
+    if (req.body?.times !== undefined && req.body?.times !== null && parsedTimes === null) {
       throw new BusinessError('times参数错误');
     }
 
@@ -227,8 +226,8 @@ router.post('/gem/synthesize', asyncHandler(async (req, res) => {
     const userId = req.userId!;
     const characterId = req.characterId!;
 
-    const recipeId = typeof req.body?.recipeId === 'string' ? req.body.recipeId : '';
-    if (!recipeId.trim()) {
+    const recipeId = parseNonEmptyText(typeof req.body?.recipeId === 'string' ? req.body.recipeId : undefined);
+    if (!recipeId) {
       throw new BusinessError('recipeId参数错误');
     }
 
@@ -258,13 +257,13 @@ router.post('/gem/synthesize/batch', asyncHandler(async (req, res) => {
     const userId = req.userId!;
     const characterId = req.characterId!;
 
-    const gemType = typeof req.body?.gemType === 'string' ? req.body.gemType : '';
-    if (!gemType.trim()) {
+    const gemType = parseNonEmptyText(typeof req.body?.gemType === 'string' ? req.body.gemType : undefined);
+    if (!gemType) {
       throw new BusinessError('gemType参数错误');
     }
 
-    const targetLevel = Number(req.body?.targetLevel);
-    if (!Number.isInteger(targetLevel) || targetLevel < 2 || targetLevel > 10) {
+    const targetLevel = parsePositiveInt(req.body?.targetLevel);
+    if (!targetLevel || targetLevel < 2 || targetLevel > 10) {
       throw new BusinessError('targetLevel参数错误');
     }
 
@@ -272,10 +271,7 @@ router.post('/gem/synthesize/batch', asyncHandler(async (req, res) => {
     if (Number.isNaN(parsedSourceLevel)) {
       throw new BusinessError('sourceLevel参数错误');
     }
-    const seriesKey =
-      typeof req.body?.seriesKey === 'string' && req.body.seriesKey.trim()
-        ? req.body.seriesKey.trim()
-        : undefined;
+    const seriesKey = parseNonEmptyText(typeof req.body?.seriesKey === 'string' ? req.body.seriesKey : undefined) ?? undefined;
 
     const result = await gemSynthesisService.synthesizeGemBatch(characterId, userId, {
       gemType,
@@ -304,21 +300,14 @@ router.post('/move', asyncHandler(async (req, res) => {
       throw new BusinessError('参数不完整');
     }
 
-    const parsedItemId = Number(itemId);
-    if (!Number.isInteger(parsedItemId) || parsedItemId <= 0) {
-      throw new BusinessError('itemId参数错误');
-    }
+    const parsedItemId = parseBodyItemInstanceId(req.body as { itemId?: unknown });
 
     if (!isAllowedSlottedLocation(targetLocation)) {
       throw new BusinessError('targetLocation参数错误');
     }
 
-    const parsedTargetSlot =
-      targetSlot === undefined || targetSlot === null ? undefined : Number(targetSlot);
-    if (
-      parsedTargetSlot !== undefined &&
-      (!Number.isInteger(parsedTargetSlot) || parsedTargetSlot < 0)
-    ) {
+    const parsedTargetSlot = parseOptionalNonNegativeInt(targetSlot);
+    if (Number.isNaN(parsedTargetSlot)) {
       throw new BusinessError('targetSlot参数错误');
     }
 
@@ -344,18 +333,9 @@ router.post('/use', asyncHandler(async (req, res) => {
       targetItemInstanceId?: unknown;
       partnerId?: unknown;
     };
-    const rawInstanceId = itemInstanceId ?? instanceId ?? itemId;
-    if (rawInstanceId === undefined || rawInstanceId === null) {
-      throw new BusinessError('参数不完整');
-    }
-
-    const parsedItemId = Number(rawInstanceId);
-    if (!Number.isInteger(parsedItemId) || parsedItemId <= 0) {
-      throw new BusinessError('itemId参数错误');
-    }
-
-    const parsedQty = qty === undefined || qty === null ? 1 : Number(qty);
-    if (!Number.isInteger(parsedQty) || parsedQty <= 0) {
+    const parsedItemId = parseBodyItemInstanceId({ itemId, itemInstanceId, instanceId });
+    const parsedQty = qty === undefined || qty === null ? 1 : parsePositiveInt(qty);
+    if (!parsedQty) {
       throw new BusinessError('qty参数错误');
     }
 
@@ -394,15 +374,7 @@ router.post('/equip', asyncHandler(async (req, res) => {
     const userId = req.userId!;
     const characterId = req.characterId!;
 
-    const { itemId } = req.body;
-    if (itemId === undefined || itemId === null) {
-      throw new BusinessError('参数不完整');
-    }
-
-    const parsedItemId = Number(itemId);
-    if (!Number.isInteger(parsedItemId) || parsedItemId <= 0) {
-      throw new BusinessError('itemId参数错误');
-    }
+    const parsedItemId = parseBodyItemInstanceId(req.body as { itemId?: unknown });
 
     const result = await inventoryService.equipItem(characterId, userId, parsedItemId);
     if (!result.success) {
@@ -425,15 +397,8 @@ router.post('/unequip', asyncHandler(async (req, res) => {
     const userId = req.userId!;
     const characterId = req.characterId!;
 
-    const { itemId, targetLocation } = req.body;
-    if (itemId === undefined || itemId === null) {
-      throw new BusinessError('参数不完整');
-    }
-
-    const parsedItemId = Number(itemId);
-    if (!Number.isInteger(parsedItemId) || parsedItemId <= 0) {
-      throw new BusinessError('itemId参数错误');
-    }
+    const { targetLocation } = req.body;
+    const parsedItemId = parseBodyItemInstanceId(req.body as { itemId?: unknown });
 
     if (targetLocation !== undefined && !isAllowedSlottedLocation(targetLocation)) {
       throw new BusinessError('targetLocation参数错误');
@@ -543,14 +508,7 @@ router.post('/growth/cost-preview', asyncHandler(async (req, res) => {
 // ============================================
 router.post('/reroll-affixes/cost-preview', asyncHandler(async (req, res) => {
     const characterId = req.characterId!;
-    const { itemId } = req.body as { itemId?: unknown };
-    if (itemId === undefined || itemId === null) {
-      throw new BusinessError('参数不完整');
-    }
-    const parsedItemId = Number(itemId);
-    if (!Number.isInteger(parsedItemId) || parsedItemId <= 0) {
-      throw new BusinessError('itemId参数错误');
-    }
+    const parsedItemId = parseBodyItemInstanceId(req.body as { itemId?: unknown });
     const result = await inventoryService.getRerollCostPreview(characterId, parsedItemId);
     return sendResult(res, result);
 }));
@@ -562,14 +520,7 @@ router.post('/reroll-affixes/cost-preview', asyncHandler(async (req, res) => {
 // ============================================
 router.post('/reroll-affixes/pool-preview', asyncHandler(async (req, res) => {
     const characterId = req.characterId!;
-    const { itemId } = req.body as { itemId?: unknown };
-    if (itemId === undefined || itemId === null) {
-      throw new BusinessError('参数不完整');
-    }
-    const parsedItemId = Number(itemId);
-    if (!Number.isInteger(parsedItemId) || parsedItemId <= 0) {
-      throw new BusinessError('itemId参数错误');
-    }
+    const parsedItemId = parseBodyItemInstanceId(req.body as { itemId?: unknown });
     const result = await inventoryService.getAffixPoolPreview(characterId, parsedItemId);
     return sendResult(res, result);
 }));
@@ -583,18 +534,11 @@ router.post('/reroll-affixes', asyncHandler(async (req, res) => {
     const userId = req.userId!;
     const characterId = req.characterId!;
 
-    const { itemId, lockIndexes } = req.body as {
+    const { lockIndexes } = req.body as {
       itemId?: unknown;
       lockIndexes?: unknown;
     };
-    if (itemId === undefined || itemId === null) {
-      throw new BusinessError('参数不完整');
-    }
-
-    const parsedItemId = Number(itemId);
-    if (!Number.isInteger(parsedItemId) || parsedItemId <= 0) {
-      throw new BusinessError('itemId参数错误');
-    }
+    const parsedItemId = parseBodyItemInstanceId(req.body as { itemId?: unknown });
 
     let parsedLockIndexes: number[] = [];
     if (lockIndexes !== undefined) {
@@ -650,23 +594,12 @@ router.post('/socket', asyncHandler(async (req, res) => {
       slot?: unknown;
     };
 
-    const rawItemInstanceId = itemInstanceId ?? instanceId ?? itemId;
-    if (rawItemInstanceId === undefined || rawItemInstanceId === null) {
-      throw new BusinessError('参数不完整');
-    }
-    const parsedItemId = Number(rawItemInstanceId);
-    if (!Number.isInteger(parsedItemId) || parsedItemId <= 0) {
-      throw new BusinessError('itemId参数错误');
-    }
-
-    const rawGemItemInstanceId = gemItemInstanceId ?? gemInstanceId ?? gemItemId;
-    if (rawGemItemInstanceId === undefined || rawGemItemInstanceId === null) {
-      throw new BusinessError('参数不完整');
-    }
-    const parsedGemItemId = Number(rawGemItemInstanceId);
-    if (!Number.isInteger(parsedGemItemId) || parsedGemItemId <= 0) {
-      throw new BusinessError('gemItemId参数错误');
-    }
+    const parsedItemId = parseBodyItemInstanceId({ itemId, itemInstanceId, instanceId });
+    const parsedGemItemId = parseBodyItemInstanceId({
+      itemId: gemItemId,
+      itemInstanceId: gemItemInstanceId,
+      instanceId: gemInstanceId,
+    });
 
     const parsedSlot = parseOptionalNonNegativeInt(slot);
     if (Number.isNaN(parsedSlot)) {
@@ -720,18 +653,14 @@ router.post('/disassemble', asyncHandler(async (req, res) => {
     const userId = req.userId!;
     const characterId = req.characterId!;
 
-    const { itemId, qty } = req.body as { itemId?: unknown; qty?: unknown };
-    if (itemId === undefined || itemId === null || qty === undefined || qty === null) {
+    const { qty } = req.body as { itemId?: unknown; qty?: unknown };
+    if (qty === undefined || qty === null) {
       throw new BusinessError('参数不完整');
     }
 
-    const parsedItemId = Number(itemId);
-    if (!Number.isInteger(parsedItemId) || parsedItemId <= 0) {
-      throw new BusinessError('itemId参数错误');
-    }
-
-    const parsedQty = Number(qty);
-    if (!Number.isInteger(parsedQty) || parsedQty <= 0) {
+    const parsedItemId = parseBodyItemInstanceId(req.body as { itemId?: unknown });
+    const parsedQty = parsePositiveInt(qty);
+    if (!parsedQty) {
       throw new BusinessError('qty参数错误');
     }
 
@@ -761,9 +690,9 @@ router.post('/disassemble/batch', asyncHandler(async (req, res) => {
       if (!row || typeof row !== 'object') {
         throw new BusinessError('items参数错误');
       }
-      const itemId = Number((row as { itemId?: unknown }).itemId);
-      const qty = Number((row as { qty?: unknown }).qty);
-      if (!Number.isInteger(itemId) || itemId <= 0 || !Number.isInteger(qty) || qty <= 0) {
+      const itemId = parsePositiveInt((row as { itemId?: unknown }).itemId);
+      const qty = parsePositiveInt((row as { qty?: unknown }).qty);
+      if (!itemId || !qty) {
         throw new BusinessError('items参数错误');
       }
       parsedItems.push({ itemId, qty });
@@ -783,19 +712,10 @@ router.post('/disassemble/batch', asyncHandler(async (req, res) => {
 router.post('/remove', asyncHandler(async (req, res) => {
     const characterId = req.characterId!;
 
-    const { itemId, qty } = req.body;
-
-    if (itemId === undefined) {
-      throw new BusinessError('参数不完整');
-    }
-
-    const parsedItemId = Number(itemId);
-    if (!Number.isInteger(parsedItemId) || parsedItemId <= 0) {
-      throw new BusinessError('itemId参数错误');
-    }
-
-    const parsedQty = qty === undefined || qty === null ? 1 : Number(qty);
-    if (!Number.isInteger(parsedQty) || parsedQty <= 0) {
+    const { qty } = req.body;
+    const parsedItemId = parseBodyItemInstanceId(req.body as { itemId?: unknown });
+    const parsedQty = qty === undefined || qty === null ? 1 : parsePositiveInt(qty);
+    if (!parsedQty) {
       throw new BusinessError('qty参数错误');
     }
 
@@ -821,8 +741,8 @@ router.post('/remove/batch', asyncHandler(async (req, res) => {
       throw new BusinessError('itemIds参数错误');
     }
 
-    const parsedIds = itemIds.map((x) => Number(x)).filter((n) => Number.isInteger(n) && n > 0);
-    if (parsedIds.length === 0) {
+    const parsedIds = parsePositiveIntArray(itemIds);
+    if (!parsedIds || parsedIds.length === 0) {
       throw new BusinessError('itemIds参数错误');
     }
 
@@ -862,16 +782,13 @@ router.post('/expand', asyncHandler(async (req, res) => {
 router.post('/lock', asyncHandler(async (req, res) => {
     const characterId = req.characterId!;
 
-    const { itemId, locked } = req.body;
+    const { locked } = req.body;
 
-    if (itemId === undefined || locked === undefined) {
+    if (locked === undefined) {
       throw new BusinessError('参数不完整');
     }
 
-    const parsedItemId = Number(itemId);
-    if (!Number.isInteger(parsedItemId) || parsedItemId <= 0) {
-      throw new BusinessError('itemId参数错误');
-    }
+    const parsedItemId = parseBodyItemInstanceId(req.body as { itemId?: unknown });
 
     if (typeof locked !== 'boolean') {
       throw new BusinessError('locked参数错误');

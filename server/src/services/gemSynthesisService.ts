@@ -3,11 +3,15 @@ import { Transactional } from '../decorators/transactional.js';
 import { randomInt } from 'crypto';
 import { addItemToInventory } from './inventory/index.js';
 import { lockCharacterInventoryMutex } from './inventoryMutex.js';
-import { getCharacterComputedByCharacterId } from './characterComputedService.js';
+import {
+  getCharacterComputedByCharacterId,
+  type CharacterComputedRow,
+} from './characterComputedService.js';
 import {
   getEnabledItemDefinitions,
   getItemDefinitionsByIds,
   getItemRecipeDefinitionsByType,
+  type ItemRecipeCostItemConfig,
 } from './staticConfigLoader.js';
 import { normalizeRecipeRateToRatio } from './shared/recipeRate.js';
 
@@ -18,11 +22,11 @@ type GemRecipeRow = {
   id: string;
   name: string;
   product_item_def_id: string;
-  product_qty: unknown;
-  cost_silver: unknown;
-  cost_spirit_stones: unknown;
-  cost_items: unknown;
-  success_rate: unknown;
+  product_qty: number;
+  cost_silver: number;
+  cost_spirit_stones: number;
+  cost_items: ItemRecipeCostItemConfig[];
+  success_rate: number;
 };
 
 type GemRecipeModel = {
@@ -55,6 +59,31 @@ type ItemDefLite = {
   id: string;
   name: string;
   icon: string | null;
+};
+
+type IntegerLike = string | number | bigint | null | undefined;
+
+type CharacterWalletRow = {
+  silver: IntegerLike;
+  spirit_stones: IntegerLike;
+};
+
+type ItemOwnedQtyRow = {
+  item_def_id: string;
+  qty: IntegerLike;
+};
+
+type ItemInstanceRow = {
+  id: IntegerLike;
+  item_def_id: string | null;
+  qty: IntegerLike;
+  locked: boolean | null;
+  location: string | null;
+};
+
+type ItemConsumeRow = {
+  id: number;
+  qty: IntegerLike;
 };
 
 export type GemSynthesisRecipeView = {
@@ -124,7 +153,7 @@ export type GemSynthesisExecuteResult =
           qty: number;
           itemIds: number[];
         } | null;
-        character: unknown;
+        character: CharacterComputedRow | null;
       };
     }
   | { success: false; message: string };
@@ -165,7 +194,7 @@ export type GemSynthesisBatchResult =
             itemIds: number[];
           };
         }>;
-        character: unknown;
+        character: CharacterComputedRow | null;
       };
     }
   | { success: false; message: string };
@@ -217,7 +246,7 @@ export type GemConvertExecuteResult =
             itemIds: number[];
           }>;
         };
-        character: unknown;
+        character: CharacterComputedRow | null;
       };
     }
   | { success: false; message: string };
@@ -247,36 +276,29 @@ const GEM_MIN_LEVEL = 1;
 const GEM_MAX_LEVEL = 10;
 const GEM_CONVERT_OBTAINED_FROM = 'gem-convert';
 
-const toInt = (value: unknown, fallback = 0): number => {
+const toInt = (value: IntegerLike, fallback = 0): number => {
   const n = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(n)) return fallback;
   return Math.floor(n);
 };
 
-const clampInt = (value: unknown, min: number, max: number): number => {
+const clampInt = (value: IntegerLike, min: number, max: number): number => {
   const n = toInt(value, min);
   if (n < min) return min;
   if (n > max) return max;
   return n;
 };
 
-const parseCostItems = (value: unknown): ItemCostEntry[] => {
-  let raw: unknown = value;
-  if (typeof raw === 'string') {
-    try {
-      raw = JSON.parse(raw) as unknown;
-    } catch {
-      return [];
-    }
-  }
+const parseCostItems = (
+  value: ItemRecipeCostItemConfig[] | null | undefined,
+): ItemCostEntry[] => {
+  const raw = Array.isArray(value) ? value : null;
   if (!Array.isArray(raw)) return [];
 
   const out: ItemCostEntry[] = [];
   for (const item of raw) {
-    if (!item || typeof item !== 'object') continue;
-    const row = item as { item_def_id?: unknown; qty?: unknown };
-    const itemDefId = String(row.item_def_id || '').trim();
-    const qty = clampInt(row.qty, 0, 999999);
+    const itemDefId = String(item.item_def_id || '').trim();
+    const qty = clampInt(item.qty, 0, 999999);
     if (!itemDefId || qty <= 0) continue;
     out.push({ itemDefId, qty });
   }
@@ -301,7 +323,7 @@ const parseGemItemDefId = (
   };
 };
 
-const normalizeGemType = (value: unknown): GemType | null => {
+const normalizeGemType = (value: string | null | undefined): GemType | null => {
   const raw = String(value || '').trim().toLowerCase();
   if (!raw) return null;
 
@@ -367,7 +389,7 @@ const getCharacterWalletTx = async (
   `;
   const result = await query(sql, [characterId]);
   if (!result.rows[0]) return null;
-  const row = result.rows[0] as { silver: unknown; spirit_stones: unknown };
+  const row = result.rows[0] as CharacterWalletRow;
   return {
     silver: clampInt(row.silver, 0, Number.MAX_SAFE_INTEGER),
     spiritStones: clampInt(row.spirit_stones, 0, Number.MAX_SAFE_INTEGER),
@@ -455,7 +477,7 @@ const getItemOwnedQtyMapTx = async (
   );
 
   const map = new Map<string, number>();
-  for (const row of result.rows as Array<{ item_def_id: string; qty: unknown }>) {
+  for (const row of result.rows as ItemOwnedQtyRow[]) {
     map.set(String(row.item_def_id || '').trim(), clampInt(row.qty, 0, Number.MAX_SAFE_INTEGER));
   }
   return map;
@@ -487,13 +509,7 @@ const getItemInstanceRowsByIdsForUpdateTx = async (
     [characterId, ids],
   );
 
-  return (result.rows as Array<{
-    id: unknown;
-    item_def_id: unknown;
-    qty: unknown;
-    locked: unknown;
-    location: unknown;
-  }>).map((row) => ({
+  return (result.rows as ItemInstanceRow[]).map((row) => ({
     id: clampInt(row.id, 0, Number.MAX_SAFE_INTEGER),
     itemDefId: String(row.item_def_id || '').trim(),
     qty: clampInt(row.qty, 0, Number.MAX_SAFE_INTEGER),
@@ -568,7 +584,7 @@ const consumeItemDefIdsQtyTx = async (
     [characterId, ids, locations],
   );
 
-  const rows = result.rows as Array<{ id: number; qty: unknown }>;
+  const rows = result.rows as ItemConsumeRow[];
   const total = rows.reduce((sum, row) => sum + clampInt(row.qty, 0, Number.MAX_SAFE_INTEGER), 0);
   if (total < need) {
     return { success: false, message: options.insufficientMessage || '材料不足' };

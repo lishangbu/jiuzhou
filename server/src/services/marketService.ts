@@ -18,6 +18,7 @@ import {
   loadAffixPoolForReroll,
   parseGeneratedAffixesForReroll,
 } from "./equipmentAffixRerollService.js";
+import { parsePositiveInt } from "./shared/httpParam.js";
 import {
   normalizeMarketCategoryFilter,
   resolveMarketItemCategory,
@@ -102,12 +103,6 @@ const MARKET_LISTINGS_CACHE_MEMORY_TTL_MS = 2_000;
 
 const clampInt = (n: number, min: number, max: number): number =>
   Math.max(min, Math.min(max, n));
-
-const parsePositiveInt = (v: unknown): number | null => {
-  const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
-  if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) return null;
-  return n;
-};
 
 const parseNonNegativeInt = (v: unknown): number | null => {
   const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;

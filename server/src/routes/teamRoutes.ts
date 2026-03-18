@@ -1,7 +1,7 @@
 /**
  * 九州修仙录 - 组队系统路由
  */
-import { Router } from 'express';
+import { Request, Router } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import {
   getCharacterTeam,
@@ -21,24 +21,38 @@ import {
   handleInvitation,
   getTeamById
 } from '../services/teamService.js';
+import { getSingleParam, getSingleQueryValue, parseNonEmptyText, parsePositiveInt } from '../services/shared/httpParam.js';
 import { sendResult } from '../middleware/response.js';
 import { BusinessError } from '../middleware/BusinessError.js';
 
 const router = Router();
 
+const getRequiredCharacterIdFromQuery = (req: Request): number => {
+  const characterId = parsePositiveInt(getSingleQueryValue(req.query.characterId));
+  if (!characterId) {
+    throw new BusinessError('缺少角色ID');
+  }
+  return characterId;
+};
+
+const getRequiredTeamIdParam = (req: Request): string => {
+  const teamId = parseNonEmptyText(getSingleParam(req.params.teamId));
+  if (!teamId) {
+    throw new BusinessError('缺少队伍ID');
+  }
+  return teamId;
+};
+
 // 获取角色当前队伍
 router.get('/my', asyncHandler(async (req, res) => {
-    const characterId = parseInt(req.query.characterId as string);
-    if (!characterId) {
-      throw new BusinessError('缺少角色ID');
-    }
+    const characterId = getRequiredCharacterIdFromQuery(req);
     const result = await getCharacterTeam(characterId);
     sendResult(res, result);
 }));
 
 // 获取队伍详情
 router.get('/:teamId', asyncHandler(async (req, res) => {
-    const teamId = String(req.params.teamId);
+    const teamId = getRequiredTeamIdParam(req);
     const result = await getTeamById(teamId);
     sendResult(res, result);
 }));
@@ -86,11 +100,8 @@ router.post('/apply', asyncHandler(async (req, res) => {
 
 // 获取队伍申请列表
 router.get('/applications/:teamId', asyncHandler(async (req, res) => {
-    const teamId = String(req.params.teamId);
-    const characterId = parseInt(req.query.characterId as string);
-    if (!characterId) {
-      throw new BusinessError('缺少角色ID');
-    }
+    const teamId = getRequiredTeamIdParam(req);
+    const characterId = getRequiredCharacterIdFromQuery(req);
     const result = await getTeamApplications(teamId, characterId);
     sendResult(res, result);
 }));
@@ -137,23 +148,17 @@ router.post('/settings', asyncHandler(async (req, res) => {
 
 // 获取附近队伍
 router.get('/nearby/list', asyncHandler(async (req, res) => {
-    const characterId = parseInt(req.query.characterId as string);
-    const mapId = req.query.mapId as string | undefined;
-    if (!characterId) {
-      throw new BusinessError('缺少角色ID');
-    }
+    const characterId = getRequiredCharacterIdFromQuery(req);
+    const mapId = parseNonEmptyText(getSingleQueryValue(req.query.mapId)) ?? undefined;
     const result = await getNearbyTeams(characterId, mapId);
     sendResult(res, result);
 }));
 
 // 获取队伍大厅
 router.get('/lobby/list', asyncHandler(async (req, res) => {
-    const characterId = parseInt(req.query.characterId as string);
-    const search = req.query.search as string | undefined;
-    const limit = parseInt(req.query.limit as string) || 50;
-    if (!characterId) {
-      throw new BusinessError('缺少角色ID');
-    }
+    const characterId = getRequiredCharacterIdFromQuery(req);
+    const search = parseNonEmptyText(getSingleQueryValue(req.query.search)) ?? undefined;
+    const limit = parsePositiveInt(getSingleQueryValue(req.query.limit)) ?? undefined;
     const result = await getLobbyTeams(characterId, search, limit);
     sendResult(res, result);
 }));
@@ -170,10 +175,7 @@ router.post('/invite', asyncHandler(async (req, res) => {
 
 // 获取收到的邀请
 router.get('/invitations/received', asyncHandler(async (req, res) => {
-    const characterId = parseInt(req.query.characterId as string);
-    if (!characterId) {
-      throw new BusinessError('缺少角色ID');
-    }
+    const characterId = getRequiredCharacterIdFromQuery(req);
     const result = await getReceivedInvitations(characterId);
     sendResult(res, result);
 }));

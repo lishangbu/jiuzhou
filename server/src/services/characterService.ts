@@ -7,7 +7,11 @@ import {
   normalizeAutoDisassembleSetting,
   type AutoDisassembleRuleSet,
 } from './autoDisassembleRules.js';
-import { getCharacterComputedByUserId, invalidateCharacterComputedCache } from './characterComputedService.js';
+import {
+  getCharacterComputedByUserId,
+  invalidateCharacterComputedCache,
+  type CharacterComputedRow,
+} from './characterComputedService.js';
 import { withUnlockedFeatures } from './featureUnlockService.js';
 import { createInventoryForCharacter } from './shared/inventoryPersistence.js';
 import { primeCharacterIdByUserIdCache } from './shared/characterId.js';
@@ -19,73 +23,15 @@ import { isCharacterRenameCardItemDefinition } from './shared/characterRenameCar
 import { broadcastWorldSystemMessage } from './shared/worldChatBroadcast.js';
 import { getItemDefinitionById } from './staticConfigLoader.js';
 
-export interface Character {
-  id: number;
-  user_id: number;
-  nickname: string;
-  title: string;
-  gender: string;
-  avatar: string | null;
-  auto_cast_skills: boolean;
-  auto_disassemble_enabled: boolean;
-  auto_disassemble_rules: AutoDisassembleRuleSet[] | null;
-  dungeon_no_stamina_cost: boolean;
-  spirit_stones: number;
-  silver: number;
-  stamina: number;
-  stamina_max: number;
-  realm: string;
-  sub_realm: string | null;
-  exp: number;
-  attribute_points: number;
-  jing: number;
-  qi: number;
-  shen: number;
-  attribute_type: string;
-  attribute_element: string;
-  qixue: number;
-  max_qixue: number;
-  lingqi: number;
-  max_lingqi: number;
-  wugong: number;
-  fagong: number;
-  wufang: number;
-  fafang: number;
-  mingzhong: number;
-  shanbi: number;
-  zhaojia: number;
-  baoji: number;
-  baoshang: number;
-  jianbaoshang: number;
-  jianfantan: number;
-  kangbao: number;
-  zengshang: number;
-  zhiliao: number;
-  jianliao: number;
-  xixue: number;
-  lengque: number;
-  kongzhi_kangxing: number;
-  jin_kangxing: number;
-  mu_kangxing: number;
-  shui_kangxing: number;
-  huo_kangxing: number;
-  tu_kangxing: number;
-  qixue_huifu: number;
-  lingqi_huifu: number;
-  sudu: number;
-  fuyuan: number;
-  current_map_id: string;
-  current_room_id: string;
+export type Character = CharacterComputedRow & {
   feature_unlocks: string[];
-  created_at: Date;
-  updated_at: Date;
-}
+};
 
 export interface CharacterResult {
   success: boolean;
   message: string;
   data?: {
-    character: Character;
+    character: Character | null;
     hasCharacter: boolean;
   };
 }
@@ -95,19 +41,23 @@ export const characterServiceSideEffects = {
   broadcastWorldSystemMessage,
 };
 
+const attachUnlockedFeaturesToCharacter = async (
+  character: CharacterComputedRow,
+): Promise<Character> => {
+  return withUnlockedFeatures(character);
+};
+
 // 检查用户是否有角色
 export const checkCharacter = async (userId: number): Promise<CharacterResult> => {
   await applyStaminaRecoveryByUserId(userId);
   const character = await getCharacterComputedByUserId(userId);
   if (character) {
-    const characterWithUnlockedFeatures = await withUnlockedFeatures(
-      character as unknown as Record<string, unknown> & { id: number },
-    );
+    const characterWithUnlockedFeatures = await attachUnlockedFeaturesToCharacter(character);
     return {
       success: true,
       message: '已有角色',
       data: {
-        character: characterWithUnlockedFeatures as unknown as Character,
+        character: characterWithUnlockedFeatures,
         hasCharacter: true,
       },
     };
@@ -117,7 +67,7 @@ export const checkCharacter = async (userId: number): Promise<CharacterResult> =
     success: true,
     message: '未创建角色',
     data: {
-      character: null as unknown as Character,
+      character: null,
       hasCharacter: false,
     },
   };
@@ -171,15 +121,13 @@ export const createCharacter = async (
   if (!computedCharacter) {
     return { success: false, message: '角色创建成功，但读取角色数据失败' };
   }
-  const characterWithUnlockedFeatures = await withUnlockedFeatures(
-    computedCharacter as unknown as Record<string, unknown> & { id: number },
-  );
+  const characterWithUnlockedFeatures = await attachUnlockedFeaturesToCharacter(computedCharacter);
 
   return {
     success: true,
     message: '角色创建成功',
     data: {
-      character: characterWithUnlockedFeatures as unknown as Character,
+      character: characterWithUnlockedFeatures,
       hasCharacter: true,
     },
   };
@@ -288,15 +236,13 @@ export const getCharacter = async (userId: number): Promise<CharacterResult> => 
   if (!character) {
     return { success: false, message: '角色不存在' };
   }
-  const characterWithUnlockedFeatures = await withUnlockedFeatures(
-    character as unknown as Record<string, unknown> & { id: number },
-  );
+  const characterWithUnlockedFeatures = await attachUnlockedFeaturesToCharacter(character);
     
   return {
     success: true,
     message: '获取成功',
     data: {
-      character: characterWithUnlockedFeatures as unknown as Character,
+      character: characterWithUnlockedFeatures,
       hasCharacter: true,
     },
   };
@@ -364,7 +310,7 @@ export const updateCharacterAutoCastSkills = async (
 export const updateCharacterAutoDisassembleSettings = async (
   userId: number,
   enabled: boolean,
-  rules?: unknown
+  rules?: AutoDisassembleRuleSet[],
 ): Promise<{ success: boolean; message: string }> => {
   try {
     const normalized = normalizeAutoDisassembleSetting({

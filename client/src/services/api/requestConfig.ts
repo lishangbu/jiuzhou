@@ -10,15 +10,24 @@ import type { AxiosRequestConfig } from 'axios';
  *
  * 输入/输出：
  * - 输入：无。
- * - 输出：`SILENT_API_REQUEST_META` 与 `SILENT_API_REQUEST_CONFIG`。
+ * - 输出：`SILENT_API_REQUEST_META`、`SILENT_API_REQUEST_CONFIG`、`withRequestParams`。
  *
  * 数据流/状态流：
  * 业务模块导入共享常量 -> axios 拦截器读取 `meta.autoErrorToast` -> 决定是否自动提示错误。
+ * 业务模块导入 `withRequestParams` -> 统一合并调用方透传配置与本次请求参数 -> 交给 axios 发起请求。
  *
  * 关键边界条件与坑点：
  * 1. 静默只关闭自动 toast，不会吞掉 Promise reject；调用方仍需自己决定是否 catch 和提示。
  * 2. 所有静默请求必须共用同一份配置来源，避免后续调整字段名时出现多处散落修改。
+ * 3. `withRequestParams` 只负责合并扁平查询参数，不负责序列化复杂嵌套结构；复杂 `params` 仍应在调用侧明确构造。
  */
+
+type RequestParamValue = string | number | boolean | null | undefined;
+type RequestParams = Record<string, RequestParamValue>;
+
+const isPlainRequestParams = (value: AxiosRequestConfig['params']): value is RequestParams => {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+};
 
 export const SILENT_API_REQUEST_META = {
   autoErrorToast: false,
@@ -27,3 +36,17 @@ export const SILENT_API_REQUEST_META = {
 export const SILENT_API_REQUEST_CONFIG = {
   meta: SILENT_API_REQUEST_META,
 } as const satisfies AxiosRequestConfig;
+
+export const withRequestParams = <TParams extends RequestParams>(
+  requestConfig: AxiosRequestConfig | undefined,
+  params: TParams,
+): AxiosRequestConfig => {
+  const baseParams = isPlainRequestParams(requestConfig?.params) ? requestConfig.params : {};
+  return {
+    ...requestConfig,
+    params: {
+      ...baseParams,
+      ...params,
+    },
+  };
+};

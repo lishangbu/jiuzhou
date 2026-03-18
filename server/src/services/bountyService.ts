@@ -43,6 +43,63 @@ type BountyDefRow = {
   weight: number;
 };
 
+type CountRow = { cnt: number | string | null };
+
+type BountyBoardQueryRow = {
+  id: number | string | null;
+  source_type: string | null;
+  task_id: string | null;
+  title: string | null;
+  description: string | null;
+  claim_policy: string | null;
+  max_claims: number | string | null;
+  claimed_count: number | string | null;
+  refresh_date: string | Date | null;
+  expires_at: string | Date | null;
+  published_by_character_id: number | string | null;
+  spirit_stones_reward: number | string | null;
+  silver_reward: number | string | null;
+  spirit_stones_fee: number | string | null;
+  silver_fee: number | string | null;
+  required_items: unknown;
+  claimed_by_me: boolean | null;
+  my_claim_status: string | null;
+  my_task_status: string | null;
+};
+
+type BountyInstanceRow = {
+  id: number | string | null;
+  task_id: string | null;
+  claim_policy: string | null;
+  max_claims: number | string | null;
+  claimed_count: number | string | null;
+  expires_at: string | Date | null;
+};
+
+type TaskStatusRow = { status: string | null };
+type InsertIdRow = { id: number | string | null };
+type CharacterCurrencyRow = { spirit_stones: number | string | null; silver: number | string | null };
+type ClaimLookupRow = {
+  claim_id: number | string | null;
+  claim_status: string | null;
+  bounty_instance_id: number | string | null;
+  required_items: unknown;
+};
+type ProgressLookupRow = { progress: unknown; status: string | null };
+type InventoryOwnedItemRow = {
+  id: number | string | null;
+  qty: number | string | null;
+  locked: boolean | null;
+  location: string | null;
+};
+type TaskObjectiveRecord = Record<string, unknown>;
+type BountyRequiredItemRecord = {
+  item_def_id?: unknown;
+  itemDefId?: unknown;
+  name?: unknown;
+  qty?: unknown;
+};
+
 const asNonEmptyString = (v: unknown): string | null => {
   const s = typeof v === 'string' ? v.trim() : '';
   return s ? s : null;
@@ -64,16 +121,31 @@ const asRequiredItems = (v: unknown): BountyRequiredItemDto[] => {
   const list = Array.isArray(v) ? v : [];
   const out: BountyRequiredItemDto[] = [];
   for (const raw of list) {
-    if (!raw || typeof raw !== 'object') continue;
-    const r = raw as any;
-    const itemDefId = asNonEmptyString(r?.item_def_id ?? r?.itemDefId) ?? '';
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const r = raw as BountyRequiredItemRecord;
+    const itemDefId = asNonEmptyString(r.item_def_id ?? r.itemDefId) ?? '';
     if (!itemDefId) continue;
-    const name = asNonEmptyString(r?.name) ?? itemDefId;
-    const qty = Math.max(1, asFiniteNonNegativeInt(r?.qty, 1));
+    const name = asNonEmptyString(r.name) ?? itemDefId;
+    const qty = Math.max(1, asFiniteNonNegativeInt(r.qty, 1));
     out.push({ itemDefId, name, qty });
   }
   return out;
 };
+
+const isTaskObjectiveRecord = (value: unknown): value is TaskObjectiveRecord =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const toTaskObjectiveRecords = (value: unknown): TaskObjectiveRecord[] =>
+  Array.isArray(value) ? value.filter(isTaskObjectiveRecord) : [];
+
+const getObjectiveType = (objective: TaskObjectiveRecord): string =>
+  String(objective.type ?? '').trim();
+
+const getObjectiveId = (objective: TaskObjectiveRecord): string | null =>
+  asNonEmptyString(objective.id);
+
+const getObjectiveTarget = (objective: TaskObjectiveRecord): number =>
+  Math.max(1, asFiniteNonNegativeInt(objective.target, 1));
 
 const getLocalDateKey = (d: Date = new Date()): string => {
   const y = d.getFullYear();
@@ -128,11 +200,11 @@ class BountyService {
       `,
     );
 
-    const existingRes = await query(
+    const existingRes = await query<CountRow>(
       `SELECT COUNT(*)::int AS cnt FROM bounty_instance WHERE source_type = 'daily' AND refresh_date = $1 AND (expires_at IS NULL OR expires_at > NOW())`,
       [today],
     );
-    const existing = asFiniteInt((existingRes as any).rows?.[0]?.cnt, 0);
+    const existing = asFiniteInt(existingRes.rows[0]?.cnt, 0);
     if (existing >= take) {
       return;
     }
@@ -204,7 +276,7 @@ class BountyService {
       );
     const where = whereParts.length > 0 ? `WHERE ${whereParts.map((p) => `(${p})`).join(' OR ')}` : '';
 
-    const res = await query(
+    const res = await query<BountyBoardQueryRow>(
       `
         SELECT
           i.id,
@@ -241,26 +313,29 @@ class BountyService {
       params,
     );
 
-    const bounties: BountyBoardRowDto[] = ((res as any).rows ?? []).map((r: any) => ({
-      id: asFiniteInt(r?.id, 0),
-      sourceType: (asNonEmptyString(r?.source_type) ?? 'daily') as BountySourceType,
-      taskId: asNonEmptyString(r?.task_id) ?? '',
-      title: String(r?.title ?? ''),
-      description: String(r?.description ?? ''),
-      claimPolicy: ((asNonEmptyString(r?.claim_policy) ?? 'limited') as BountyClaimPolicy) ?? 'limited',
-      maxClaims: asFiniteInt(r?.max_claims, 0),
-      claimedCount: asFiniteInt(r?.claimed_count, 0),
-      refreshDate: r?.refresh_date ? String(r.refresh_date) : null,
-      expiresAt: r?.expires_at ? new Date(r.expires_at).toISOString() : null,
-      publishedByCharacterId: r?.published_by_character_id === null || r?.published_by_character_id === undefined ? null : asFiniteInt(r.published_by_character_id, 0),
-      spiritStonesReward: asFiniteNonNegativeInt(r?.spirit_stones_reward, 0),
-      silverReward: asFiniteNonNegativeInt(r?.silver_reward, 0),
-      spiritStonesFee: asFiniteNonNegativeInt(r?.spirit_stones_fee, 0),
-      silverFee: asFiniteNonNegativeInt(r?.silver_fee, 0),
-      requiredItems: asRequiredItems(r?.required_items),
-      claimedByMe: r?.claimed_by_me === true,
-      myClaimStatus: asNonEmptyString(r?.my_claim_status),
-      myTaskStatus: asNonEmptyString(r?.my_task_status),
+    const bounties: BountyBoardRowDto[] = res.rows.map((row) => ({
+      id: asFiniteInt(row.id, 0),
+      sourceType: (asNonEmptyString(row.source_type) ?? 'daily') as BountySourceType,
+      taskId: asNonEmptyString(row.task_id) ?? '',
+      title: String(row.title ?? ''),
+      description: String(row.description ?? ''),
+      claimPolicy: (asNonEmptyString(row.claim_policy) ?? 'limited') as BountyClaimPolicy,
+      maxClaims: asFiniteInt(row.max_claims, 0),
+      claimedCount: asFiniteInt(row.claimed_count, 0),
+      refreshDate: row.refresh_date ? String(row.refresh_date) : null,
+      expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+      publishedByCharacterId:
+        row.published_by_character_id === null || row.published_by_character_id === undefined
+          ? null
+          : asFiniteInt(row.published_by_character_id, 0),
+      spiritStonesReward: asFiniteNonNegativeInt(row.spirit_stones_reward, 0),
+      silverReward: asFiniteNonNegativeInt(row.silver_reward, 0),
+      spiritStonesFee: asFiniteNonNegativeInt(row.spirit_stones_fee, 0),
+      silverFee: asFiniteNonNegativeInt(row.silver_fee, 0),
+      requiredItems: asRequiredItems(row.required_items),
+      claimedByMe: row.claimed_by_me === true,
+      myClaimStatus: asNonEmptyString(row.my_claim_status),
+      myTaskStatus: asNonEmptyString(row.my_task_status),
     }));
 
     return { success: true, data: { bounties, today } };
@@ -279,7 +354,7 @@ class BountyService {
     if (!Number.isFinite(cid) || cid <= 0) return { success: false, message: '角色不存在' };
     if (!Number.isFinite(bid) || bid <= 0) return { success: false, message: '悬赏不存在' };
 
-    const instRes = await query(
+    const instRes = await query<BountyInstanceRow>(
       `
         SELECT id, task_id, claim_policy, max_claims, claimed_count, expires_at
         FROM bounty_instance
@@ -289,22 +364,22 @@ class BountyService {
       `,
       [bid],
     );
-    if (((instRes as any).rows ?? []).length === 0) {
+    if (instRes.rows.length === 0) {
       return { success: false, message: '悬赏不存在' };
     }
-    const inst = (instRes as any).rows[0] as any;
-    const taskId = asNonEmptyString(inst?.task_id) ?? '';
+    const inst = instRes.rows[0];
+    const taskId = asNonEmptyString(inst.task_id) ?? '';
     if (!taskId) {
       return { success: false, message: '悬赏数据异常' };
     }
-    const expiresAtMs = inst?.expires_at ? new Date(inst.expires_at).getTime() : 0;
+    const expiresAtMs = inst.expires_at ? new Date(inst.expires_at).getTime() : 0;
     if (expiresAtMs && Number.isFinite(expiresAtMs) && Date.now() > expiresAtMs) {
       return { success: false, message: '悬赏已过期' };
     }
 
-    const claimPolicy = (asNonEmptyString(inst?.claim_policy) ?? 'limited') as BountyClaimPolicy;
-    const maxClaims = asFiniteInt(inst?.max_claims, 0);
-    const claimedCount = asFiniteInt(inst?.claimed_count, 0);
+    const claimPolicy = (asNonEmptyString(inst.claim_policy) ?? 'limited') as BountyClaimPolicy;
+    const maxClaims = asFiniteInt(inst.max_claims, 0);
+    const claimedCount = asFiniteInt(inst.claimed_count, 0);
 
     if (claimPolicy === 'unique' && claimedCount >= 1) {
       return { success: false, message: '该悬赏已被接取' };
@@ -313,18 +388,18 @@ class BountyService {
       return { success: false, message: '该悬赏接取次数已满' };
     }
 
-    const taskProgRes = await query(
+    const taskProgRes = await query<TaskStatusRow>(
       `SELECT status FROM character_task_progress WHERE character_id = $1 AND task_id = $2 LIMIT 1 FOR UPDATE`,
       [cid, taskId],
     );
-    if (((taskProgRes as any).rows ?? []).length > 0) {
-      const st = asNonEmptyString((taskProgRes as any).rows[0]?.status);
+    if (taskProgRes.rows.length > 0) {
+      const st = asNonEmptyString(taskProgRes.rows[0]?.status);
       if (st && st !== 'claimed') {
         return { success: false, message: '该任务已接取' };
       }
     }
 
-    const insertClaimRes = await query(
+    const insertClaimRes = await query<InsertIdRow>(
       `
         INSERT INTO bounty_claim (bounty_instance_id, character_id, status, claimed_at, updated_at)
         VALUES ($1, $2, 'claimed', NOW(), NOW())
@@ -333,7 +408,7 @@ class BountyService {
       `,
       [bid, cid],
     );
-    if (((insertClaimRes as any).rows ?? []).length === 0) {
+    if (insertClaimRes.rows.length === 0) {
       return { success: false, message: '已接取该悬赏' };
     }
 
@@ -346,8 +421,8 @@ class BountyService {
     if (!taskDef) {
       return { success: false, message: '任务不存在' };
     }
-    const objectives = Array.isArray(taskDef.objectives) ? (taskDef.objectives as any[]) : [];
-    const hasSubmitObjective = objectives.some((o) => (o && typeof o === 'object' ? String((o as any).type ?? '').trim() : '') === 'submit_items');
+    const objectives = toTaskObjectiveRecords(taskDef.objectives);
+    const hasSubmitObjective = objectives.some((objective) => getObjectiveType(objective) === 'submit_items');
     const initialStatus = hasSubmitObjective ? 'turnin' : 'ongoing';
 
     await query(
@@ -407,9 +482,10 @@ class BountyService {
     const rawRequiredItems = Array.isArray(payload.requiredItems) ? payload.requiredItems : [];
     const requiredItems: Array<{ itemDefId: string; qty: number }> = [];
     for (const it of rawRequiredItems) {
-      if (!it || typeof it !== 'object') continue;
-      const itemDefId = asNonEmptyString((it as any).itemDefId) ?? '';
-      const qty = Math.max(1, asFiniteNonNegativeInt((it as any).qty, 1));
+      if (!it || typeof it !== 'object' || Array.isArray(it)) continue;
+      const input = it as { itemDefId?: unknown; qty?: unknown };
+      const itemDefId = asNonEmptyString(input.itemDefId) ?? '';
+      const qty = Math.max(1, asFiniteNonNegativeInt(input.qty, 1));
       if (!itemDefId) continue;
       requiredItems.push({ itemDefId, qty });
     }
@@ -515,15 +591,15 @@ class BountyService {
       }
     }
 
-    const charRes = await query(
+    const charRes = await query<CharacterCurrencyRow>(
       `SELECT spirit_stones, silver FROM characters WHERE id = $1 LIMIT 1 FOR UPDATE`,
       [cid],
     );
-    if (((charRes as any).rows ?? []).length === 0) {
+    if (charRes.rows.length === 0) {
       return { success: false, message: '角色不存在' };
     }
-    const curSpirit = asFiniteNonNegativeInt((charRes as any).rows[0]?.spirit_stones, 0);
-    const curSilver = asFiniteNonNegativeInt((charRes as any).rows[0]?.silver, 0);
+    const curSpirit = asFiniteNonNegativeInt(charRes.rows[0]?.spirit_stones, 0);
+    const curSilver = asFiniteNonNegativeInt(charRes.rows[0]?.silver, 0);
     if (curSpirit < spiritCost) {
       return { success: false, message: '灵石不足' };
     }
@@ -536,7 +612,7 @@ class BountyService {
       [spiritCost, silverCost, cid],
     );
 
-    const res = await query(
+    const res = await query<InsertIdRow>(
       `
         INSERT INTO bounty_instance (
           source_type, bounty_def_id, task_id, title, description,
@@ -570,7 +646,7 @@ class BountyService {
         JSON.stringify(normalizedRequiredItems),
       ],
     );
-    const id = asFiniteInt((res as any).rows?.[0]?.id, 0);
+    const id = asFiniteInt(res.rows[0]?.id, 0);
     if (!id) {
       return { success: false, message: '发布失败' };
     }
@@ -630,7 +706,7 @@ class BountyService {
     cid: number,
     tid: string,
   ): Promise<{ success: true; message: string; data: { taskId: string } } | { success: false; message: string }> {
-    const claimRes = await query(
+    const claimRes = await query<ClaimLookupRow>(
       `
         SELECT
           c.id AS claim_id,
@@ -647,30 +723,30 @@ class BountyService {
       `,
       [cid, tid],
     );
-    if (((claimRes as any).rows ?? []).length === 0) {
+    if (claimRes.rows.length === 0) {
       return { success: false, message: '未接取该悬赏' };
     }
 
-    const claimRow = (claimRes as any).rows[0] as any;
-    const claimId = Number(claimRow?.claim_id);
-    const claimStatus = asNonEmptyString(claimRow?.claim_status) ?? 'claimed';
+    const claimRow = claimRes.rows[0];
+    const claimId = Number(claimRow.claim_id);
+    const claimStatus = asNonEmptyString(claimRow.claim_status) ?? 'claimed';
     if (claimStatus === 'completed') {
       return { success: false, message: '已提交材料' };
     }
 
-    const requiredItems = asRequiredItems(claimRow?.required_items);
+    const requiredItems = asRequiredItems(claimRow.required_items);
     if (requiredItems.length === 0) {
       return { success: false, message: '该悬赏无需提交材料' };
     }
 
-    const progRes = await query(
+    const progRes = await query<ProgressLookupRow>(
       `SELECT progress, status FROM character_task_progress WHERE character_id = $1 AND task_id = $2 FOR UPDATE`,
       [cid, tid],
     );
-    if (((progRes as any).rows ?? []).length === 0) {
+    if (progRes.rows.length === 0) {
       return { success: false, message: '任务未接取' };
     }
-    const currentStatus = asNonEmptyString((progRes as any).rows[0]?.status) ?? 'ongoing';
+    const currentStatus = asNonEmptyString(progRes.rows[0]?.status) ?? 'ongoing';
     if (currentStatus === 'claimable') {
       return { success: false, message: '任务已可领取' };
     }
@@ -679,14 +755,14 @@ class BountyService {
     }
 
     const taskDef = await getTaskDefinitionById(tid);
-    const objectives = Array.isArray(taskDef?.objectives) ? (taskDef.objectives as any[]) : [];
-    const submitObj = objectives.find((o) => (o && typeof o === 'object' ? String((o as any).type ?? '').trim() : '') === 'submit_items');
-    const submitObjId = submitObj && typeof submitObj === 'object' ? asNonEmptyString((submitObj as any).id) : null;
-    const submitTarget = submitObj && typeof submitObj === 'object' ? Math.max(1, asFiniteNonNegativeInt((submitObj as any).target, 1)) : 1;
+    const objectives = toTaskObjectiveRecords(taskDef?.objectives);
+    const submitObj = objectives.find((objective) => getObjectiveType(objective) === 'submit_items');
+    const submitObjId = submitObj ? getObjectiveId(submitObj) : null;
+    const submitTarget = submitObj ? getObjectiveTarget(submitObj) : 1;
 
     for (const reqItem of requiredItems) {
       let remaining = Math.max(1, Math.floor(reqItem.qty));
-      const rowsRes = await query(
+      const rowsRes = await query<InventoryOwnedItemRow>(
         `
           SELECT id, qty, locked, location
           FROM item_instance
@@ -698,7 +774,7 @@ class BountyService {
         `,
         [cid, reqItem.itemDefId],
       );
-      const rows = ((rowsRes as any).rows ?? []) as Array<{ id: number; qty: number; locked: boolean }>;
+      const rows = rowsRes.rows;
       const available = rows.filter((r) => !r.locked).reduce((sum, r) => sum + Math.max(0, Number(r.qty) || 0), 0);
       if (available < remaining) {
         return { success: false, message: `${reqItem.name}数量不足` };
@@ -719,7 +795,11 @@ class BountyService {
       }
     }
 
-    const progressRecord = (progRes as any).rows[0]?.progress && typeof (progRes as any).rows[0].progress === 'object' ? ((progRes as any).rows[0].progress as Record<string, unknown>) : {};
+    const progressValue = progRes.rows[0]?.progress;
+    const progressRecord =
+      progressValue && typeof progressValue === 'object' && !Array.isArray(progressValue)
+        ? (progressValue as Record<string, unknown>)
+        : {};
     const nextProgress: Record<string, number> = {};
     for (const [k, v] of Object.entries(progressRecord)) {
       const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN;

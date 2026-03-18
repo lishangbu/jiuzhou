@@ -5,21 +5,22 @@ import { battlePassService } from '../services/battlePassService.js';
 import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
 import { sendSuccess, sendResult } from '../middleware/response.js';
 import { BusinessError } from '../middleware/BusinessError.js';
+import { getSingleParam, getSingleQueryValue, parseNonEmptyText } from '../services/shared/httpParam.js';
 
 const router = Router();
 
 
 router.get('/tasks', requireAuth, asyncHandler(async (req, res) => {
   const userId = req.userId!;
-  const seasonId = typeof req.query.seasonId === 'string' ? req.query.seasonId : undefined;
+  const seasonId = parseNonEmptyText(getSingleQueryValue(req.query.seasonId)) ?? undefined;
   const data = await battlePassService.getBattlePassTasksOverview(userId, seasonId);
   return sendSuccess(res, data);
 }));
 
 router.post('/tasks/:taskId/complete', requireAuth, asyncHandler(async (req, res) => {
   const userId = req.userId!;
-  const taskId = typeof req.params.taskId === 'string' ? req.params.taskId : '';
-  if (!taskId.trim()) {
+  const taskId = parseNonEmptyText(getSingleParam(req.params.taskId));
+  if (!taskId) {
     throw new BusinessError('任务ID无效');
   }
   const result = await battlePassService.completeBattlePassTask(userId, taskId);
@@ -34,7 +35,7 @@ router.get('/status', requireAuth, asyncHandler(async (req, res) => {
 }));
 
 router.get('/rewards', requireAuth, asyncHandler(async (req, res) => {
-  const seasonId = typeof req.query.seasonId === 'string' ? req.query.seasonId : undefined;
+  const seasonId = parseNonEmptyText(getSingleQueryValue(req.query.seasonId)) ?? undefined;
   const data = await battlePassService.getBattlePassRewards(seasonId);
   return sendSuccess(res, data);
 }));

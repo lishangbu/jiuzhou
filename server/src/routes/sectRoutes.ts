@@ -33,6 +33,7 @@ import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
 import { sendResult } from '../middleware/response.js';
 import { BusinessError } from '../middleware/BusinessError.js';
 import { getCharacterSectId } from '../services/sect/db.js';
+import { getSingleParam, getSingleQueryValue, parseFiniteNumber, parseNonEmptyText } from '../services/shared/httpParam.js';
 import { listSectMemberCharacterIds } from '../services/sect/indicator.js';
 import {
   notifySectIndicatorByApplicationId,
@@ -45,12 +46,7 @@ const router = Router();
 
 
 const parseBodyNumber = (v: unknown): number | undefined => {
-  if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
-  if (typeof v === 'string' && v.trim() !== '') {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : undefined;
-  }
-  return undefined;
+  return parseFiniteNumber(v);
 };
 
 router.use(requireCharacter);
@@ -62,9 +58,9 @@ router.get('/me', asyncHandler(async (req, res) => {
 }));
 
 router.get('/search', asyncHandler(async (req, res) => {
-  const keyword = typeof req.query.keyword === 'string' ? req.query.keyword : undefined;
-  const page = typeof req.query.page === 'string' ? Number(req.query.page) : undefined;
-  const limit = typeof req.query.limit === 'string' ? Number(req.query.limit) : undefined;
+  const keyword = parseNonEmptyText(getSingleQueryValue(req.query.keyword)) ?? undefined;
+  const page = parseFiniteNumber(getSingleQueryValue(req.query.page));
+  const limit = parseFiniteNumber(getSingleQueryValue(req.query.limit));
   const result = await searchSects(keyword, page, limit);
   return sendResult(res, result);
 }));
@@ -318,14 +314,13 @@ router.post('/shop/buy', asyncHandler(async (req, res) => {
 
 router.get('/logs', asyncHandler(async (req, res) => {
   const characterId = req.characterId!;
-  const limit = typeof req.query.limit === 'string' ? Number(req.query.limit) : undefined;
+  const limit = parseFiniteNumber(getSingleQueryValue(req.query.limit));
   const result = await getSectLogs(characterId, limit);
   return sendResult(res, result);
 }));
 
 router.get('/:sectId', asyncHandler(async (req, res) => {
-  const sectIdRaw = req.params.sectId;
-  const sectId = Array.isArray(sectIdRaw) ? sectIdRaw[0] : sectIdRaw;
+  const sectId = parseNonEmptyText(getSingleParam(req.params.sectId));
   if (!sectId) throw new BusinessError('参数错误');
   const result = await getSectInfo(sectId);
   return res.status(result.success ? 200 : 404).json(result);

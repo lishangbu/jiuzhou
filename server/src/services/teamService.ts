@@ -94,6 +94,44 @@ interface TeamApplicationQueryRow {
   avatar: string | null;
 }
 
+interface TeamUserIdRow {
+  user_id: number | string | null;
+}
+
+interface TeamCharacterIdRow {
+  character_id: number | string | null;
+}
+
+interface TeamBrowseRow {
+  id: string;
+  name: string;
+  goal: string;
+  join_min_realm: string;
+  max_members: number;
+  leader_id: number | string;
+  leader_name: string;
+  member_count: number | string;
+}
+
+interface TeamInvitationQueryRow {
+  id: string;
+  message: string | null;
+  created_at: string | Date;
+  inviter_id: number | string;
+  team_id: string;
+  team_name: string;
+  goal: string;
+  inviter_name: string;
+}
+
+type TeamUpdatePayload = {
+  kind: string;
+  teamId: string;
+  time: number;
+  applicationId?: string;
+  invitationId?: string;
+};
+
 export interface TeamApplicationListItem {
   id: string;
   characterId: number;
@@ -294,7 +332,7 @@ const invalidateTeamReadCaches = async (teamId: string): Promise<void> => {
   ]);
 };
 
-const emitTeamUpdateToUserIds = (userIds: number[], payload: any) => {
+const emitTeamUpdateToUserIds = (userIds: number[], payload: TeamUpdatePayload) => {
   try {
     const gameServer = getGameServer();
     const ids = Array.from(new Set(userIds.filter((id) => Number.isFinite(id))));
@@ -307,13 +345,13 @@ const emitTeamUpdateToUserIds = (userIds: number[], payload: any) => {
 const getUserIdsByCharacterIds = async (characterIds: number[]): Promise<number[]> => {
   const ids = Array.from(new Set(characterIds.filter((id) => Number.isFinite(id))));
   if (ids.length === 0) return [];
-  const res = await query(`SELECT DISTINCT user_id FROM characters WHERE id = ANY($1::int[])`, [ids]);
-  return res.rows.map((r: any) => Number(r.user_id)).filter((n: number) => Number.isFinite(n));
+  const res = await query<TeamUserIdRow>(`SELECT DISTINCT user_id FROM characters WHERE id = ANY($1::int[])`, [ids]);
+  return res.rows.map((row) => Number(row.user_id)).filter((n: number) => Number.isFinite(n));
 };
 
 const notifyTeamMembersChanged = async (teamId: string, extraCharacterIds: number[] = [], kind: string = 'team_changed') => {
-  const memberRes = await query(`SELECT character_id FROM team_members WHERE team_id = $1`, [teamId]);
-  const memberIds = memberRes.rows.map((r: any) => Number(r.character_id)).filter((n: number) => Number.isFinite(n));
+  const memberRes = await query<TeamCharacterIdRow>(`SELECT character_id FROM team_members WHERE team_id = $1`, [teamId]);
+  const memberIds = memberRes.rows.map((row) => Number(row.character_id)).filter((n: number) => Number.isFinite(n));
   const allCharacterIds = Array.from(new Set([...memberIds, ...extraCharacterIds]));
   const userIds = await getUserIdsByCharacterIds(allCharacterIds);
   emitTeamUpdateToUserIds(userIds, { kind, teamId, time: Date.now() });
@@ -486,8 +524,8 @@ export const disbandTeam = async (characterId: number, teamId: string) => {
     return { success: false, message: '只有队长才能解散队伍' };
   }
 
-  const memberRes = await query(`SELECT character_id FROM team_members WHERE team_id = $1`, [teamId]);
-  const memberCharacterIds = memberRes.rows.map((r: any) => Number(r.character_id)).filter((n: number) => Number.isFinite(n));
+  const memberRes = await query<TeamCharacterIdRow>(`SELECT character_id FROM team_members WHERE team_id = $1`, [teamId]);
+  const memberCharacterIds = memberRes.rows.map((row) => Number(row.character_id)).filter((n: number) => Number.isFinite(n));
   const memberUserIds = await getUserIdsByCharacterIds(memberCharacterIds);
   for (const userId of memberUserIds) {
     if (!Number.isFinite(userId) || userId <= 0) continue;
@@ -543,8 +581,8 @@ export const leaveTeam = async (characterId: number) => {
       await query(`UPDATE team_members SET role = 'leader' WHERE team_id = $1 AND character_id = $2`, [teamId, newLeaderId]);
     } else {
       // 没有其他成员，解散队伍
-      const memberRes = await query(`SELECT character_id FROM team_members WHERE team_id = $1`, [teamId]);
-      const memberCharacterIds = memberRes.rows.map((r: any) => Number(r.character_id)).filter((n: number) => Number.isFinite(n));
+      const memberRes = await query<TeamCharacterIdRow>(`SELECT character_id FROM team_members WHERE team_id = $1`, [teamId]);
+      const memberCharacterIds = memberRes.rows.map((row) => Number(row.character_id)).filter((n: number) => Number.isFinite(n));
       const memberUserIds = await getUserIdsByCharacterIds(memberCharacterIds);
       emitTeamUpdateToUserIds(memberUserIds, { kind: 'disband_team', teamId, time: Date.now() });
       await query(`DELETE FROM teams WHERE id = $1`, [teamId]);
@@ -882,7 +920,7 @@ export const updateTeamSettings = async (
 
   // 构建更新语句
   const updates: string[] = [];
-  const values: any[] = [];
+  const values: Array<string | boolean> = [];
   let paramIndex = 1;
 
   if (settings.name !== undefined) {
@@ -946,7 +984,7 @@ export const getNearbyTeams = async (characterId: number, mapId?: string) => {
   const currentMapId = mapId || charResult.rows[0].current_map_id;
 
   // 查询同地图的公开队伍
-  const teamsResult = await query(
+  const teamsResult = await query<TeamBrowseRow>(
     `SELECT t.id, t.name, t.goal, t.join_min_realm, t.max_members, t.leader_id,
             c.nickname as leader_name,
             (SELECT COUNT(*) FROM team_members WHERE team_id = t.id) as member_count
@@ -960,12 +998,12 @@ export const getNearbyTeams = async (characterId: number, mapId?: string) => {
     [currentMapId, characterId]
   );
 
-  const rawRows = teamsResult.rows.map((row: any) => ({
+  const rawRows = teamsResult.rows.map((row) => ({
     id: row.id,
     name: row.name,
     leader: row.leader_name,
     leaderCharacterId: Number(row.leader_id),
-    members: parseInt(row.member_count),
+    members: Number.parseInt(String(row.member_count), 10),
     cap: row.max_members,
     goal: row.goal,
     minRealm: row.join_min_realm,
@@ -998,7 +1036,7 @@ export const getLobbyTeams = async (characterId: number, search?: string, limit:
     WHERE t.is_public = true
       AND t.id NOT IN (SELECT team_id FROM team_members WHERE character_id = $1)
   `;
-  const params: any[] = [characterId];
+  const params: Array<number | string> = [characterId];
 
   if (search) {
     sql += ` AND (t.name ILIKE $2 OR c.nickname ILIKE $2 OR t.goal ILIKE $2)`;
@@ -1008,14 +1046,14 @@ export const getLobbyTeams = async (characterId: number, search?: string, limit:
   sql += ` ORDER BY t.created_at DESC LIMIT $${params.length + 1}`;
   params.push(limit);
 
-  const teamsResult = await query(sql, params);
+  const teamsResult = await query<TeamBrowseRow>(sql, params);
 
-  const rawRows = teamsResult.rows.map((row: any) => ({
+  const rawRows = teamsResult.rows.map((row) => ({
     id: row.id,
     name: row.name,
     leader: row.leader_name,
     leaderCharacterId: Number(row.leader_id),
-    members: parseInt(row.member_count),
+    members: Number.parseInt(String(row.member_count), 10),
     cap: row.max_members,
     goal: row.goal,
     minRealm: row.join_min_realm,
@@ -1103,7 +1141,7 @@ export const inviteToTeam = async (inviterId: number, inviteeId: number, message
  * 获取收到的邀请
  */
 export const getReceivedInvitations = async (characterId: number) => {
-  const invitations = await query(
+  const invitations = await query<TeamInvitationQueryRow>(
     `SELECT ti.id, ti.message, ti.created_at, ti.inviter_id,
             t.id as team_id, t.name as team_name, t.goal,
             c.nickname as inviter_name
@@ -1115,7 +1153,7 @@ export const getReceivedInvitations = async (characterId: number) => {
     [characterId]
   );
 
-  const rawRows = invitations.rows.map((row: any) => ({
+  const rawRows = invitations.rows.map((row) => ({
     id: row.id,
     teamId: row.team_id,
     teamName: row.team_name,
@@ -1123,7 +1161,7 @@ export const getReceivedInvitations = async (characterId: number) => {
     inviterName: row.inviter_name,
     inviterCharacterId: Number(row.inviter_id),
     message: row.message,
-    time: new Date(row.created_at).getTime(),
+    time: new Date(String(row.created_at)).getTime(),
   }));
 
   const inviterMonthCardActiveMap = await getMonthCardActiveMapByCharacterIds(

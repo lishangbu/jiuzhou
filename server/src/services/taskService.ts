@@ -117,6 +117,12 @@ type RecurringTaskResetInflightEntry = {
   realmStateKey: string | null;
 };
 
+type BountyClaimRewardRow = {
+  claim_id: number | string | null;
+  spirit_stones_reward: number | string | null;
+  silver_reward: number | string | null;
+};
+
 const asNonEmptyString = (v: unknown): string | null => {
   if (typeof v !== 'string') return null;
   const s = v.trim();
@@ -715,7 +721,7 @@ export const getBountyTaskOverview = async (characterId: number): Promise<{ task
       const bountyInstanceIdRaw = typeof r.bounty_instance_id === 'number' ? r.bounty_instance_id : Number(r.bounty_instance_id);
       const bountyInstanceId = Number.isFinite(bountyInstanceIdRaw) ? Math.trunc(bountyInstanceIdRaw) : 0;
       const sourceType = (asNonEmptyString(r.source_type) ?? 'daily') as BountyTaskSourceType;
-      const expiresAt = r.expires_at ? new Date(r.expires_at as any).toISOString() : null;
+      const expiresAt = r.expires_at ? new Date(String(r.expires_at)).toISOString() : null;
       const remainingSeconds = computeRemainingSeconds(expiresAt);
 
       const title = String(r.bounty_title ?? taskId);
@@ -1626,7 +1632,7 @@ class TaskService {
     characterId: number,
     taskId: string
   ): Promise<{ rewards: ClaimedRewardResult[]; rewardDelta: CharacterRewardDelta }> {
-    const res = await query(
+    const res = await query<BountyClaimRewardRow>(
       `
         SELECT
           c.id AS claim_id,
@@ -1646,7 +1652,7 @@ class TaskService {
       return { rewards: [], rewardDelta: createCharacterRewardDelta() };
     }
 
-    const row = res.rows[0] as any;
+    const row = res.rows[0];
     const claimId = Number(row?.claim_id);
     if (!Number.isFinite(claimId) || claimId <= 0) {
       return { rewards: [], rewardDelta: createCharacterRewardDelta() };

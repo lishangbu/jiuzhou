@@ -19,6 +19,7 @@ import { safePushCharacterUpdate } from '../middleware/pushUpdate.js';
 import { sendResult, sendSuccess } from '../middleware/response.js';
 import { isTencentCaptchaProvider } from '../config/captchaConfig.js';
 import { BusinessError } from '../middleware/BusinessError.js';
+import { getSingleQueryValue, parseFiniteNumber, parseNonEmptyText } from '../services/shared/httpParam.js';
 import { verifyCaptchaByProvider } from '../shared/verifyCaptchaByProvider.js';
 
 const router = Router();
@@ -51,14 +52,6 @@ const partnerMarketBuyMutationQpsLimit = createMarketQpsLimit('partner-buy', MAR
 const marketAuthGuards = [requireAuth, requireMarketPhoneBinding];
 const marketCharacterGuards = [requireCharacter, requireMarketPhoneBinding];
 
-const parseQueryNumber = (v: unknown): number | undefined => {
-  if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
-  if (typeof v !== 'string') return undefined;
-  const n = Number(v);
-  if (!Number.isFinite(n)) return undefined;
-  return n;
-};
-
 type MarketCaptchaPayload = {
   captchaId?: string;
   captchaCode?: string;
@@ -68,14 +61,15 @@ type MarketCaptchaPayload = {
 
 router.get('/listings', ...marketAuthGuards, marketListingsQpsLimit, asyncHandler(async (req, res) => {
   const userId = req.userId!;
-  const category = typeof req.query.category === 'string' ? req.query.category : undefined;
-  const quality = typeof req.query.quality === 'string' ? req.query.quality : undefined;
-  const queryText = typeof req.query.query === 'string' ? req.query.query : undefined;
-  const sort = typeof req.query.sort === 'string' ? (req.query.sort as MarketSort) : undefined;
-  const minPrice = parseQueryNumber(req.query.minPrice);
-  const maxPrice = parseQueryNumber(req.query.maxPrice);
-  const page = parseQueryNumber(req.query.page);
-  const pageSize = parseQueryNumber(req.query.pageSize);
+  const category = parseNonEmptyText(getSingleQueryValue(req.query.category)) ?? undefined;
+  const quality = parseNonEmptyText(getSingleQueryValue(req.query.quality)) ?? undefined;
+  const queryText = parseNonEmptyText(getSingleQueryValue(req.query.query)) ?? undefined;
+  const sortRaw = getSingleQueryValue(req.query.sort);
+  const sort = sortRaw ? (sortRaw as MarketSort) : undefined;
+  const minPrice = parseFiniteNumber(getSingleQueryValue(req.query.minPrice));
+  const maxPrice = parseFiniteNumber(getSingleQueryValue(req.query.maxPrice));
+  const page = parseFiniteNumber(getSingleQueryValue(req.query.page));
+  const pageSize = parseFiniteNumber(getSingleQueryValue(req.query.pageSize));
   await recordMarketRiskQueryAccess({
     userId,
     signature: buildItemMarketRiskQuerySignature({
@@ -126,23 +120,19 @@ router.post('/captcha/verify', ...marketCharacterGuards, asyncHandler(async (req
 }));
 
 router.get('/my-listings', ...marketCharacterGuards, marketMyListingsQpsLimit, asyncHandler(async (req, res) => {
-  const userId = req.userId!;
   const characterId = req.characterId!;
-
-  const status = typeof req.query.status === 'string' ? req.query.status : undefined;
-  const page = parseQueryNumber(req.query.page);
-  const pageSize = parseQueryNumber(req.query.pageSize);
+  const status = parseNonEmptyText(getSingleQueryValue(req.query.status)) ?? undefined;
+  const page = parseFiniteNumber(getSingleQueryValue(req.query.page));
+  const pageSize = parseFiniteNumber(getSingleQueryValue(req.query.pageSize));
 
   const result = await marketService.getMyMarketListings({ characterId, status, page, pageSize });
   return sendResult(res, result);
 }));
 
 router.get('/records', ...marketCharacterGuards, marketRecordsQpsLimit, asyncHandler(async (req, res) => {
-  const userId = req.userId!;
   const characterId = req.characterId!;
-
-  const page = parseQueryNumber(req.query.page);
-  const pageSize = parseQueryNumber(req.query.pageSize);
+  const page = parseFiniteNumber(getSingleQueryValue(req.query.page));
+  const pageSize = parseFiniteNumber(getSingleQueryValue(req.query.pageSize));
   const result = await marketService.getMarketTradeRecords({ characterId, page, pageSize });
   return sendResult(res, result);
 }));
@@ -207,12 +197,13 @@ router.post('/buy', ...marketCharacterGuards, marketBuyMutationQpsLimit, require
 
 router.get('/partner-listings', ...marketAuthGuards, partnerMarketListingsQpsLimit, asyncHandler(async (req, res) => {
   const userId = req.userId!;
-  const quality = typeof req.query.quality === 'string' ? req.query.quality : undefined;
-  const element = typeof req.query.element === 'string' ? req.query.element : undefined;
-  const queryText = typeof req.query.query === 'string' ? req.query.query : undefined;
-  const sort = typeof req.query.sort === 'string' ? (req.query.sort as PartnerMarketSort) : undefined;
-  const page = parseQueryNumber(req.query.page);
-  const pageSize = parseQueryNumber(req.query.pageSize);
+  const quality = parseNonEmptyText(getSingleQueryValue(req.query.quality)) ?? undefined;
+  const element = parseNonEmptyText(getSingleQueryValue(req.query.element)) ?? undefined;
+  const queryText = parseNonEmptyText(getSingleQueryValue(req.query.query)) ?? undefined;
+  const sortRaw = getSingleQueryValue(req.query.sort);
+  const sort = sortRaw ? (sortRaw as PartnerMarketSort) : undefined;
+  const page = parseFiniteNumber(getSingleQueryValue(req.query.page));
+  const pageSize = parseFiniteNumber(getSingleQueryValue(req.query.pageSize));
   await recordMarketRiskQueryAccess({
     userId,
     signature: buildPartnerMarketRiskQuerySignature({
@@ -238,9 +229,9 @@ router.get('/partner-listings', ...marketAuthGuards, partnerMarketListingsQpsLim
 
 router.get('/partner-my-listings', ...marketCharacterGuards, partnerMarketMyListingsQpsLimit, asyncHandler(async (req, res) => {
   const characterId = req.characterId!;
-  const status = typeof req.query.status === 'string' ? req.query.status : undefined;
-  const page = parseQueryNumber(req.query.page);
-  const pageSize = parseQueryNumber(req.query.pageSize);
+  const status = parseNonEmptyText(getSingleQueryValue(req.query.status)) ?? undefined;
+  const page = parseFiniteNumber(getSingleQueryValue(req.query.page));
+  const pageSize = parseFiniteNumber(getSingleQueryValue(req.query.pageSize));
 
   const result = await partnerMarketService.getMyPartnerListings({
     characterId,
@@ -253,8 +244,8 @@ router.get('/partner-my-listings', ...marketCharacterGuards, partnerMarketMyList
 
 router.get('/partner-records', ...marketCharacterGuards, partnerMarketRecordsQpsLimit, asyncHandler(async (req, res) => {
   const characterId = req.characterId!;
-  const page = parseQueryNumber(req.query.page);
-  const pageSize = parseQueryNumber(req.query.pageSize);
+  const page = parseFiniteNumber(getSingleQueryValue(req.query.page));
+  const pageSize = parseFiniteNumber(getSingleQueryValue(req.query.pageSize));
 
   const result = await partnerMarketService.getPartnerTradeRecords({
     characterId,

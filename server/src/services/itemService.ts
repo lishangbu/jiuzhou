@@ -21,7 +21,7 @@ import {
 } from './inventory/index.js';
 import { inventoryService } from './inventory/service.js';
 import { lockCharacterInventoryMutex } from './inventoryMutex.js';
-import { buildEquipmentDisplayBaseAttrs } from './equipmentGrowthRules.js';
+import { buildEquipmentDisplayBaseAttrs, type CharacterAttrRecord } from './equipmentGrowthRules.js';
 import { getRealmRankZeroBased } from './shared/realmRules.js';
 import { resolveQualityRankFromName } from './shared/itemQuality.js';
 import { shouldValidateTechniqueLearnRealm } from './shared/techniqueLearnRule.js';
@@ -31,6 +31,7 @@ import { resolveItemUseResourceDelta, rollItemUseAmount } from './shared/itemUse
 import {
   applyCharacterResourceDeltaByCharacterId,
   getCharacterComputedByCharacterId,
+  type CharacterComputedRow,
 } from './characterComputedService.js';
 import { getItemDefinitionById, getItemDefinitions, getTechniqueDefinitions } from './staticConfigLoader.js';
 import { getGemLevel, isGemItemDefinition } from './shared/gemItemSemantics.js';
@@ -69,45 +70,163 @@ export interface CreateItemResult {
   equipment?: GeneratedEquipment;
 }
 
+type JsonPrimitive = string | number | boolean | null;
+type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
+type JsonObject = { [key: string]: JsonValue | undefined };
+
+type ItemUseEffect = JsonObject;
+
+type CharacterRealmRow = {
+  id: number;
+  realm: string;
+  sub_realm: string | null;
+};
+
+type ItemUseCooldownRow = {
+  cooldown_until: Date | string | null;
+};
+
+type ItemUseCountRow = {
+  daily_count: number;
+  total_count: number;
+  last_daily_reset: Date | string | null;
+};
+
+type ItemInstanceRow = {
+  id: number;
+  item_def_id: string;
+  qty: number;
+  locked: boolean;
+  quality: string | null;
+  quality_rank: number | null;
+  strengthen_level: number | null;
+  refine_level: number | null;
+  socketed_gems: JsonValue | null;
+  affixes: JsonValue[] | null;
+  identified: boolean | null;
+  bind_type: string | null;
+  location: string | null;
+  location_slot: number | null;
+  equipped_slot: string | null;
+  metadata: JsonObject | null;
+  created_at: Date | string | null;
+};
+
+/**
+ * 统一 itemService 对外返回结构，避免“使用结果”和“物品详情”在路由层各自拼装第二套类型。
+ * 这样 partnerRoutes / inventoryRoutes 只消费单一出口，后续物品字段增减也只需在服务边界调整一次。
+ */
+export interface ItemUseLootResult {
+  type: string;
+  name?: string;
+  amount: number;
+}
+
+export interface ItemUseResult {
+  success: boolean;
+  message: string;
+  effects?: ItemUseEffect[];
+  character?: CharacterComputedRow | null;
+  lootResults?: ItemUseLootResult[];
+  partnerTechniqueResult?: PartnerLearnTechniqueResultDto;
+}
+
+export interface ItemInstanceDetail {
+  id: number;
+  itemDefId: string;
+  name: string;
+  icon: string | null;
+  category: string;
+  subCategory: string;
+  quality: string | null;
+  qualityRank: number;
+  qty: number;
+  stackMax: number;
+  description: string | null;
+  equipSlot: string | null;
+  equipReqRealm: string | null;
+  baseAttrs: CharacterAttrRecord;
+  affixes: JsonValue[];
+  setId: string | null;
+  strengthenLevel: number | null;
+  refineLevel: number | null;
+  socketedGems: JsonValue | null;
+  identified: boolean;
+  locked: boolean;
+  bindType: string | null;
+  location: string | null;
+  locationSlot: number | null;
+  equippedSlot: string | null;
+  metadata: JsonObject | null;
+  createdAt: Date | string | null;
+}
+
 const DEFAULT_RANDOM_GEM_SUB_CATEGORIES = ['gem_attack', 'gem_defense', 'gem_survival'] as const;
 
-const getRealmRank = (realmRaw: unknown, subRealmRaw?: unknown): number => {
+const isJsonObject = (value: JsonValue | undefined): value is JsonObject => {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+};
+
+const asJsonObject = (value: JsonValue | undefined): JsonObject | null => {
+  return isJsonObject(value) ? value : null;
+};
+
+const asJsonArray = (value: JsonValue | undefined): JsonValue[] => {
+  return Array.isArray(value) ? value : [];
+};
+
+const asTrimmedString = (value: JsonValue | undefined): string => {
+  return typeof value === 'string' ? value.trim() : '';
+};
+
+const asFiniteNumber = (value: JsonValue | undefined): number | null => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const getRealmRank = (realmRaw: JsonValue | undefined, subRealmRaw?: JsonValue | undefined): number => {
   return getRealmRankZeroBased(realmRaw, subRealmRaw);
 };
 
-const isRealmSufficient = (currentRealm: unknown, requiredRealm: unknown, currentSubRealm?: unknown): boolean => {
-  const required = typeof requiredRealm === 'string' ? requiredRealm.trim() : '';
+const isRealmSufficient = (
+  currentRealm: JsonValue | undefined,
+  requiredRealm: JsonValue | undefined,
+  currentSubRealm?: JsonValue | undefined,
+): boolean => {
+  const required = asTrimmedString(requiredRealm);
   if (!required) return true;
   return getRealmRank(currentRealm, currentSubRealm) >= getRealmRank(required);
 };
 
-const toPositiveInt = (value: unknown, fallback: number): number => {
-  const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
-  if (!Number.isFinite(n)) return fallback;
+const toPositiveInt = (value: JsonValue | undefined, fallback: number): number => {
+  const n = asFiniteNumber(value);
+  if (n === null) return fallback;
   return Math.max(1, Math.floor(n));
 };
 
-const toStringArray = (value: unknown): string[] => {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+const toStringArray = (value: JsonValue | undefined): string[] => {
+  return asJsonArray(value)
+    .map((entry) => asTrimmedString(entry))
     .filter((entry): entry is string => entry.length > 0);
 };
 
 type ItemUseTargetType = 'none' | 'bound_equipment';
 
-const getItemUseTargetType = (effectDefs: unknown[]): ItemUseTargetType => {
-  for (const rawEffect of effectDefs) {
-    if (!rawEffect || typeof rawEffect !== 'object' || Array.isArray(rawEffect)) continue;
-    const effect = rawEffect as Record<string, unknown>;
+const getItemUseTargetType = (effectDefs: readonly ItemUseEffect[]): ItemUseTargetType => {
+  for (const effect of effectDefs) {
     if (String(effect.trigger || '') !== 'use') continue;
-    if (String(effect.effect_type || '').trim() !== 'unbind') continue;
-    const params =
-      effect.params && typeof effect.params === 'object' && !Array.isArray(effect.params)
-        ? (effect.params as Record<string, unknown>)
-        : null;
-    if (String(params?.target_type || '').trim() !== 'equipment') continue;
-    if (String(params?.bind_state || '').trim() !== 'bound') continue;
+    if (asTrimmedString(effect.effect_type) !== 'unbind') continue;
+    const params = asJsonObject(effect.params);
+    if (asTrimmedString(params?.target_type) !== 'equipment') continue;
+    if (asTrimmedString(params?.bind_state) !== 'bound') continue;
     return 'bound_equipment';
   }
   return 'none';
@@ -287,10 +406,10 @@ class ItemService {
     instanceId: number,
     qty: number = 1,
     options: { targetItemInstanceId?: number; partnerId?: number } = {},
-  ): Promise<{ success: boolean; message: string; effects?: any[]; character?: any; lootResults?: { type: string; name?: string; amount: number }[]; partnerTechniqueResult?: PartnerLearnTechniqueResultDto }> {
+  ): Promise<ItemUseResult> {
     await lockCharacterInventoryMutex(characterId);
 
-    const charResult = await query(
+    const charResult = await query<CharacterRealmRow>(
       'SELECT id, realm, sub_realm FROM characters WHERE id = $1 FOR UPDATE',
       [characterId]
     );
@@ -304,7 +423,7 @@ class ItemService {
     }
 
     // 获取物品实例
-    const instanceResult = await query(
+    const instanceResult = await query<ItemInstanceRow>(
       `
       SELECT *
       FROM item_instance
@@ -318,8 +437,8 @@ class ItemService {
       return { success: false, message: '物品不存在' };
     }
   
-    const item = instanceResult.rows[0] as Record<string, unknown>;
-    const itemDefId = typeof item.item_def_id === 'string' ? item.item_def_id : String(item.item_def_id || '');
+    const item = instanceResult.rows[0];
+    const itemDefId = item.item_def_id.trim();
     if (!itemDefId) {
       return { success: false, message: '物品数据异常' };
     }
@@ -330,14 +449,13 @@ class ItemService {
     }
     const resolvedTechniqueBook = resolveTechniqueBookLearning({
       itemDef,
-      metadata:
-        item.metadata && typeof item.metadata === 'object' && !Array.isArray(item.metadata)
-          ? (item.metadata as object)
-          : null,
+      metadata: item.metadata,
     });
     const category = String(itemDef.category || '');
     const useType = String(itemDef.use_type || '');
-    const effectDefs = Array.isArray(itemDef.effect_defs) ? itemDef.effect_defs : [];
+    const effectDefs = Array.isArray(itemDef.effect_defs)
+      ? itemDef.effect_defs.filter((effect): effect is ItemUseEffect => isJsonObject(effect as JsonValue | undefined))
+      : [];
     const itemUseTargetType = getItemUseTargetType(effectDefs);
   
     // 检查是否可使用
@@ -369,7 +487,7 @@ class ItemService {
     const effectiveCdSec = Math.max(0, cdSec, cdRound);
   
     if (effectiveCdSec > 0) {
-      const cdResult = await query(
+      const cdResult = await query<ItemUseCooldownRow>(
         `SELECT cooldown_until FROM item_use_cooldown WHERE character_id = $1 AND item_def_id = $2`,
         [characterId, itemDefId]
       );
@@ -387,7 +505,7 @@ class ItemService {
     const totalLimit = Number(itemDef.use_limit_total) || 0;
 
     if (dailyLimit > 0 || totalLimit > 0) {
-      const cntResult = await query(
+      const cntResult = await query<ItemUseCountRow>(
         `SELECT daily_count, total_count, last_daily_reset
          FROM item_use_count
          WHERE character_id = $1 AND item_def_id = $2
@@ -423,22 +541,19 @@ class ItemService {
     let hasExpandEffect = false;
     let hasEquipmentUnbindEffect = false;
     let partnerTechniqueResult: PartnerLearnTechniqueResultDto | undefined;
-    const lootResults: { type: string; name?: string; amount: number }[] = [];
+    const normalizedEffects: ItemUseEffect[] = [];
+    const lootResults: ItemUseLootResult[] = [];
     const lootItemsToAdd: { itemDefId: string; qty: number }[] = [];
     let totalExpandSize = 0;
     let deltaSilver = 0;
     let deltaSpiritStones = 0;
   
-    for (const rawEffect of effectDefs) {
-      if (!rawEffect || typeof rawEffect !== 'object') continue;
-      const effect = rawEffect as Record<string, unknown>;
+    for (const effect of effectDefs) {
+      normalizedEffects.push(effect);
       if (String(effect.trigger || '') !== 'use') continue;
   
       const effectType = typeof effect.effect_type === 'string' ? effect.effect_type : undefined;
-      const params =
-        effect.params && typeof effect.params === 'object' && !Array.isArray(effect.params)
-          ? (effect.params as Record<string, unknown>)
-          : null;
+      const params = asJsonObject(effect.params);
 
       if (effectType === 'unbind') {
         const targetType = String(params?.target_type || '').trim();
@@ -486,22 +601,19 @@ class ItemService {
             }
           }
         } else if (lootType === 'multi') {
-          const items = params && Array.isArray(params.items) ? params.items : [];
+          const items = asJsonArray(params?.items);
           for (const li of items) {
-            if (!li || typeof li !== 'object') continue;
-            const row = li as Record<string, unknown>;
+            const row = asJsonObject(li);
+            if (!row) continue;
             const itemDefId = String(row.item_id || '');
-            const itemQty = Math.max(1, Math.floor(Number(row.qty) || 1)) * qty;
+            const itemQty = Math.max(1, Math.floor(asFiniteNumber(row.qty) ?? 1)) * qty;
             if (itemDefId) {
               lootItemsToAdd.push({ itemDefId, qty: itemQty });
             }
           }
-          const currency =
-            params && params.currency && typeof params.currency === 'object'
-              ? (params.currency as Record<string, unknown>)
-              : null;
-          const silverAmt = Math.max(0, Math.floor(currency ? Number(currency.silver) || 0 : 0)) * qty;
-          const ssAmt = Math.max(0, Math.floor(currency ? Number(currency.spirit_stones) || 0 : 0)) * qty;
+          const currency = asJsonObject(params?.currency);
+          const silverAmt = Math.max(0, Math.floor(asFiniteNumber(currency?.silver) ?? 0)) * qty;
+          const ssAmt = Math.max(0, Math.floor(asFiniteNumber(currency?.spirit_stones) ?? 0)) * qty;
           if (silverAmt > 0) {
             deltaSilver += silverAmt;
             lootResults.push({ type: 'silver', name: '银两', amount: silverAmt });
@@ -551,16 +663,12 @@ class ItemService {
       }
   
       if (effectType === 'expand') {
-        const params =
-          effect.params && typeof effect.params === 'object'
-            ? (effect.params as Record<string, unknown>)
-            : null;
         const expandType = params ? String(params.expand_type || '') : '';
         if (expandType !== 'bag') {
           return { success: false, message: '该道具暂不支持当前扩容类型' };
         }
   
-        const valueRaw = params ? Number(params.value) : NaN;
+        const valueRaw = asFiniteNumber(params?.value) ?? Number.NaN;
         const expandValue = Number.isInteger(valueRaw) ? valueRaw : Math.floor(valueRaw);
         if (!Number.isInteger(expandValue) || expandValue <= 0) {
           return { success: false, message: '扩容道具配置错误' };
@@ -754,7 +862,7 @@ class ItemService {
     }
   
     const setClauses = ['updated_at = NOW()'];
-    const setValues: any[] = [characterId];
+    const setValues: number[] = [characterId];
     let paramIdx = 2;
   
     if (deltaExp !== 0) {
@@ -855,7 +963,7 @@ class ItemService {
     return {
       success: true,
       message: '使用成功',
-      effects: effectDefs,
+      effects: normalizedEffects.length > 0 ? normalizedEffects : undefined,
       character: updatedChar,
       lootResults: lootResults.length > 0 ? lootResults : undefined,
       partnerTechniqueResult,
@@ -865,8 +973,8 @@ class ItemService {
   /**
    * 获取物品实例详情（通用）
    */
-  async getItemInstance(instanceId: number): Promise<any | null> {
-    const result = await query(
+  async getItemInstance(instanceId: number): Promise<ItemInstanceDetail | null> {
+    const result = await query<ItemInstanceRow>(
       `
       SELECT *
       FROM item_instance
@@ -878,7 +986,7 @@ class ItemService {
     if (result.rows.length === 0) return null;
 
     const row = result.rows[0];
-    const itemDefId = String(row.item_def_id || '').trim();
+    const itemDefId = row.item_def_id.trim();
     if (!itemDefId) return null;
     const itemDef = getItemDefinitionById(itemDefId);
     if (!itemDef) return null;
@@ -898,24 +1006,24 @@ class ItemService {
       id: row.id,
       itemDefId: row.item_def_id,
       name: itemDef.name,
-      icon: itemDef.icon,
+      icon: itemDef.icon ?? null,
       category: itemDef.category,
-      subCategory: itemDef.sub_category,
+      subCategory: itemDef.sub_category ?? '',
       quality: resolvedQuality,
       qualityRank: resolvedQualityRank,
       qty: row.qty,
-      stackMax: itemDef.stack_max,
-      description: itemDef.description,
+      stackMax: Math.max(1, Number(itemDef.stack_max) || 1),
+      description: itemDef.description ?? null,
       // 装备专用
-      equipSlot: itemDef.equip_slot,
-      equipReqRealm: itemDef.equip_req_realm,
+      equipSlot: itemDef.equip_slot ?? null,
+      equipReqRealm: itemDef.equip_req_realm ?? null,
       baseAttrs: itemDef.category === 'equipment' ? displayBaseAttrs : (itemDef.base_attrs ?? {}),
       affixes: row.affixes || [],
-      setId: itemDef.set_id,
+      setId: itemDef.set_id ?? null,
       strengthenLevel: row.strengthen_level,
       refineLevel: row.refine_level,
       socketedGems: row.socketed_gems,
-      identified: row.identified,
+      identified: row.identified === true,
       // 通用
       locked: row.locked,
       bindType: row.bind_type,

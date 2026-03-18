@@ -6,6 +6,7 @@ import { canChallengeToday, getArenaOpponents, getArenaRecords, getArenaStatus }
 import { startPVPBattle } from '../domains/battle/index.js';
 import { sendSuccess, sendResult } from '../middleware/response.js';
 import { BusinessError } from '../middleware/BusinessError.js';
+import { getSingleQueryValue, parsePositiveInt } from '../services/shared/httpParam.js';
 
 const router = Router();
 
@@ -19,18 +20,16 @@ router.get('/status', asyncHandler(async (req, res) => {
 }));
 
 router.get('/opponents', asyncHandler(async (req, res) => {
-  const userId = req.userId!;
   const characterId = req.characterId!;
-  const limit = typeof req.query.limit === 'string' ? Number(req.query.limit) : undefined;
-  const result = await getArenaOpponents(characterId, Number.isFinite(limit as number) ? (limit as number) : 10);
+  const limit = parsePositiveInt(getSingleQueryValue(req.query.limit)) ?? 10;
+  const result = await getArenaOpponents(characterId, limit);
   return sendResult(res, result);
 }));
 
 router.get('/records', asyncHandler(async (req, res) => {
-  const userId = req.userId!;
   const characterId = req.characterId!;
-  const limit = typeof req.query.limit === 'string' ? Number(req.query.limit) : undefined;
-  const result = await getArenaRecords(characterId, Number.isFinite(limit as number) ? (limit as number) : 50);
+  const limit = parsePositiveInt(getSingleQueryValue(req.query.limit)) ?? 50;
+  const result = await getArenaRecords(characterId, limit);
   return sendResult(res, result);
 }));
 
@@ -38,8 +37,8 @@ router.post('/challenge', asyncHandler(async (req, res) => {
   const userId = req.userId!;
   const characterId = req.characterId!;
 
-  const opponentCharacterId = Number((req.body as { opponentCharacterId?: unknown })?.opponentCharacterId);
-  if (!Number.isFinite(opponentCharacterId) || opponentCharacterId <= 0) {
+  const opponentCharacterId = parsePositiveInt((req.body as { opponentCharacterId?: unknown })?.opponentCharacterId);
+  if (!opponentCharacterId) {
     throw new BusinessError('对手参数错误');
   }
   if (opponentCharacterId === characterId) {

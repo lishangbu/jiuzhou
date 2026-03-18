@@ -20,7 +20,7 @@ export interface FeatureUnlockApplyResult {
 
 export type CharacterRowWithId = {
   id: number;
-} & Record<string, unknown>;
+};
 
 interface FeatureUnlockRow {
   feature_code: string;
