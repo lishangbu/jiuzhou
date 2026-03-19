@@ -22,10 +22,10 @@ import test from 'node:test';
 import {
   PARTNER_RECRUIT_CUSTOM_BASE_MODEL_BYPASSES_COOLDOWN,
   PARTNER_RECRUIT_CUSTOM_BASE_MODEL_ENABLE_REQUIRED_MESSAGE,
-  PARTNER_RECRUIT_CUSTOM_BASE_MODEL_REQUIRED_MESSAGE,
   PARTNER_RECRUIT_CUSTOM_BASE_MODEL_SENSITIVE_MESSAGE,
   guardPartnerRecruitRequestedBaseModel,
   shouldPartnerRecruitBypassCooldownWithCustomBaseModel,
+  shouldPartnerRecruitUseCustomBaseModelToken,
   validatePartnerRecruitRequestedBaseModelSelection,
   validatePartnerRecruitRequestedBaseModel,
 } from '../shared/partnerRecruitBaseModel.js';
@@ -65,19 +65,22 @@ test('validatePartnerRecruitRequestedBaseModelSelection: 未勾选时提交底�
   assert.equal(result.message, PARTNER_RECRUIT_CUSTOM_BASE_MODEL_ENABLE_REQUIRED_MESSAGE);
 });
 
-test('validatePartnerRecruitRequestedBaseModelSelection: 勾选后留空应提示输入底模', async () => {
+test('validatePartnerRecruitRequestedBaseModelSelection: 勾选后留空应允许走随机底模', async () => {
   const result = await validatePartnerRecruitRequestedBaseModelSelection({
     enabled: true,
     requestedBaseModel: '   ',
   });
 
-  assert.equal(result.success, false);
-  if (result.success) return;
-  assert.equal(result.message, PARTNER_RECRUIT_CUSTOM_BASE_MODEL_REQUIRED_MESSAGE);
+  assert.deepEqual(result, {
+    success: true,
+    value: null,
+  });
 });
 
-test('shouldPartnerRecruitBypassCooldownWithCustomBaseModel: 自定义底模招募应复用高级招募令绕过冷却规则', () => {
+test('shouldPartnerRecruitBypassCooldownWithCustomBaseModel: 只要启用高级招募令模式就应绕过冷却', () => {
   assert.equal(PARTNER_RECRUIT_CUSTOM_BASE_MODEL_BYPASSES_COOLDOWN, true);
-  assert.equal(shouldPartnerRecruitBypassCooldownWithCustomBaseModel('雪狐'), true);
-  assert.equal(shouldPartnerRecruitBypassCooldownWithCustomBaseModel(null), false);
+  assert.equal(shouldPartnerRecruitUseCustomBaseModelToken(true), true);
+  assert.equal(shouldPartnerRecruitUseCustomBaseModelToken(false), false);
+  assert.equal(shouldPartnerRecruitBypassCooldownWithCustomBaseModel(true), true);
+  assert.equal(shouldPartnerRecruitBypassCooldownWithCustomBaseModel(false), false);
 });

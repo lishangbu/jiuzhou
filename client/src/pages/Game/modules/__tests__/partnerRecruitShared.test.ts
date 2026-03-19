@@ -3,6 +3,7 @@ import type { PartnerRecruitStatusDto } from '../../../../services/api/partner';
 import {
   resolvePartnerRecruitActionState,
   resolvePartnerRecruitCooldownDisplay,
+  resolvePartnerRecruitSubmitState,
 } from '../PartnerModal/partnerRecruitShared';
 
 const buildRecruitStatus = (
@@ -54,5 +55,26 @@ describe('partnerRecruitShared', () => {
     expect(cooldownDisplay.statusText).toContain('本次招募不受影响');
     expect(cooldownDisplay.ruleText).toContain('不会重置或新增招募冷却');
     expect(cooldownDisplay.bypassedByCustomBaseModel).toBe(true);
+  });
+
+  it('启用高级招募令模式后即使未填写底模也应允许提交', () => {
+    const submitState = resolvePartnerRecruitSubmitState(buildRecruitStatus({
+      cooldownUntil: '2026-03-19T12:00:00.000Z',
+      cooldownRemainingSeconds: 3_600,
+    }), true);
+
+    expect(submitState.canSubmit).toBe(true);
+    expect(submitState.disabledReason).toBeNull();
+  });
+
+  it('启用高级招募令模式但令牌不足时应继续禁止提交', () => {
+    const submitState = resolvePartnerRecruitSubmitState(buildRecruitStatus({
+      customBaseModelTokenAvailableQty: 0,
+      cooldownUntil: '2026-03-19T12:00:00.000Z',
+      cooldownRemainingSeconds: 3_600,
+    }), true);
+
+    expect(submitState.canSubmit).toBe(false);
+    expect(submitState.disabledReason).toContain('高级招募令不足');
   });
 });

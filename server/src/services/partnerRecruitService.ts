@@ -82,6 +82,7 @@ import {
   PARTNER_RECRUIT_CUSTOM_BASE_MODEL_TOKEN_ITEM_DEF_ID,
   resolvePartnerRecruitBaseModel,
   shouldPartnerRecruitBypassCooldownWithCustomBaseModel,
+  shouldPartnerRecruitUseCustomBaseModelToken,
   validatePartnerRecruitRequestedBaseModelSelection,
 } from './shared/partnerRecruitBaseModel.js';
 import {
@@ -173,6 +174,10 @@ const asString = (raw: unknown): string => (typeof raw === 'string' ? raw.trim()
 const asNumber = (raw: unknown, fallback = 0): number => {
   const value = Number(raw);
   return Number.isFinite(value) ? value : fallback;
+};
+
+const asBoolean = (raw: unknown): boolean => {
+  return raw === true || raw === 'true' || raw === 1 || raw === '1';
 };
 
 const toIsoString = (raw: unknown): string | null => {
@@ -802,7 +807,7 @@ class PartnerRecruitService {
         FROM partner_recruit_job
         WHERE character_id = $1
           AND status = ANY($2::text[])
-          AND requested_base_model IS NULL
+          AND used_custom_base_model_token = false
         ORDER BY created_at DESC
         LIMIT 1
         ${lockSql}
@@ -989,7 +994,8 @@ class PartnerRecruitService {
       };
     }
 
-    const shouldBypassCooldown = shouldPartnerRecruitBypassCooldownWithCustomBaseModel(requestedBaseModelValidation.value);
+    const shouldUseCustomBaseModelToken = shouldPartnerRecruitUseCustomBaseModelToken(customBaseModelEnabled);
+    const shouldBypassCooldown = shouldPartnerRecruitBypassCooldownWithCustomBaseModel(customBaseModelEnabled);
     if (!shouldBypassCooldown) {
       const cooldownReductionRate = await getActiveMonthCardCooldownReductionRate(characterId);
       const latestCooldownStartedAt = await this.loadLatestRecruitCooldownStartedAt(characterId, true);
@@ -1017,7 +1023,7 @@ class PartnerRecruitService {
       };
     }
 
-    if (requestedBaseModelValidation.value) {
+    if (shouldUseCustomBaseModelToken) {
       const customBaseModelTokenAvailableQty = await this.loadCustomBaseModelTokenAvailableQty(characterId, true);
       if (customBaseModelTokenAvailableQty < PARTNER_RECRUIT_CUSTOM_BASE_MODEL_TOKEN_COST) {
         const tokenItemName = getPartnerRecruitCustomBaseModelTokenName();
@@ -1040,7 +1046,7 @@ class PartnerRecruitService {
       [characterId, PARTNER_RECRUIT_SPIRIT_STONES_COST],
     );
 
-    if (requestedBaseModelValidation.value) {
+    if (shouldUseCustomBaseModelToken) {
       const consumeTokenResult = await consumeMaterialByDefId(
         characterId,
         PARTNER_RECRUIT_CUSTOM_BASE_MODEL_TOKEN_ITEM_DEF_ID,
@@ -1064,11 +1070,12 @@ class PartnerRecruitService {
           quality_rolled,
           spirit_stones_cost,
           requested_base_model,
+          used_custom_base_model_token,
           cooldown_started_at,
           created_at,
           updated_at
         ) VALUES (
-          $1, $2, 'pending', $3, $4, $5, NOW(), NOW(), NOW()
+          $1, $2, 'pending', $3, $4, $5, $6, NOW(), NOW(), NOW()
         )
       `,
       [
@@ -1077,6 +1084,7 @@ class PartnerRecruitService {
         quality,
         PARTNER_RECRUIT_SPIRIT_STONES_COST,
         requestedBaseModelValidation.value,
+        shouldUseCustomBaseModelToken,
       ],
     );
 
@@ -1107,7 +1115,7 @@ class PartnerRecruitService {
   ): Promise<void> {
     const jobRes = await query(
       `
-        SELECT status, spirit_stones_cost, requested_base_model
+        SELECT status, spirit_stones_cost, requested_base_model, used_custom_base_model_token
         FROM partner_recruit_job
         WHERE id = $1 AND character_id = $2
         FOR UPDATE
@@ -1118,7 +1126,7 @@ class PartnerRecruitService {
     const row = jobRes.rows[0] as Record<string, unknown>;
     const status = asString(row.status);
     const spiritStonesCost = Math.max(0, Math.floor(asNumber(row.spirit_stones_cost, 0)));
-    const requestedBaseModel = asString(row.requested_base_model) || null;
+    const usedCustomBaseModelToken = asBoolean(row.used_custom_base_model_token);
     if (status === 'accepted' || status === 'discarded' || status === 'failed' || status === 'refunded') return;
 
     await query(
@@ -1130,7 +1138,7 @@ class PartnerRecruitService {
       `,
       [characterId, spiritStonesCost],
     );
-    if (requestedBaseModel) {
+    if (usedCustomBaseModelToken) {
       const userId = await this.loadCharacterUserId(characterId, true);
       if (userId) {
         await addItemToInventory(

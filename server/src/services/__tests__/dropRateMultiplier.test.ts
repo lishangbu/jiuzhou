@@ -23,15 +23,31 @@ import test from 'node:test';
 
 import { getAdjustedChance, getAdjustedQuantity } from '../shared/dropRateMultiplier.js';
 
+const DUNGEON_BOSS_UNBIND_POOL_ID = 'dp-common-dungeon-boss-unbind';
+const DUNGEON_BOSS_ADVANCED_RECRUIT_TOKEN_POOL_ID = 'dp-common-dungeon-boss-advanced-recruit-token';
+
 test('秘境 BOSS 解绑道具公共池不应放大概率与数量', () => {
   const options = { isDungeonBattle: true, monsterKind: 'boss' as const };
 
   assert.equal(
-    getAdjustedChance(0.005, 'common', 'dp-common-dungeon-boss-unbind', options),
+    getAdjustedChance(0.005, 'common', DUNGEON_BOSS_UNBIND_POOL_ID, options),
     0.005,
   );
   assert.equal(
-    getAdjustedQuantity(1, 'common', 'dp-common-dungeon-boss-unbind', options, true),
+    getAdjustedQuantity(1, 'common', DUNGEON_BOSS_UNBIND_POOL_ID, options, true),
+    1,
+  );
+});
+
+test('秘境 BOSS 高级招募令公共池不应放大概率与数量', () => {
+  const options = { isDungeonBattle: true, monsterKind: 'boss' as const };
+
+  assert.equal(
+    getAdjustedChance(0.001, 'common', DUNGEON_BOSS_ADVANCED_RECRUIT_TOKEN_POOL_ID, options),
+    0.001,
+  );
+  assert.equal(
+    getAdjustedQuantity(1, 'common', DUNGEON_BOSS_ADVANCED_RECRUIT_TOKEN_POOL_ID, options, true),
     1,
   );
 });

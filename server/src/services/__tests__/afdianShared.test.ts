@@ -21,6 +21,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  AFDIAN_ADVANCED_RECRUIT_TOKEN_PRODUCT_PLAN_ID,
   AFDIAN_MONTH_CARD_PLAN_ID,
   AFDIAN_PLAN_CONFIGS,
   AFDIAN_SPIRIT_STONE_PRODUCT_PLAN_ID,
@@ -34,6 +35,7 @@ import {
   getAfdianPlanConfig,
   type AfdianWebhookOrder,
 } from '../afdian/shared.js';
+import { PARTNER_RECRUIT_CUSTOM_BASE_MODEL_TOKEN_ITEM_DEF_ID } from '../shared/partnerRecruitBaseModel.js';
 
 const SAMPLE_ORDER: AfdianWebhookOrder = {
   out_trade_no: '202603160001',
@@ -70,6 +72,7 @@ test('爱发电方案配置应按 plan_id 返回对应奖励规则，并由统�
   assert.deepEqual(Object.keys(AFDIAN_PLAN_CONFIGS), [
     AFDIAN_MONTH_CARD_PLAN_ID,
     AFDIAN_SPIRIT_STONE_PRODUCT_PLAN_ID,
+    AFDIAN_ADVANCED_RECRUIT_TOKEN_PRODUCT_PLAN_ID,
   ]);
 
   const monthCardPlan = getAfdianPlanConfig(AFDIAN_MONTH_CARD_PLAN_ID);
@@ -98,6 +101,21 @@ test('爱发电方案配置应按 plan_id 返回对应奖励规则，并由统�
     sku_detail: [{ sku_id: 'sku-001', count: 3, name: 'AA', album_id: '', pic: '' }],
   }), {
     spiritStones: 90000,
+  });
+
+  const advancedRecruitTokenPlan = getAfdianPlanConfig(AFDIAN_ADVANCED_RECRUIT_TOKEN_PRODUCT_PLAN_ID);
+  assert.ok(advancedRecruitTokenPlan);
+  assert.deepEqual(buildAfdianOrderRewardPayload(advancedRecruitTokenPlan, {
+    out_trade_no: '202603201200000000000000001',
+    user_id: 'afdian-user-004',
+    plan_id: AFDIAN_ADVANCED_RECRUIT_TOKEN_PRODUCT_PLAN_ID,
+    month: 1,
+    total_amount: '30.00',
+    status: 2,
+    product_type: 1,
+    sku_detail: [{ sku_id: 'sku-advanced-001', count: 3, name: '高级招募令', album_id: '', pic: '' }],
+  }), {
+    items: [{ itemDefId: PARTNER_RECRUIT_CUSTOM_BASE_MODEL_TOKEN_ITEM_DEF_ID, quantity: 3 }],
   });
 
   assert.equal(getAfdianPlanConfig('other-plan'), null);

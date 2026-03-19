@@ -60,9 +60,11 @@ import { getElementTextClassName, getElementToneClassName } from '../../shared/e
 import { getItemQualityTagClassName } from '../../shared/itemQuality';
 import {
   buildPartnerRecruitIndicator,
+  hasPartnerRecruitCustomBaseModelToken,
   resolvePartnerRecruitCooldownDisplay,
   resolvePartnerRecruitActionState,
   resolvePartnerRecruitPanelView,
+  resolvePartnerRecruitSubmitState,
 } from './partnerRecruitShared';
 import './index.scss';
 
@@ -254,21 +256,19 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
     () => resolvePartnerRecruitActionState(recruitStatus, customBaseModelEnabled),
     [customBaseModelEnabled, recruitStatus],
   );
+  const recruitSubmitState = useMemo(
+    () => resolvePartnerRecruitSubmitState(recruitStatus, customBaseModelEnabled),
+    [customBaseModelEnabled, recruitStatus],
+  );
   const recruitCooldownDisplay = useMemo(
     () => resolvePartnerRecruitCooldownDisplay(recruitStatus, customBaseModelEnabled),
     [customBaseModelEnabled, recruitStatus],
   );
   const recruitBaseModelInputTrimmed = recruitBaseModelInput.trim();
   const recruitBaseModelInputLength = Array.from(recruitBaseModelInputTrimmed).length;
-  const hasCustomBaseModelToken = recruitStatus !== null
-    && recruitStatus.customBaseModelTokenAvailableQty >= recruitStatus.customBaseModelTokenCost;
-  const customBaseModelTokenEnough = !customBaseModelEnabled
-    || (
-      recruitStatus !== null
-      && recruitStatus.customBaseModelTokenAvailableQty >= recruitStatus.customBaseModelTokenCost
-    );
-  const customBaseModelRequestReady = !customBaseModelEnabled || recruitBaseModelInputTrimmed.length > 0;
-  const canSubmitRecruit = recruitActionState.canGenerate && customBaseModelTokenEnough && customBaseModelRequestReady;
+  const hasCustomBaseModelToken = hasPartnerRecruitCustomBaseModelToken(recruitStatus);
+  const customBaseModelTokenEnough = recruitSubmitState.customBaseModelTokenEnough;
+  const canSubmitRecruit = recruitSubmitState.canSubmit;
 
   useEffect(() => {
     if (!hasCustomBaseModelToken && customBaseModelEnabled) {
@@ -1191,7 +1191,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
             {customBaseModelEnabled ? (
               <>
                 <div className="partner-meta">
-                  需消耗 {recruitStatus.customBaseModelTokenItemName} x{recruitStatus.customBaseModelTokenCost}。
+                  需消耗 {recruitStatus.customBaseModelTokenItemName} x{recruitStatus.customBaseModelTokenCost}，留空则随机底模。
                 </div>
                 <Input
                   value={recruitBaseModelInput}
@@ -1214,18 +1214,23 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
         ) : null}
 
         {recruitActionState.showGenerateButton ? (
-          <div className="partner-action-row partner-recruit-action-row">
-            <Button
-              type="primary"
-              loading={actionKey === 'recruit-generate'}
-              disabled={!canSubmitRecruit}
-              onClick={() => {
-                void handleGenerateRecruit();
-              }}
-            >
-              开始招募
-            </Button>
-          </div>
+          <>
+            <div className="partner-action-row partner-recruit-action-row">
+              <Button
+                type="primary"
+                loading={actionKey === 'recruit-generate'}
+                disabled={!canSubmitRecruit}
+                onClick={() => {
+                  void handleGenerateRecruit();
+                }}
+              >
+                开始招募
+              </Button>
+            </div>
+            {recruitSubmitState.disabledReason ? (
+              <div className="partner-meta">{recruitSubmitState.disabledReason}</div>
+            ) : null}
+          </>
         ) : null}
       </div>
     );

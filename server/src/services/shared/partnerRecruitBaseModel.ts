@@ -40,7 +40,6 @@ export const PARTNER_RECRUIT_CUSTOM_BASE_MODEL_MAX_LENGTH = 12;
 export const PARTNER_RECRUIT_CUSTOM_BASE_MODEL_SENSITIVE_MESSAGE = '自定义底模包含敏感词，请重新输入';
 export const PARTNER_RECRUIT_CUSTOM_BASE_MODEL_SENSITIVE_UNAVAILABLE_MESSAGE = '敏感词检测服务暂不可用，请稍后重试';
 export const PARTNER_RECRUIT_CUSTOM_BASE_MODEL_ENABLE_REQUIRED_MESSAGE = '请先勾选启用自定义底模';
-export const PARTNER_RECRUIT_CUSTOM_BASE_MODEL_REQUIRED_MESSAGE = '请输入自定义底模';
 export const PARTNER_RECRUIT_CUSTOM_BASE_MODEL_TOKEN_ITEM_DEF_ID = 'token-004';
 export const PARTNER_RECRUIT_CUSTOM_BASE_MODEL_TOKEN_COST = 1;
 export const PARTNER_RECRUIT_CUSTOM_BASE_MODEL_BYPASSES_COOLDOWN = true;
@@ -67,11 +66,17 @@ export const hasPartnerRecruitCustomBaseModel = (
   return typeof requestedBaseModel === 'string' && requestedBaseModel.trim().length > 0;
 };
 
+export const shouldPartnerRecruitUseCustomBaseModelToken = (
+  customBaseModelEnabled: boolean,
+): boolean => {
+  return customBaseModelEnabled;
+};
+
 export const shouldPartnerRecruitBypassCooldownWithCustomBaseModel = (
-  requestedBaseModel: string | null | undefined,
+  customBaseModelEnabled: boolean,
 ): boolean => {
   return PARTNER_RECRUIT_CUSTOM_BASE_MODEL_BYPASSES_COOLDOWN
-    && hasPartnerRecruitCustomBaseModel(requestedBaseModel);
+    && shouldPartnerRecruitUseCustomBaseModelToken(customBaseModelEnabled);
 };
 
 const resolvePartnerRecruitBaseModelPath = (): string => {
@@ -199,16 +204,6 @@ export const validatePartnerRecruitRequestedBaseModelSelection = async (params: 
   }
 
   const validation = await guardPartnerRecruitRequestedBaseModel(params.requestedBaseModel);
-  if (!validation.success) {
-    return validation;
-  }
-  if (!validation.value) {
-    return {
-      success: false,
-      message: PARTNER_RECRUIT_CUSTOM_BASE_MODEL_REQUIRED_MESSAGE,
-    };
-  }
-
   return validation;
 };
 

@@ -846,6 +846,21 @@
       "enabled": true
     },
     {
+      "id": "dp-common-dungeon-boss-advanced-recruit-token",
+      "name": "秘境BOSS高级招募令通用掉落池",
+      "mode": "prob",
+      "entries": [
+        {
+          "item_def_id": "token-004",
+          "chance": 0.001,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        }
+      ],
+      "enabled": true
+    },
+    {
       "id": "dp-common-monster-caiyao",
       "name": "炼炁化神·采药期公共掉落池",
       "mode": "prob",

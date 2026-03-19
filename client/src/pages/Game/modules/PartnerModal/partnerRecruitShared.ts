@@ -45,6 +45,13 @@ export type PartnerRecruitActionState = {
   pendingGenerationId: string | null;
 };
 
+export type PartnerRecruitSubmitState = {
+  canSubmit: boolean;
+  disabledReason: string | null;
+  hasCustomBaseModelToken: boolean;
+  customBaseModelTokenEnough: boolean;
+};
+
 export type PartnerRecruitCooldownDisplay = {
   statusText: string;
   ruleText: string;
@@ -194,5 +201,47 @@ export const resolvePartnerRecruitActionState = (
       && panelView.kind !== 'pending'
       && panelView.kind !== 'draft',
     pendingGenerationId: panelView.kind === 'pending' ? panelView.job.generationId : null,
+  };
+};
+
+export const hasPartnerRecruitCustomBaseModelToken = (
+  status: PartnerRecruitStatusData | null,
+): boolean => {
+  return status !== null
+    && status.customBaseModelTokenAvailableQty >= status.customBaseModelTokenCost;
+};
+
+export const resolvePartnerRecruitSubmitState = (
+  status: PartnerRecruitStatusData | null,
+  customBaseModelEnabled: boolean,
+): PartnerRecruitSubmitState => {
+  const actionState = resolvePartnerRecruitActionState(status, customBaseModelEnabled);
+  const hasCustomBaseModelToken = hasPartnerRecruitCustomBaseModelToken(status);
+  const customBaseModelTokenEnough = !customBaseModelEnabled || hasCustomBaseModelToken;
+  const canSubmit = actionState.canGenerate && customBaseModelTokenEnough;
+
+  if (!customBaseModelEnabled || canSubmit) {
+    return {
+      canSubmit,
+      disabledReason: null,
+      hasCustomBaseModelToken,
+      customBaseModelTokenEnough,
+    };
+  }
+
+  if (!customBaseModelTokenEnough) {
+    return {
+      canSubmit,
+      disabledReason: `${status?.customBaseModelTokenItemName ?? '高级招募令'}不足，当前无法开始招募。`,
+      hasCustomBaseModelToken,
+      customBaseModelTokenEnough,
+    };
+  }
+
+  return {
+    canSubmit,
+    disabledReason: null,
+    hasCustomBaseModelToken,
+    customBaseModelTokenEnough,
   };
 };

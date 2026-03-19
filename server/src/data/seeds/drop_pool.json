@@ -1507,7 +1507,8 @@
         "dp-common-monster-global",
         "dp-common-monster-jietai",
         "dp-common-monster-boss",
-        "dp-common-dungeon-boss-unbind"
+        "dp-common-dungeon-boss-unbind",
+        "dp-common-dungeon-boss-advanced-recruit-token"
       ]
     },
     {
@@ -1674,7 +1675,8 @@
         "dp-common-monster-global",
         "dp-common-monster-yangshen",
         "dp-common-monster-boss",
-        "dp-common-dungeon-boss-unbind"
+        "dp-common-dungeon-boss-unbind",
+        "dp-common-dungeon-boss-advanced-recruit-token"
       ]
     },
     {
@@ -1959,7 +1961,8 @@
         "dp-common-monster-global",
         "dp-common-monster-huanxu",
         "dp-common-monster-boss",
-        "dp-common-dungeon-boss-unbind"
+        "dp-common-dungeon-boss-unbind",
+        "dp-common-dungeon-boss-advanced-recruit-token"
       ]
     },
     {
@@ -2237,7 +2240,8 @@
         "dp-common-monster-global",
         "dp-common-monster-hedao",
         "dp-common-monster-boss",
-        "dp-common-dungeon-boss-unbind"
+        "dp-common-dungeon-boss-unbind",
+        "dp-common-dungeon-boss-advanced-recruit-token"
       ]
     },
     {
