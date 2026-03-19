@@ -70,7 +70,6 @@ async function removeUserFromTeamBattle(
 
 export async function onUserJoinTeam(userId: number): Promise<void> {
   const battleIds = listActiveBattleIdsByUserId(userId);
-  if (battleIds.length === 0) return;
   for (const battleId of battleIds) {
     const engine = activeBattles.get(battleId);
     if (!engine) continue;
@@ -84,6 +83,10 @@ export async function onUserJoinTeam(userId: number): Promise<void> {
       console.warn(`[battle] onUserJoinTeam 自动退出战斗失败: ${battleId}`, error);
     }
   }
+
+  // 加入队伍时清理残留的 waiting_transition 会话
+  // （如 PVP 结束后 session 未被推进就进组，会被 getCurrentBattleSession 拉回上一场战斗）
+  cleanupUserWaitingTransitionSessions(userId);
 }
 
 export async function onUserLeaveTeam(userId: number): Promise<void> {
