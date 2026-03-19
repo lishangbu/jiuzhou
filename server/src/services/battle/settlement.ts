@@ -254,15 +254,22 @@ async function finishBattleCore(
       }
     : null;
 
-  const participantCharacterIds = participants
-    .map((entry) => Math.floor(Number(entry.characterId)))
-    .filter((characterId) => Number.isFinite(characterId) && characterId > 0);
-  const cooldownCharacterIds =
-    participantCharacterIds.length > 0
-      ? participantCharacterIds
-      : collectPlayerCharacterIdsFromBattleState(state);
-  const cooldownUntilMs =
-    setBattleStartCooldownByCharacterIds(cooldownCharacterIds);
+  // 秘境战斗跳过冷却：波次之间无冷却间隔，发起时也通过 skipped 策略绕过校验
+  const cooldownNow = Date.now();
+  let cooldownUntilMs: number;
+  if (isDungeonBattle) {
+    cooldownUntilMs = cooldownNow;
+  } else {
+    const participantCharacterIds = participants
+      .map((entry) => Math.floor(Number(entry.characterId)))
+      .filter((characterId) => Number.isFinite(characterId) && characterId > 0);
+    const cooldownCharacterIds =
+      participantCharacterIds.length > 0
+        ? participantCharacterIds
+        : collectPlayerCharacterIdsFromBattleState(state);
+    cooldownUntilMs =
+      setBattleStartCooldownByCharacterIds(cooldownCharacterIds);
+  }
 
   const battleResult: BattleResult = {
     success: true,

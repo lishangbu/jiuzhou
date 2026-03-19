@@ -485,3 +485,32 @@ export const getAttachedBattleSessionSnapshot = (
 ): BattleSessionSnapshot | null => {
   return getBattleSessionSnapshotByBattleId(battleId);
 };
+
+/**
+ * 清理指定用户在 waiting_transition 状态下的残留会话。
+ *
+ * 作用：
+ * - 当战斗已结算并从 activeBattles 移除，但 session 仍停在 waiting_transition 时，
+ *   onUserLeaveTeam 的活跃战斗循环无法覆盖该 session（因为查不到 activeBattles）。
+ * - 本函数作为补充路径，按 userId 扫描所有 waiting_transition 会话并逐一移除用户。
+ *
+ * 调用时机：
+ * - onUserLeaveTeam 末尾调用，确保离队玩家不再被残留 session 拉回。
+ *
+ * 边界条件：
+ * 1) 仅处理 waiting_transition 状态，不影响 running 会话（running 由活跃战斗循环处理）。
+ * 2) owner 被移除时直接 abandoned 整条 session（与 removeBattleSessionParticipantUser 行为一致）。
+ */
+export const cleanupUserWaitingTransitionSessions = (
+  userId: number,
+): void => {
+  const sessions = listBattleSessionRecords()
+    .filter((s) => s.status === 'waiting_transition')
+    .filter((s) => ensureSessionAccess(userId, s));
+
+  for (const session of sessions) {
+    const battleId = session.currentBattleId;
+    if (!battleId) continue;
+    removeBattleSessionParticipantUser(battleId, userId);
+  }
+};

@@ -35,6 +35,7 @@ import {
 import {
   getAttachedBattleSessionSnapshot,
   removeBattleSessionParticipantUser,
+  cleanupUserWaitingTransitionSessions,
 } from "../battleSession/index.js";
 
 /**
@@ -87,7 +88,6 @@ export async function onUserJoinTeam(userId: number): Promise<void> {
 
 export async function onUserLeaveTeam(userId: number): Promise<void> {
   const battleIds = listActiveBattleIdsByUserId(userId);
-  if (battleIds.length === 0) return;
   for (const battleId of battleIds) {
     const engine = activeBattles.get(battleId);
     if (!engine) continue;
@@ -114,6 +114,11 @@ export async function onUserLeaveTeam(userId: number): Promise<void> {
       console.warn(`[battle] onUserLeaveTeam 推送退出战斗失败: ${battleId}`, error);
     }
   }
+
+  // 战斗已结算但 session 仍停在 waiting_transition 时，上面的活跃战斗循环
+  // 无法覆盖（activeBattles 已清理），需要补充清理残留会话，避免离队后
+  // 玩家仍被 getCurrentBattleSession 拉回该 session。
+  cleanupUserWaitingTransitionSessions(userId);
 }
 
 export async function syncBattleStateOnReconnect(
