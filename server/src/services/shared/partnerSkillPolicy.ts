@@ -258,7 +258,7 @@ export const normalizePartnerSkillPolicySlotsForSave = (params: {
     disabledSlots.push(normalizedSlot);
   });
 
-  if (invalidSlotFound || seenSkillIds.size !== params.availableSkills.length) {
+  if (invalidSlotFound || seenSkillIds.size !== availableSkills.length) {
     return { success: false, message: '技能策略存在重复、缺失或非法技能' };
   }
 

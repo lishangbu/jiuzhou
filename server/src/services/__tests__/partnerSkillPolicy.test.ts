@@ -195,6 +195,41 @@ test('normalizePartnerSkillPolicySlotsForSave: 应重排优先级并保留启用
   ]);
 });
 
+test('normalizePartnerSkillPolicySlotsForSave: 带光环被动技能时仍应只校验主动技能覆盖', () => {
+  const result = normalizePartnerSkillPolicySlotsForSave({
+    availableSkills: [
+      ...createAvailableSkills(),
+      {
+        skillId: 'skill-passive-aura',
+        skillName: '护体灵光',
+        skillIcon: '/passive.png',
+        skillDescription: '进场自动展开光环',
+        cooldown: 0,
+        target_type: 'self',
+        effects: [{ type: 'buff', buffKind: 'aura' }],
+        trigger_type: 'passive',
+        sourceTechniqueId: 'tech-c',
+        sourceTechniqueName: '护体诀',
+        sourceTechniqueQuality: '玄',
+      },
+    ],
+    slots: [
+      { skillId: 'skill-c', priority: 8, enabled: true },
+      { skillId: 'skill-a', priority: 2, enabled: false },
+      { skillId: 'skill-b', priority: 4, enabled: true },
+    ],
+  });
+
+  assert.equal(result.success, true);
+  if (!result.success) return;
+
+  assert.deepEqual(result.value, [
+    { skillId: 'skill-b', priority: 1, enabled: true },
+    { skillId: 'skill-c', priority: 2, enabled: true },
+    { skillId: 'skill-a', priority: 3, enabled: false },
+  ]);
+});
+
 test('buildPartnerSkillPolicyDto: 保存后的自定义启用顺序不应被自然顺序覆盖', () => {
   const result = buildPartnerSkillPolicyDto({
     partnerId: 9,
