@@ -2,9 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BattleEngine } from '../../battle/battleEngine.js';
 import { createPVEBattle } from '../../battle/battleFactory.js';
-import { getAvailableSkills } from '../../battle/modules/skill.js';
+import { executeSkill, getAvailableSkills } from '../../battle/modules/skill.js';
+import type { BattleSkill } from '../../battle/types.js';
 import type { SkillData } from '../../battle/battleFactory.js';
-import { createCharacterData, createMonsterData } from './battleTestUtils.js';
+import type { SkillDefConfig } from '../staticConfigLoader.js';
+import { buildEffectiveTechniqueSkillData } from '../shared/techniqueSkillProgression.js';
+import { asActionLog, consumeBattleLogs, createCharacterData, createMonsterData, createState, createUnit } from './battleTestUtils.js';
 
 /**
  * 自研功法 passive 技能回归测试
@@ -138,5 +141,180 @@ test('光环技能即使被错误写成 active，进入战斗时也应强制按 
   assert.deepEqual(
     availableSkillIds,
     ['skill-normal-attack', ACTIVE_SKILL.id],
+  );
+});
+
+test('光环获得摘要中的比率属性应按百分比显示，避免 flat 比率被写成 +0', () => {
+  const caster = createUnit({ id: 'player-1', name: '施法者' });
+  const enemy = createUnit({ id: 'monster-1', name: '敌人', type: 'monster' });
+  const state = createState({
+    attacker: [caster],
+    defender: [enemy],
+  });
+
+  const auraSkill: BattleSkill = {
+    id: 'skill-active-aura-log',
+    name: '鎏金灵环',
+    source: 'technique',
+    cost: {},
+    cooldown: 0,
+    targetType: 'self',
+    targetCount: 1,
+    damageType: 'magic',
+    element: 'huo',
+    effects: [
+      {
+        type: 'buff' as const,
+        buffKind: 'aura',
+        buffKey: 'buff-aura',
+        auraTarget: 'all_ally' as const,
+        duration: 2,
+        auraEffects: [
+          {
+            type: 'buff' as const,
+            buffKind: 'attr',
+            buffKey: 'buff-zengshang-up',
+            attrKey: 'zengshang',
+            applyType: 'flat' as const,
+            value: 0.1,
+          },
+          {
+            type: 'buff' as const,
+            buffKind: 'attr',
+            buffKey: 'buff-fagong-up',
+            attrKey: 'fagong',
+            applyType: 'percent' as const,
+            value: 0.06,
+          },
+          {
+            type: 'restore_lingqi' as const,
+            value: 4,
+          },
+        ],
+      },
+    ],
+    triggerType: 'active' as const,
+    aiPriority: 60,
+  };
+  caster.skills = [auraSkill];
+
+  const result = executeSkill(state, caster, auraSkill, [caster.id]);
+  assert.equal(result.success, true);
+
+  const actionLog = asActionLog(consumeBattleLogs(state)[0]);
+  assert.equal(
+    actionLog.targets[0]?.buffsApplied?.[0],
+    '增益光环（全体友方：增伤提升+10%、法攻提升+6%、灵气+4）',
+  );
+});
+
+test('升级后的光环子效果进入战斗时应按升级值生效', () => {
+  const techniqueSkillDef: SkillDefConfig = {
+    id: 'skill-upgraded-passive-aura',
+    name: '曜金灵环',
+    source_type: 'technique',
+    target_type: 'self',
+    target_count: 1,
+    damage_type: 'none',
+    element: 'huo',
+    effects: [
+      {
+        type: 'buff',
+        buffKind: 'aura',
+        buffKey: 'buff-aura',
+        auraTarget: 'self',
+        auraEffects: [
+          {
+            type: 'buff',
+            buffKind: 'attr',
+            buffKey: 'buff-fagong-up',
+            attrKey: 'fagong',
+            applyType: 'percent',
+            value: 0.06,
+          },
+        ],
+      },
+    ],
+    trigger_type: 'passive',
+    upgrades: [
+      {
+        layer: 1,
+        changes: {
+          effects: [
+            {
+              type: 'buff',
+              buffKind: 'aura',
+              buffKey: 'buff-aura',
+              auraTarget: 'self',
+              auraEffects: [
+                {
+                  type: 'buff',
+                  buffKind: 'attr',
+                  buffKey: 'buff-fagong-up',
+                  attrKey: 'fagong',
+                  applyType: 'percent',
+                  value: 0.06,
+                },
+                {
+                  type: 'buff',
+                  buffKind: 'attr',
+                  buffKey: 'buff-zengshang-up',
+                  attrKey: 'zengshang',
+                  applyType: 'flat',
+                  value: 0.1,
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ],
+  };
+
+  const effectiveSkill = buildEffectiveTechniqueSkillData(techniqueSkillDef, 1);
+  const passiveAuraSkill: SkillData = {
+    id: techniqueSkillDef.id,
+    name: techniqueSkillDef.name,
+    cost_lingqi: effectiveSkill.cost_lingqi,
+    cost_lingqi_rate: effectiveSkill.cost_lingqi_rate,
+    cost_qixue: effectiveSkill.cost_qixue,
+    cost_qixue_rate: effectiveSkill.cost_qixue_rate,
+    cooldown: effectiveSkill.cooldown,
+    target_type: techniqueSkillDef.target_type,
+    target_count: effectiveSkill.target_count,
+    damage_type: techniqueSkillDef.damage_type ?? 'none',
+    element: techniqueSkillDef.element ?? 'none',
+    effects: effectiveSkill.effects,
+    trigger_type: 'passive',
+    ai_priority: effectiveSkill.ai_priority,
+  };
+
+  const player = createCharacterData(1);
+  const monster = createMonsterData('passive-aura-upgrade-monster');
+  const state = createPVEBattle(
+    'battle-passive-aura-upgrade',
+    player,
+    [ACTIVE_SKILL, passiveAuraSkill],
+    [monster],
+    { [monster.id]: [] },
+  );
+
+  const attacker = state.teams.attacker.units[0];
+  assert.ok(attacker, '应成功创建攻击方单位');
+
+  const engine = new BattleEngine(state);
+  engine.startBattle();
+
+  const logs = consumeBattleLogs(state);
+  const auraLog = logs.find((log) => log.type === 'aura');
+  if (!auraLog || auraLog.type !== 'aura') {
+    assert.fail('期望产生 aura 日志');
+  }
+
+  assert.equal(attacker.currentAttrs.fagong, Math.floor(attacker.baseAttrs.fagong * 1.06));
+  assert.equal(attacker.currentAttrs.zengshang, 0.1);
+  assert.deepEqual(
+    auraLog.subResults[0]?.buffsApplied,
+    ['法攻提升+6%', '增伤提升+10%'],
   );
 });

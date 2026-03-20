@@ -24,6 +24,7 @@ import { applyDamage } from './damage.js';
 import { applyHealing } from './healing.js';
 import { applySoulShackleRecoveryReduction } from './mark.js';
 import { appendBattleLog } from '../logStream.js';
+import { buildAuraSubEffectSummary } from '../utils/auraSummary.js';
 
 /**
  * 添加Buff到单位
@@ -427,7 +428,7 @@ function applyAuraSubEffect(
         dispellable: true,
       }, 1, 1);
       if (!subResult.buffsApplied) subResult.buffsApplied = [];
-      subResult.buffsApplied.push(sub.buffDefId);
+      subResult.buffsApplied.push(buildAuraSubEffectSummary(sub) || sub.buffDefId);
       break;
     }
     case 'resource': {
