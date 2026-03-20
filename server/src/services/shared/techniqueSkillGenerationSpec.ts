@@ -46,6 +46,7 @@ export type TechniqueSkillGenerationValidationResult =
   | { success: false; reason: string };
 
 export const TECHNIQUE_SKILL_EFFECT_MAX_COUNT = 4;
+export const TECHNIQUE_UPGRADE_DAMAGE_EFFECT_MAX_TOTAL_SCALE_RATE = 3.0;
 
 export const TECHNIQUE_SKILL_EFFECT_TYPE_LIST = [
   'damage',
@@ -303,6 +304,46 @@ const validateValueExpression = (effect: SkillEffect): TechniqueSkillGenerationV
   const baseValueValidation = validateRequiredNumberField('baseValue', effect.baseValue);
   if (!baseValueValidation.success) return baseValueValidation;
   return validateRequiredNumberField('scaleRate', effect.scaleRate, 0, 5);
+};
+
+/**
+ * 校验升级阶段的伤害总倍率预算
+ *
+ * 作用：
+ * 1) 只对 upgrades.changes.effects / addEffect 中的 damage effect 限制总倍率，避免升级链路把单技能强化到离谱区间。
+ * 2) 不干预基础技能 effect 设计，保持“基础技能允许更自由、升级强化额外受预算约束”的单一口径。
+ *
+ * 输入/输出：
+ * - 输入：单个 effect 与字段名。
+ * - 输出：升级阶段预算校验结果。
+ *
+ * 关键边界条件与坑点：
+ * 1) 这里必须只挂在升级校验路径，不能再回流到基础 effect 校验，否则会和你的需求相反。
+ * 2) 命中失败时要把字段路径写进 reason，便于重试提示精确纠偏到 upgrades.changes.effects / addEffect。
+ */
+const validateUpgradeDamageEffectBudget = (
+  effect: SkillEffect,
+  fieldName: string,
+): TechniqueSkillGenerationValidationResult => {
+  if (effect.type !== 'damage') {
+    return { success: true };
+  }
+
+  const scaleRate = asNumber(effect.scaleRate);
+  if (scaleRate === null || scaleRate <= 0) {
+    return { success: true };
+  }
+
+  const hitCountRaw = asNumber(effect.hit_count);
+  const hitCount = hitCountRaw === null ? 1 : Math.max(1, Math.floor(hitCountRaw));
+  if (scaleRate * hitCount > TECHNIQUE_UPGRADE_DAMAGE_EFFECT_MAX_TOTAL_SCALE_RATE) {
+    return {
+      success: false,
+      reason: `${fieldName}.scaleRate × hit_count 不能大于 ${TECHNIQUE_UPGRADE_DAMAGE_EFFECT_MAX_TOTAL_SCALE_RATE}`,
+    };
+  }
+
+  return { success: true };
 };
 
 /**
@@ -686,6 +727,17 @@ export const validateTechniqueSkillUpgrade = (
     if (!effectListValidation.success) {
       return effectListValidation;
     }
+    if (Array.isArray(changes.effects)) {
+      for (const effect of changes.effects) {
+        if (!isJsonObject(effect) || !isSkillEffectObject(effect)) {
+          continue;
+        }
+        const damageBudgetValidation = validateUpgradeDamageEffectBudget(effect, 'upgrades.changes.effects');
+        if (!damageBudgetValidation.success) {
+          return damageBudgetValidation;
+        }
+      }
+    }
   }
 
   if (changes.addEffect !== undefined) {
@@ -698,6 +750,13 @@ export const validateTechniqueSkillUpgrade = (
     const addEffectValidation = validateTechniqueSkillEffect(changes.addEffect);
     if (!addEffectValidation.success) {
       return { success: false, reason: `upgrades.changes.addEffect 非法：${addEffectValidation.reason}` };
+    }
+    const addEffectBudgetValidation = validateUpgradeDamageEffectBudget(
+      changes.addEffect,
+      'upgrades.changes.addEffect',
+    );
+    if (!addEffectBudgetValidation.success) {
+      return addEffectBudgetValidation;
     }
   }
 

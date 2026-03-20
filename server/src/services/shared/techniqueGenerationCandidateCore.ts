@@ -270,6 +270,7 @@ const normalizeTechniqueLayerSkillIds = (
 
 const DUPLICATE_EFFECT_FAILURE_TOKEN = '不允许包含重复 effect';
 const UPGRADE_UNSUPPORTED_FIELD_REASON_PATTERN = /upgrades\.changes 包含未支持字段：([A-Za-z0-9_]+)/;
+const UPGRADE_DAMAGE_TOTAL_SCALE_FAILURE_TOKEN = 'scaleRate × hit_count 不能大于';
 
 const buildTechniqueGenerationRetryCorrectionRules = (reason: string): string[] => {
   const rules = [
@@ -281,6 +282,14 @@ const buildTechniqueGenerationRetryCorrectionRules = (reason: string): string[] 
       '同一技能的 effects 数组内，任意两个 effect 对象都不能完全相同。',
       '如果已经存在 restore_lingqi/heal/shield/resource 等效果，不要再复制一条字段与数值完全一致的 effect。',
       '如果只是想增强同一效果，请直接提高该 effect 的 value、baseValue、scaleRate 或 duration，不要新增重复对象。',
+    );
+  }
+
+  if (reason.includes(UPGRADE_DAMAGE_TOTAL_SCALE_FAILURE_TOKEN)) {
+    rules.push(
+      '只有升级链路需要限制总伤害倍率；基础技能 effects 不受这条规则约束。',
+      '若 upgrades.changes.effects 或 addEffect 中包含 damage，且同时填写 scaleRate 与 hit_count，则总倍率（scaleRate × hit_count）不能超过 2.5。',
+      '如果升级想做多段伤害，请同步下调每段 scaleRate，保证升级后的总倍率预算不过线。',
     );
   }
 

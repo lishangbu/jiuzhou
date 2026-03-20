@@ -644,3 +644,104 @@ test('validateTechniqueGenerationCandidate: single_enemy 技能不应生成 targ
     code: 'GENERATOR_INVALID',
   });
 });
+
+test('validateTechniqueGenerationCandidate: 升级项不应放行超预算总伤害倍率', () => {
+  const raw = {
+    technique: {
+      name: '焚脉离火诀',
+      required_realm: '凡人',
+      attribute_type: 'magic',
+      attribute_element: 'huo',
+      description: '测试伤害倍率预算约束',
+      long_desc: '测试伤害倍率预算约束长描述',
+      tags: ['测试', '倍率'],
+    },
+    skills: [
+      {
+        id: 'skill-over-budget-hit',
+        name: '焚星天舞',
+        description: '错误配置的超预算连击技能',
+        cost_lingqi: 34,
+        cooldown: 3,
+        target_type: 'all_enemy',
+        target_count: 1,
+        damage_type: 'magic',
+        element: 'huo',
+        ai_priority: 72,
+        effects: [
+          {
+            type: 'damage',
+            valueType: 'scale',
+            scaleAttr: 'fagong',
+            scaleRate: 1.68,
+            damageType: 'magic',
+            element: 'huo',
+            hit_count: 6,
+          },
+        ],
+        upgrades: [
+          {
+            layer: 2,
+            changes: {
+              effects: [
+                {
+                  type: 'damage',
+                  valueType: 'scale',
+                  scaleAttr: 'fagong',
+                  scaleRate: 1.68,
+                  damageType: 'magic',
+                  element: 'huo',
+                  hit_count: 6,
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+    layers: [
+      {
+        layer: 1,
+        cost_spirit_stones: 100,
+        cost_exp: 50,
+        passives: [{ key: 'fagong', value: 12 }],
+        unlock_skill_ids: ['skill-over-budget-hit'],
+        upgrade_skill_ids: [],
+        layer_desc: '入门',
+      },
+      {
+        layer: 2,
+        cost_spirit_stones: 200,
+        cost_exp: 100,
+        passives: [{ key: 'fagong', value: 18 }],
+        unlock_skill_ids: [],
+        upgrade_skill_ids: [],
+        layer_desc: '精进',
+      },
+      {
+        layer: 3,
+        cost_spirit_stones: 300,
+        cost_exp: 150,
+        passives: [{ key: 'fagong', value: 24 }],
+        unlock_skill_ids: [],
+        upgrade_skill_ids: [],
+        layer_desc: '圆满',
+      },
+    ],
+  };
+
+  const candidate = sanitizeTechniqueGenerationCandidateFromModel(raw, '武技', '黄', 3);
+  assert.ok(candidate);
+
+  const validation = validateTechniqueGenerationCandidate({
+    candidate,
+    expectedTechniqueType: '武技',
+    expectedQuality: '黄',
+    expectedMaxLayer: 3,
+  });
+  assert.deepEqual(validation, {
+    success: false,
+    message: 'AI结果技能升级配置非法：upgrades.changes.effects.scaleRate × hit_count 不能大于 2.5',
+    code: 'GENERATOR_INVALID',
+  });
+});

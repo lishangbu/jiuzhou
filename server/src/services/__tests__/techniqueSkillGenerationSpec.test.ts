@@ -76,6 +76,20 @@ test('damage 效果应支持使用主战属性作为倍率来源', () => {
   assert.deepEqual(validation, { success: true });
 });
 
+test('基础 damage 效果允许高连击与高总倍率组合', () => {
+  const validation = validateTechniqueSkillEffect({
+    type: 'damage',
+    valueType: 'scale',
+    scaleAttr: 'fagong',
+    scaleRate: 1.68,
+    damageType: 'magic',
+    element: 'huo',
+    hit_count: 6,
+  });
+
+  assert.deepEqual(validation, { success: true });
+});
+
 test('非法 controlType 应被共享校验拦截', () => {
   const validation = validateTechniqueSkillEffect({
     type: 'control',
@@ -105,6 +119,59 @@ test('升级项应支持 addEffect 追加控制效果', () => {
   );
 
   assert.deepEqual(validation, { success: true });
+});
+
+test('升级项的 changes.effects 不应放行超预算总伤害倍率', () => {
+  const validation = validateTechniqueSkillUpgrade(
+    {
+      layer: 5,
+      changes: {
+        effects: [
+          {
+            type: 'damage',
+            valueType: 'scale',
+            scaleAttr: 'fagong',
+            scaleRate: 1.68,
+            damageType: 'magic',
+            element: 'huo',
+            hit_count: 6,
+          },
+        ],
+      },
+    },
+    9,
+    'all_enemy',
+  );
+
+  assert.deepEqual(validation, {
+    success: false,
+    reason: 'upgrades.changes.effects.scaleRate × hit_count 不能大于 2.5',
+  });
+});
+
+test('升级项的 addEffect 不应放行超预算总伤害倍率', () => {
+  const validation = validateTechniqueSkillUpgrade(
+    {
+      layer: 5,
+      changes: {
+        addEffect: {
+          type: 'damage',
+          valueType: 'scale',
+          scaleAttr: 'wugong',
+          scaleRate: 1.3,
+          damageType: 'physical',
+          hit_count: 2,
+        },
+      },
+    },
+    9,
+    'random_enemy',
+  );
+
+  assert.deepEqual(validation, {
+    success: false,
+    reason: 'upgrades.changes.addEffect.scaleRate × hit_count 不能大于 2.5',
+  });
 });
 
 test('光环子效果不应再声明 duration', () => {
