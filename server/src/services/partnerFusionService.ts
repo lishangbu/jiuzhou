@@ -118,6 +118,11 @@ type PartnerFusionMaterialSnapshot = {
   techniqueIds: string[];
 };
 
+type PartnerFusionMaterialStaticMeta = {
+  quality: QualityName;
+  element: string;
+};
+
 const normalizeGeneratedId = (prefix: string): string => {
   return `${prefix}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
 };
@@ -154,12 +159,20 @@ const buildMaterialSnapshot = (
   };
 };
 
-const getPartnerQualityByRow = (row: PartnerRow): QualityName | null => {
+const getPartnerFusionMaterialStaticMeta = (
+  row: PartnerRow,
+): PartnerFusionMaterialStaticMeta | null => {
   const definition = getPartnerDefinitionById(row.partner_def_id);
   if (!definition) {
     throw new Error(`伙伴模板不存在: ${row.partner_def_id}`);
   }
-  return isQualityName(definition.quality) ? definition.quality : null;
+  if (!isQualityName(definition.quality)) {
+    return null;
+  }
+  return {
+    quality: definition.quality,
+    element: normalizeText(definition.attribute_element) || 'none',
+  };
 };
 
 const loadCharacterExists = async (
@@ -364,6 +377,7 @@ class PartnerFusionService {
 
     const techniqueMap = await loadPartnerTechniqueRows(normalizedPartnerIds, true);
     let sourceQuality: QualityName | null = null;
+    const materialStaticMetas: PartnerFusionMaterialStaticMeta[] = [];
     for (const row of partnerRows) {
       if (row.is_active) {
         return { success: false, message: '出战中的伙伴不可参与三魂归契', code: 'FUSION_PARTNER_ACTIVE' };
@@ -375,14 +389,15 @@ class PartnerFusionService {
         return { success: false, message: '归契中的伙伴不可重复参与三魂归契', code: 'FUSION_PARTNER_LOCKED' };
       }
 
-      const quality = getPartnerQualityByRow(row);
-      if (!quality) {
+      const materialStaticMeta = getPartnerFusionMaterialStaticMeta(row);
+      if (!materialStaticMeta) {
         return { success: false, message: '伙伴品级配置非法', code: 'FUSION_PARTNER_QUALITY_INVALID' };
       }
-      if (sourceQuality && quality !== sourceQuality) {
+      if (sourceQuality && materialStaticMeta.quality !== sourceQuality) {
         return { success: false, message: '三魂归契素材必须为同品级伙伴', code: 'FUSION_PARTNER_QUALITY_MISMATCH' };
       }
-      sourceQuality = quality;
+      sourceQuality = materialStaticMeta.quality;
+      materialStaticMetas.push(materialStaticMeta);
     }
 
     if (!sourceQuality) {
@@ -390,7 +405,11 @@ class PartnerFusionService {
     }
 
     const fusionId = buildPartnerFusionJobId();
-    const resultQuality = rollPartnerFusionResultQuality(sourceQuality);
+    const resultQuality = rollPartnerFusionResultQuality(
+      sourceQuality,
+      Math.random(),
+      materialStaticMetas.map((entry) => entry.element),
+    );
 
     await query(
       `
@@ -410,13 +429,13 @@ class PartnerFusionService {
     );
 
     for (const [index, row] of partnerRows.entries()) {
-      const quality = getPartnerQualityByRow(row);
-      if (!quality) {
+      const materialStaticMeta = materialStaticMetas[index];
+      if (!materialStaticMeta) {
         return { success: false, message: '伙伴品级配置非法', code: 'FUSION_PARTNER_QUALITY_INVALID' };
       }
       const snapshot = buildMaterialSnapshot(
         row,
-        quality,
+        materialStaticMeta.quality,
         techniqueMap.get(Number(row.id)) ?? [],
       );
       await query(
