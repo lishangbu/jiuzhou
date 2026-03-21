@@ -112,6 +112,10 @@ import {
   resolveRealtimeBattleViewSyncMode,
   shouldRestoreBattleSessionFromRealtime,
 } from './shared/battleViewSync';
+import {
+  buildBattleSessionAdvanceKey,
+  resolveBattleSessionAdvanceMode,
+} from './shared/battleSessionAdvance';
 import { resolveBattleViewUiState } from './shared/battleViewUiState';
 import {
   shouldResetTeamBattleReplayContext,
@@ -763,6 +767,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const [teamBattleId, setTeamBattleId] = useState<string | null>(null);
   const [reconnectBattleId, setReconnectBattleId] = useState<string | null>(null);
   const [battleCooldownStateVersion, setBattleCooldownStateVersion] = useState(0);
+  const [blockedAutoAdvanceSessionKey, setBlockedAutoAdvanceSessionKey] = useState('');
   const [autoMode, setAutoMode] = useState(true); // 默认开启自动战斗
   const taskOverviewRequestScopeKeyRef = useRef<string>(`game-task-overview-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   const [equippedItems, setEquippedItems] = useState<
@@ -1309,14 +1314,22 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       return;
     }
 
+    const sessionAdvanceKey = buildBattleSessionAdvanceKey(session);
+    const isLatestAdvanceTarget = () => (
+      buildBattleSessionAdvanceKey(activeBattleSessionRef.current) === sessionAdvanceKey
+    );
     try {
       const res = await advanceBattleSession(session.sessionId, SILENT_API_REQUEST_CONFIG);
       const nextSession = res?.data?.session ?? null;
       if (!res?.success || !nextSession) {
-        void 0;
+        if (isLatestAdvanceTarget()) {
+          setBlockedAutoAdvanceSessionKey(sessionAdvanceKey);
+        }
+        messageRef.current.error(res?.message || '推进战斗失败');
         return;
       }
 
+      setBlockedAutoAdvanceSessionKey('');
       setActiveBattleSession(nextSession);
       const nextBattleId = nextSession.currentBattleId;
       if (nextBattleId) {
@@ -1354,6 +1367,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       if (isBattleSessionMissingError(errorText)) {
         clearSessionAutoAdvanceTimer();
         lastAutoAdvanceSessionKeyRef.current = '';
+        setBlockedAutoAdvanceSessionKey('');
         setActiveBattleSession(null);
         setTeamBattleId(null);
         setReconnectBattleId(null);
@@ -1363,13 +1377,30 @@ const Game: FC<GameProps> = ({ onLogout }) => {
         setBattleActiveUnitId(null);
         return;
       }
+      if (isLatestAdvanceTarget()) {
+        setBlockedAutoAdvanceSessionKey(sessionAdvanceKey);
+      }
       messageRef.current.error(errorText);
     }
   }, [activeBattleSession, applyBattleViewUiState, clearBattleAutoCloseTimer, clearSessionAutoAdvanceTimer]);
 
+  const currentSessionAdvanceKey = useMemo(
+    () => buildBattleSessionAdvanceKey(activeBattleSession),
+    [activeBattleSession],
+  );
+
+  const sessionAdvanceMode = useMemo(
+    () => resolveBattleSessionAdvanceMode({
+      session: activeBattleSession,
+      inTeam,
+      isTeamLeader,
+      blockedAutoAdvanceSessionKey,
+    }),
+    [activeBattleSession, blockedAutoAdvanceSessionKey, inTeam, isTeamLeader],
+  );
+
   useEffect(() => {
     const session = activeBattleSession;
-    const canControlSession = !inTeam || isTeamLeader;
     const latestBattleCooldown = gameSocket.getLatestBattleCooldown();
     const isSessionAdvanceCoolingDown =
       session?.type === 'pve'
@@ -1378,8 +1409,8 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       && latestBattleCooldown.characterId === characterId;
     if (
       !session
-      || !session.canAdvance
-      || !canControlSession
+      || sessionAdvanceMode === 'none'
+      || sessionAdvanceMode === 'manual_session'
       || isSessionAdvanceCoolingDown
     ) {
       clearSessionAutoAdvanceTimer();
@@ -1387,20 +1418,12 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       return;
     }
 
-    const autoAdvanceKey = [
-      session.sessionId,
-      session.currentBattleId ?? '',
-      session.status,
-      session.nextAction,
-      session.lastResult ?? '',
-    ].join('|');
-
-    if (lastAutoAdvanceSessionKeyRef.current === autoAdvanceKey) {
+    if (lastAutoAdvanceSessionKeyRef.current === currentSessionAdvanceKey) {
       return;
     }
 
     clearSessionAutoAdvanceTimer();
-    lastAutoAdvanceSessionKeyRef.current = autoAdvanceKey;
+    lastAutoAdvanceSessionKeyRef.current = currentSessionAdvanceKey;
     sessionAutoAdvanceTimerRef.current = window.setTimeout(() => {
       sessionAutoAdvanceTimerRef.current = null;
       void handleAdvanceBattleSession();
@@ -1414,41 +1437,36 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     battleCooldownStateVersion,
     characterId,
     clearSessionAutoAdvanceTimer,
+    currentSessionAdvanceKey,
     handleAdvanceBattleSession,
-    inTeam,
-    isTeamLeader,
+    sessionAdvanceMode,
   ]);
 
   const allowAutoNextBattle = useMemo(() => {
-    if (!activeBattleSession?.canAdvance) return false;
-    return !inTeam || isTeamLeader;
-  }, [activeBattleSession?.canAdvance, inTeam, isTeamLeader]);
+    return sessionAdvanceMode === 'auto_session' || sessionAdvanceMode === 'auto_session_cooldown';
+  }, [sessionAdvanceMode]);
 
   const battleAdvanceMode = useMemo<BattleAdvanceMode>(() => {
-    if (activeBattleSession?.canAdvance && (!inTeam || isTeamLeader)) {
-      if (activeBattleSession.type === 'pve' && activeBattleSession.nextAction === 'advance') {
-        return 'auto_session_cooldown';
-      }
-      return 'auto_session';
+    if (sessionAdvanceMode !== 'none') {
+      return sessionAdvanceMode;
     }
     if (activeSessionBattleId || reconnectBattleId || (inTeam && !isTeamLeader && teamBattleId)) {
       return 'wait_external';
     }
     return 'auto_local_retry';
   }, [
-    activeBattleSession?.canAdvance,
     activeSessionBattleId,
     inTeam,
     isTeamLeader,
     reconnectBattleId,
+    sessionAdvanceMode,
     teamBattleId,
   ]);
 
   const battleOnNext = useMemo(() => {
-    if (!activeBattleSession?.canAdvance) return undefined;
-    if (inTeam && !isTeamLeader) return undefined;
+    if (sessionAdvanceMode === 'none') return undefined;
     return handleAdvanceBattleSession;
-  }, [activeBattleSession?.canAdvance, handleAdvanceBattleSession, inTeam, isTeamLeader]);
+  }, [handleAdvanceBattleSession, sessionAdvanceMode]);
 
   /**
    * 控制 BattleArea 是否允许“无 externalBattleId 时本地自动开战”。

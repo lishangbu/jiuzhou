@@ -32,10 +32,10 @@ export type TechniqueBookDisassembleReward = {
 };
 
 const TECHNIQUE_BOOK_REWARD_QTY_BY_QUALITY_RANK: Record<number, number> = {
-  1: 10,
-  2: 20,
-  3: 40,
-  4: 80,
+  1: 20,
+  2: 40,
+  3: 80,
+  4: 160,
 };
 
 export const resolveTechniqueBookDisassembleRewardByQualityRank = (
