@@ -1,12 +1,20 @@
 .tower-modal {
+  .ant-modal {
+    max-height: calc(100dvh - 32px);
+  }
+
   .ant-modal-content {
     padding: 0;
     border-radius: 14px;
     overflow: hidden;
     background: var(--panel-bg);
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100dvh - 32px);
   }
 
   .ant-modal-header {
+    flex: 0 0 auto;
     margin-bottom: 0;
     padding: 12px 16px;
     border-bottom: 1px solid var(--border-color-soft);
@@ -14,16 +22,51 @@
   }
 
   .ant-modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
     padding: 12px 16px 16px;
+    overflow: hidden;
   }
 
   .ant-tabs-nav {
+    flex: 0 0 auto;
     margin-bottom: 12px;
+  }
+
+  .ant-tabs {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .ant-tabs-content-holder,
+  .ant-tabs-content,
+  .ant-tabs-tabpane {
+    min-height: 0;
+  }
+
+  .ant-tabs-content-holder {
+    flex: 1 1 auto;
+  }
+
+  .ant-tabs-content {
+    height: 100%;
+  }
+
+  .ant-tabs-tabpane {
+    height: 100%;
   }
 }
 
 .tower-modal-shell {
-  min-height: 360px;
+  flex: 1 1 auto;
+  max-height: min(680px, calc(100dvh - 120px));
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .tower-modal-loading {
@@ -37,6 +80,11 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .tower-summary-panel,
@@ -279,6 +327,12 @@
 
 @media (max-width: 768px) {
   .tower-modal {
+    .ant-modal {
+      width: calc(100vw - 16px) !important;
+      max-width: calc(100vw - 16px);
+      margin: 8px auto;
+    }
+
     .ant-modal-header {
       padding: 10px 12px;
     }
@@ -286,6 +340,11 @@
     .ant-modal-body {
       padding: 10px 12px 12px;
     }
+  }
+
+  .tower-modal-shell {
+    max-height: calc(100dvh - 108px);
+    min-height: 0;
   }
 
   .tower-summary-head,
