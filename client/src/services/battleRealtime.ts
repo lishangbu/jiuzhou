@@ -111,24 +111,41 @@ const mergeBattleLogs = (
 
 type BattleTeamStateDto = BattleStateDto['teams']['attacker'];
 
+const mergeBattleUnitSnapshot = (
+  previousUnit: BattleUnitDto,
+  incomingUnit: BattleUnitDto,
+): BattleUnitDto => {
+  return {
+    ...previousUnit,
+    ...incomingUnit,
+    currentAttrs: {
+      ...previousUnit.currentAttrs,
+      ...incomingUnit.currentAttrs,
+    },
+    buffs: incomingUnit.buffs,
+  };
+};
+
 const mergeBattleUnits = (
   previousUnits: BattleUnitDto[],
   incomingUnits: BattleUnitDto[],
 ): BattleUnitDto[] => {
   const previousUnitById = new Map(previousUnits.map((unit) => [unit.id, unit]));
-  return incomingUnits.map((unit) => {
-    const previousUnit = previousUnitById.get(unit.id);
-    if (!previousUnit) return unit;
-    return {
-      ...previousUnit,
-      ...unit,
-      currentAttrs: {
-        ...previousUnit.currentAttrs,
-        ...unit.currentAttrs,
-      },
-      buffs: unit.buffs,
-    };
-  });
+  const incomingUnitById = new Map(incomingUnits.map((unit) => [unit.id, unit]));
+  const mergedUnits: BattleUnitDto[] = [];
+
+  for (const previousUnit of previousUnits) {
+    const incomingUnit = incomingUnitById.get(previousUnit.id);
+    if (!incomingUnit) continue;
+    mergedUnits.push(mergeBattleUnitSnapshot(previousUnit, incomingUnit));
+  }
+
+  for (const incomingUnit of incomingUnits) {
+    if (previousUnitById.has(incomingUnit.id)) continue;
+    mergedUnits.push(incomingUnit);
+  }
+
+  return mergedUnits;
 };
 
 const mergeBattleTeamState = (

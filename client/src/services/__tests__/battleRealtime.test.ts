@@ -4,7 +4,8 @@
  * 作用（做什么 / 不做什么）：
  * 1. 做什么：验证 `normalizeBattleRealtimePayload` 在 `unitsDelta` 场景下会按单位 ID 合并状态，避免静态字段被后续增量覆盖丢失。
  * 2. 做什么：锁定伙伴头像在战斗首帧存在、后续状态仅更新动态字段时仍然持续可用，避免 BattleArea 再次出现“伙伴头像不显示”的回归。
- * 3. 不做什么：不测试 BattleArea 样式，也不覆盖 socket 订阅流程。
+ * 3. 做什么：锁定战斗单位沿用首帧数组顺序，避免服务端增量包顺序变化时前端站位跟着跳动。
+ * 4. 不做什么：不测试 BattleArea 样式，也不覆盖 socket 订阅流程。
  *
  * 输入/输出：
  * - 输入：battle_started 全量状态、battle_state 增量状态。
@@ -186,5 +187,97 @@ describe('normalizeBattleRealtimePayload', () => {
     );
     expect(normalized.state.teams.attacker.units[1]?.qixue).toBe(88);
     expect(normalized.state.currentUnitId).toBe('partner-7');
+  });
+
+  it('unitsDelta 增量顺序变化时应沿用首帧站位顺序', () => {
+    const previous = createStatePayload();
+
+    const normalized = normalizeBattleRealtimePayload(
+      {
+        kind: 'battle_state',
+        battleId: 'battle-1',
+        unitsDelta: true,
+        state: {
+          battleId: 'battle-1',
+          battleType: 'pve',
+          teams: {
+            attacker: {
+              odwnerId: 1,
+              totalSpeed: 100,
+              units: [
+                {
+                  id: 'partner-7',
+                  name: '青木小鸥',
+                  type: 'partner',
+                  qixue: 88,
+                  lingqi: 35,
+                  currentAttrs: {
+                    max_qixue: 100,
+                    max_lingqi: 50,
+                  },
+                  isAlive: true,
+                  buffs: [],
+                },
+                {
+                  id: 'player-1',
+                  name: '主角',
+                  type: 'player',
+                  qixue: 90,
+                  lingqi: 40,
+                  currentAttrs: {
+                    max_qixue: 100,
+                    max_lingqi: 50,
+                    realm: '炼气境',
+                  },
+                  isAlive: true,
+                  buffs: [],
+                },
+              ],
+            },
+            defender: {
+              odwnerId: 0,
+              totalSpeed: 80,
+              units: [
+                {
+                  id: 'monster-1',
+                  name: '山狼',
+                  type: 'monster',
+                  qixue: 75,
+                  lingqi: 20,
+                  currentAttrs: {
+                    max_qixue: 100,
+                    max_lingqi: 50,
+                    realm: '妖兽',
+                  },
+                  isAlive: true,
+                  buffs: [],
+                },
+              ],
+            },
+          },
+          roundCount: 1,
+          currentTeam: 'attacker',
+          currentUnitId: 'partner-7',
+          phase: 'action',
+          firstMover: 'attacker',
+        },
+        logs: [],
+        logStart: 0,
+        logDelta: false,
+      },
+      previous,
+    );
+
+    expect(normalized?.kind).toBe('battle_state');
+    if (!normalized || normalized.kind === 'battle_abandoned') {
+      throw new Error('预期返回战斗状态 payload');
+    }
+
+    expect(normalized.state.teams.attacker.units.map((unit) => unit.id)).toEqual([
+      'player-1',
+      'partner-7',
+    ]);
+    expect(normalized.state.teams.attacker.units[0]?.qixue).toBe(90);
+    expect(normalized.state.teams.attacker.units[1]?.qixue).toBe(88);
   });
 });
