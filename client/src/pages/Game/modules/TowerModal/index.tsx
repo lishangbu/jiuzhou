@@ -166,7 +166,7 @@ const TowerModal: React.FC<TowerModalProps> = ({
       onCancel={onClose}
       footer={null}
       centered
-      width={920}
+      width={600}
       destroyOnHidden
       title="千层塔（测试中，无奖励）"
       className="tower-modal"
