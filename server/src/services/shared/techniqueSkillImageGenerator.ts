@@ -2,24 +2,21 @@
  * 生成功法技能图标（绘图 AI）
  *
  * 作用（做什么 / 不做什么）：
- * 1) 做什么：根据功法与技能语义调用绘图模型，生成技能图标并写入本地 uploads 目录，返回可访问路径。
- * 2) 做什么：复用统一图片 client，把 provider 协议差异从业务模块中移除，避免技能图标与伙伴头像重复维护一套请求逻辑。
+ * 1) 做什么：根据功法与技能语义调用绘图模型，生成技能图标并交给统一图片持久化入口，返回可直接入库的地址。
+ * 2) 做什么：复用统一图片 client，把 provider 协议差异从业务模块中移除，并让技能图标与伙伴头像共用同一套“本地/CDN”决策。
  * 3) 不做什么：不负责业务状态机、不负责数据库写入、不抛出阻断主流程异常（失败时返回 null）。
  *
  * 输入/输出：
  * - 输入：技能语义上下文（功法名、技能名、描述、元素、效果摘要等）。
- * - 输出：`/uploads/techniques/*.webp` 或远端 URL；失败返回 null。
+ * - 输出：最终图标地址；COS/CDN 启用时为远端 URL，否则为 `/uploads/techniques/*.webp`；失败返回 null。
  *
  * 数据流/状态流：
- * 上下文 -> prompt 拼装 -> imageModelClient -> 解析 b64/url -> 本地落盘(可选) -> 返回图标路径。
+ * 上下文 -> prompt 拼装 -> imageModelClient -> 解析 b64/url -> 压缩 -> generatedImageStorage -> 返回图标路径。
  *
  * 关键边界条件与坑点：
  * 1) 外部模型可能返回空图片资源，解析失败必须静默回退，不能影响主链路。
  * 2) 批量生成采用固定 3 并发，既缩短多技能等待时间，也避免把第三方配额压力一次性放大到“全量 Promise.all”。
  */
-import fs from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import sharp from 'sharp';
 import {
   downloadImageBuffer,
@@ -31,6 +28,7 @@ import {
   debugImageGenerationLog,
   summarizeImageGenerationError,
 } from './imageGenerationDebugShared.js';
+import { persistGeneratedImage } from './generatedImageStorage.js';
 
 export type TechniqueSkillImageInput = {
   skillId: string;
@@ -43,19 +41,9 @@ export type TechniqueSkillImageInput = {
   skillEffects: unknown[];
 };
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const LOCAL_IMAGE_PREFIX = '/uploads/techniques';
 export const TECHNIQUE_SKILL_IMAGE_CONCURRENCY = 5;
 export const TECHNIQUE_SKILL_IMAGE_OUTPUT_MAX_EDGE = 256;
 export const TECHNIQUE_SKILL_IMAGE_OUTPUT_WEBP_QUALITY = 82;
-
-const ensureImageDir = async (): Promise<string> => {
-  const dir = path.join(__dirname, '../../../uploads/techniques');
-  await fs.mkdir(dir, { recursive: true });
-  return dir;
-};
 
 export const buildTechniqueSkillImagePrompt = (input: TechniqueSkillImageInput): string => {
   return [
@@ -87,7 +75,7 @@ const getSafeSkillId = (skillId: string): string => {
  * - 输出：压缩后的 WebP Buffer；压缩失败返回 null。
  *
  * 数据流/状态流：
- * 模型原始字节 -> compressTechniqueSkillImageBuffer -> saveImageBufferToLocal -> uploads/techniques。
+ * 模型原始字节 -> compressTechniqueSkillImageBuffer -> generatedImageStorage -> 本地 uploads 或 CDN。
  *
  * 关键边界条件与坑点：
  * 1) 只允许缩小不允许放大，避免小图被错误重采样导致发糊。
@@ -115,25 +103,26 @@ export const compressTechniqueSkillImageBuffer = async (buffer: Buffer): Promise
   }
 };
 
-const saveImageBufferToLocal = async (buffer: Buffer, skillId: string): Promise<string | null> => {
+const persistTechniqueSkillImageBuffer = async (buffer: Buffer, skillId: string): Promise<string | null> => {
   try {
     if (buffer.length <= 0) return null;
     const compressedBuffer = await compressTechniqueSkillImageBuffer(buffer);
     if (!compressedBuffer || compressedBuffer.length <= 0) return null;
-    const dir = await ensureImageDir();
-    const safeSkillId = getSafeSkillId(skillId);
-    const fileName = `tech-skill-${Date.now()}-${safeSkillId}.webp`;
-    const filePath = path.join(dir, fileName);
-    await fs.writeFile(filePath, compressedBuffer);
-    return `${LOCAL_IMAGE_PREFIX}/${fileName}`;
+    return persistGeneratedImage({
+      buffer: compressedBuffer,
+      group: 'techniques',
+      fileStem: `tech-skill-${getSafeSkillId(skillId)}`,
+      contentType: 'image/webp',
+      extension: 'webp',
+    });
   } catch {
     return null;
   }
 };
 
-const saveB64ImageToLocal = async (b64: string, skillId: string): Promise<string | null> => {
+const persistTechniqueSkillB64 = async (b64: string, skillId: string): Promise<string | null> => {
   if (!b64) return null;
-  return saveImageBufferToLocal(Buffer.from(b64, 'base64'), skillId);
+  return persistTechniqueSkillImageBuffer(Buffer.from(b64, 'base64'), skillId);
 };
 
 export const generateTechniqueSkillIcon = async (input: TechniqueSkillImageInput): Promise<string | null> => {
@@ -163,32 +152,30 @@ export const generateTechniqueSkillIcon = async (input: TechniqueSkillImageInput
     }
 
     if (generated.asset.b64) {
-      const localPath = await saveB64ImageToLocal(generated.asset.b64, input.skillId);
-      if (localPath) {
-        debugImageGenerationLog('technique-image', 'saved from b64:', localPath);
-        return localPath;
+      const assetUrl = await persistTechniqueSkillB64(generated.asset.b64, input.skillId);
+      if (assetUrl) {
+        debugImageGenerationLog('technique-image', 'persisted from b64:', assetUrl);
+        return assetUrl;
       }
-      debugImageGenerationLog('technique-image', 'b64 returned but local save failed');
+      debugImageGenerationLog('technique-image', 'b64 returned but persist failed');
     }
 
     if (generated.asset.url) {
       try {
         const buffer = await downloadImageBuffer(generated.asset.url, generated.timeoutMs);
-        const localPath = await saveImageBufferToLocal(buffer, input.skillId);
-        if (localPath) {
-          debugImageGenerationLog('technique-image', 'saved from url:', localPath);
-          return localPath;
+        const assetUrl = await persistTechniqueSkillImageBuffer(buffer, input.skillId);
+        if (assetUrl) {
+          debugImageGenerationLog('technique-image', 'persisted from url:', assetUrl);
+          return assetUrl;
         }
-        debugImageGenerationLog('technique-image', 'url returned but local save failed, fallback remote url');
+        debugImageGenerationLog('technique-image', 'url returned but persist failed');
       } catch (error) {
         debugImageGenerationLog(
           'technique-image',
-          'download url failed, fallback remote url:',
+          'download url failed:',
           summarizeImageGenerationError(error instanceof Error ? error : String(error)),
         );
-        return generated.asset.url;
       }
-      return generated.asset.url;
     }
 
     debugImageGenerationLog('technique-image', 'empty image asset returned');

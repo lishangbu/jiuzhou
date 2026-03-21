@@ -26,6 +26,15 @@ declare module 'cos-nodejs-sdk-v5' {
     [key: string]: unknown;
   }
 
+  interface CosPutObjectParams extends CosObjectBaseParams {
+    Body: Buffer;
+    ContentType?: string;
+  }
+
+  interface CosPutObjectResult {
+    [key: string]: unknown;
+  }
+
   class COS {
     constructor(options: CosClientOptions);
 
@@ -37,6 +46,11 @@ declare module 'cos-nodejs-sdk-v5' {
     deleteObject(
       params: CosObjectBaseParams,
       callback: CosCallback<CosDeleteObjectResult>,
+    ): void;
+
+    putObject(
+      params: CosPutObjectParams,
+      callback: CosCallback<CosPutObjectResult>,
     ): void;
   }
 

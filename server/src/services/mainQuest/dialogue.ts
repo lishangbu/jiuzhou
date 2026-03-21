@@ -22,6 +22,7 @@ import {
   createDialogueState,
   applyDialogueEffectsTx,
   type DialogueEffect,
+  type DialogueNode,
   type DialogueState,
 } from '../dialogueService.js';
 import { asString, asArray, asObject } from '../shared/typeCoercion.js';
@@ -41,12 +42,31 @@ export const startDialogueLegacy = async (
   await ensureMainQuestProgressForNewChapters(cid);
 
   const progressRes = await query(
-    `SELECT current_section_id, section_status
+    `SELECT current_section_id, section_status, dialogue_state
      FROM character_main_quest_progress WHERE character_id = $1`,
     [cid],
   );
-  const progress = progressRes.rows?.[0] as { current_section_id?: unknown; section_status?: unknown } | undefined;
+  const progress = progressRes.rows?.[0] as {
+    current_section_id?: unknown;
+    section_status?: unknown;
+    dialogue_state?: unknown;
+  } | undefined;
   if (!progress) return { success: false, message: '主线进度不存在' };
+
+  const existingDialogueStateRaw = asObject(progress.dialogue_state);
+  const existingDialogueState = existingDialogueStateRaw.dialogueId
+    ? {
+        dialogueId: asString(existingDialogueStateRaw.dialogueId),
+        currentNodeId: asString(existingDialogueStateRaw.currentNodeId),
+        currentNode: (existingDialogueStateRaw.currentNode as DialogueNode | null) ?? null,
+        selectedChoices: asArray<string>(existingDialogueStateRaw.selectedChoices),
+        isComplete: existingDialogueStateRaw.isComplete === true,
+        pendingEffects: asArray<DialogueEffect>(existingDialogueStateRaw.pendingEffects),
+      }
+    : null;
+  if (asString(progress.section_status) === 'dialogue' && existingDialogueState && !existingDialogueState.isComplete) {
+    return { success: true, message: 'ok', data: { dialogueState: existingDialogueState } };
+  }
 
   let targetDialogueId = typeof dialogueId === 'string' && dialogueId.trim() ? dialogueId.trim() : '';
   if (!targetDialogueId && progress.current_section_id) {
@@ -78,6 +98,70 @@ export const startDialogueLegacy = async (
   );
 
   return { success: true, message: 'ok', data: { dialogueState } };
+};
+
+const resolveDialogueCompletionSectionStatus = (sectionId: string): SectionStatus => {
+  if (!sectionId) return 'turnin';
+  const section = getEnabledMainQuestSectionById(sectionId);
+  const objectives = asArray(section?.objectives);
+  return objectives.length > 0 ? 'objectives' : 'turnin';
+};
+
+const shouldAutoCompleteEnteredDialogueNode = (node: DialogueNode): boolean => {
+  if (node.type === 'choice') return false;
+  if (asArray<DialogueEffect>(node.effects).length > 0) return false;
+  return !asString(node.next).trim();
+};
+
+const persistEnteredDialogueNode = async (params: {
+  characterId: number;
+  sectionId: string;
+  dialogueId: string;
+  nextNode: DialogueNode;
+  selectedChoices: string[];
+}): Promise<DialogueState> => {
+  const {
+    characterId,
+    sectionId,
+    dialogueId,
+    nextNode,
+    selectedChoices,
+  } = params;
+  const autoComplete = shouldAutoCompleteEnteredDialogueNode(nextNode);
+  const nextDialogueState: DialogueState = {
+    dialogueId,
+    currentNodeId: nextNode.id,
+    currentNode: nextNode,
+    selectedChoices,
+    isComplete: autoComplete,
+    pendingEffects: autoComplete ? [] : asArray<DialogueEffect>(nextNode.effects),
+  };
+
+  if (autoComplete) {
+    const nextSectionStatus = resolveDialogueCompletionSectionStatus(sectionId);
+    await query(
+      `UPDATE character_main_quest_progress
+       SET dialogue_state = $2::jsonb,
+           section_status = $3,
+           updated_at = NOW()
+       WHERE character_id = $1`,
+      [characterId, JSON.stringify(nextDialogueState), nextSectionStatus],
+    );
+    if (nextSectionStatus === 'objectives') {
+      await syncCurrentSectionStaticProgress(characterId);
+    }
+    return nextDialogueState;
+  }
+
+  await query(
+    `UPDATE character_main_quest_progress
+     SET dialogue_state = $2::jsonb,
+         section_status = 'dialogue',
+         updated_at = NOW()
+     WHERE character_id = $1`,
+    [characterId, JSON.stringify(nextDialogueState)],
+  );
+  return nextDialogueState;
 };
 
 /** 推进对话（需 @Transactional） */
@@ -195,25 +279,13 @@ export const advanceDialogueLegacy = async (
     return { success: false, message: `无效的对话节点: ${nextNodeId}` };
   }
 
-  const newDialogueState: DialogueState = {
+  const newDialogueState = await persistEnteredDialogueNode({
+    characterId: cid,
+    sectionId,
     dialogueId,
-    currentNodeId: nextNodeId,
-    currentNode: nextNode,
+    nextNode,
     selectedChoices,
-    isComplete: false,
-    pendingEffects: asArray<DialogueEffect>(nextNode.effects),
-  };
-
-  const newSectionStatus: SectionStatus = 'dialogue';
-
-  await query(
-    `UPDATE character_main_quest_progress
-     SET dialogue_state = $2::jsonb,
-         section_status = $3,
-         updated_at = NOW()
-     WHERE character_id = $1`,
-    [cid, JSON.stringify(newDialogueState), newSectionStatus],
-  );
+  });
   return { success: true, message: 'ok', data: { dialogueState: newDialogueState, effectResults } };
 };
 
@@ -232,7 +304,7 @@ export const selectDialogueChoiceLegacy = async (
   if (!ch) return { success: false, message: '选项ID不能为空' };
 
   const progressRes = await query(
-    `SELECT dialogue_state
+    `SELECT dialogue_state, current_section_id
      FROM character_main_quest_progress
      WHERE character_id = $1 FOR UPDATE`,
     [cid],
@@ -241,7 +313,9 @@ export const selectDialogueChoiceLegacy = async (
     return { success: false, message: '主线进度不存在' };
   }
 
-  const dialogueStateRaw = asObject(progressRes.rows[0].dialogue_state);
+  const progress = progressRes.rows[0] as { dialogue_state?: unknown; current_section_id?: unknown };
+  const dialogueStateRaw = asObject(progress.dialogue_state);
+  const sectionId = asString(progress.current_section_id);
   if (!dialogueStateRaw.dialogueId) {
     return { success: false, message: '没有进行中的对话' };
   }
@@ -269,21 +343,12 @@ export const selectDialogueChoiceLegacy = async (
   }
   const selectedChoices = [...asArray<string>(dialogueStateRaw.selectedChoices), ch];
 
-  const newDialogueState: DialogueState = {
+  const newDialogueState = await persistEnteredDialogueNode({
+    characterId: cid,
+    sectionId,
     dialogueId: asString(dialogueStateRaw.dialogueId),
-    currentNodeId: nextNodeId,
-    currentNode: nextNode,
+    nextNode,
     selectedChoices,
-    isComplete: false,
-    pendingEffects: asArray<DialogueEffect>(nextNode.effects),
-  };
-
-  await query(
-    `UPDATE character_main_quest_progress
-     SET dialogue_state = $2::jsonb,
-         updated_at = NOW()
-     WHERE character_id = $1`,
-    [cid, JSON.stringify(newDialogueState)],
-  );
+  });
   return { success: true, message: 'ok', data: { dialogueState: newDialogueState, effectResults } };
 };

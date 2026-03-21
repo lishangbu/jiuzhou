@@ -69,6 +69,7 @@ services:
       - COS_BUCKET=${COS_BUCKET}
       - COS_REGION=${COS_REGION:-ap-guangzhou}
       - COS_AVATAR_PREFIX=${COS_AVATAR_PREFIX:-avatars/}
+      - COS_GENERATED_IMAGE_PREFIX=${COS_GENERATED_IMAGE_PREFIX:-generated/}
       - COS_DOMAIN=${COS_DOMAIN}
     volumes:
       - uploads:/app/server/uploads

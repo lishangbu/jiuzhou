@@ -1525,6 +1525,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     }
     return null;
   }, [mainQuestDialogueLoading, npcDialogue.length, npcTalkActionKey, npcTalkLoading]);
+  const isMainQuestDialogueCloseLocked = npcTalkPhase === 'mainQuestDialogue' && mainQuestDialogueState?.isComplete !== true;
 
   const buildTaskNpcLine = useCallback((t: NpcTalkTaskOption): string => {
     const title = String(t.title || '').trim() || '这件事';
@@ -2626,6 +2627,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
         dialogue={npcDialogue}
         loading={npcTalkLoading}
         busyText={npcTalkBusyText}
+        closeDisabled={isMainQuestDialogueCloseLocked}
         onClose={closeNpcTalk}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -2901,9 +2903,11 @@ const Game: FC<GameProps> = ({ onLogout }) => {
                     </Button>
                   )}
 
-                  <Button onClick={resetMainQuestDialogueFlow} disabled={mainQuestDialogueLoading}>
-                    返回
-                  </Button>
+                  {mainQuestDialogueState?.isComplete ? (
+                    <Button onClick={resetMainQuestDialogueFlow} disabled={mainQuestDialogueLoading}>
+                      返回
+                    </Button>
+                  ) : null}
                 </div>
               );
             })()

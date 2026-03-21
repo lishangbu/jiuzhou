@@ -2,24 +2,21 @@
  * AI 伙伴头像生成器
  *
  * 作用（做什么 / 不做什么）：
- * 1) 做什么：根据伙伴名字、品质、元素、定位与描述调用图像模型生成头像，并落到本地 uploads 目录。
- * 2) 做什么：把伙伴头像 prompt、图片压缩与本地落盘集中到单模块，模型 provider 协议由统一图片 client 处理。
+ * 1) 做什么：根据伙伴名字、品质、元素、定位与描述调用图像模型生成头像，并把压缩后的图片交给统一持久化入口。
+ * 2) 做什么：把伙伴头像 prompt 与图片压缩集中在单模块，具体存本地还是上传 CDN 由共享存储模块决定。
  * 3) 不做什么：不写任务状态表、不吞掉业务失败；头像生成失败应由上层触发整单退款。
  *
  * 输入/输出：
  * - 输入：伙伴视觉语义信息。
- * - 输出：本地可访问头像路径 `/uploads/partners/*.webp`。
+ * - 输出：最终头像地址；COS/CDN 启用时为远端 URL，否则为 `/uploads/partners/*.webp`。
  *
  * 数据流/状态流：
- * partner recruit draft -> buildPartnerRecruitAvatarPrompt -> imageModelClient -> 压缩落盘 -> partnerRecruitService 回写 job/def。
+ * partner recruit draft -> buildPartnerRecruitAvatarPrompt -> imageModelClient -> 压缩 -> generatedImageStorage -> partnerRecruitService 回写 job/def。
  *
  * 关键边界条件与坑点：
  * 1) 这里仍复用现有生图环境变量，但业务层不再关心 OpenAI / DashScope 协议差异。
  * 2) 统一图片 client 只返回标准资源 `{ b64, url }`，头像模块必须明确处理“无图片数据”这种失败分支，不能静默吞掉。
  */
-import fs from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import sharp from 'sharp';
 import {
   downloadImageBuffer,
@@ -36,6 +33,7 @@ import {
   debugImageGenerationLog,
   summarizeImageGenerationError,
 } from './imageGenerationDebugShared.js';
+import { persistGeneratedImage } from './generatedImageStorage.js';
 
 export type PartnerRecruitAvatarInput = {
   partnerId: string;
@@ -45,9 +43,6 @@ export type PartnerRecruitAvatarInput = {
   role: string;
   description: string;
 };
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const OUTPUT_MAX_EDGE = 384;
 const OUTPUT_QUALITY = 84;
@@ -63,12 +58,6 @@ const buildPartnerRecruitAvatarPrompt = (input: PartnerRecruitAvatarInput): stri
     ...PARTNER_RECRUIT_AVATAR_STYLE_RULES,
     ...PARTNER_RECRUIT_AVATAR_COMPOSITION_RULES,
   ].join('\n');
-};
-
-const ensureImageDir = async (): Promise<string> => {
-  const dir = path.join(__dirname, '../../../uploads/partners');
-  await fs.mkdir(dir, { recursive: true });
-  return dir;
 };
 
 const getSafePartnerId = (partnerId: string): string => {
@@ -95,14 +84,15 @@ const compressImageBuffer = async (buffer: Buffer): Promise<Buffer> => {
     .toBuffer();
 };
 
-const saveImageBufferToLocal = async (buffer: Buffer, partnerId: string): Promise<string> => {
-  const dir = await ensureImageDir();
-  const safeId = getSafePartnerId(partnerId);
-  const fileName = `${safeId}-${Date.now().toString(36)}.webp`;
-  const outputPath = path.join(dir, fileName);
+const persistPartnerAvatarImage = async (buffer: Buffer, partnerId: string): Promise<string> => {
   const compressed = await compressImageBuffer(buffer);
-  await fs.writeFile(outputPath, compressed);
-  return `/uploads/partners/${fileName}`;
+  return persistGeneratedImage({
+    buffer: compressed,
+    group: 'partners',
+    fileStem: getSafePartnerId(partnerId),
+    contentType: 'image/webp',
+    extension: 'webp',
+  });
 };
 
 export const generatePartnerRecruitAvatar = async (
@@ -135,15 +125,15 @@ export const generatePartnerRecruitAvatar = async (
     }
 
     if (generated.asset.b64) {
-      const localPath = await saveImageBufferToLocal(Buffer.from(generated.asset.b64, 'base64'), input.partnerId);
-      debugImageGenerationLog('partner-avatar-image', 'saved from b64:', localPath);
-      return localPath;
+      const assetUrl = await persistPartnerAvatarImage(Buffer.from(generated.asset.b64, 'base64'), input.partnerId);
+      debugImageGenerationLog('partner-avatar-image', 'persisted from b64:', assetUrl);
+      return assetUrl;
     }
     if (generated.asset.url) {
       const buffer = await downloadImageBuffer(generated.asset.url, generated.timeoutMs);
-      const localPath = await saveImageBufferToLocal(buffer, input.partnerId);
-      debugImageGenerationLog('partner-avatar-image', 'saved from url:', localPath);
-      return localPath;
+      const assetUrl = await persistPartnerAvatarImage(buffer, input.partnerId);
+      debugImageGenerationLog('partner-avatar-image', 'persisted from url:', assetUrl);
+      return assetUrl;
     }
 
     throw new Error('图像模型未返回可用图片数据');

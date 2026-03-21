@@ -24,6 +24,8 @@ export const COS_BUCKET = process.env.COS_BUCKET ?? "";
 export const COS_REGION = process.env.COS_REGION ?? "";
 /** COS 对象键前缀，末尾含 '/' */
 export const COS_AVATAR_PREFIX = process.env.COS_AVATAR_PREFIX || "avatars/";
+/** AI 生成图片对象键前缀，末尾含 '/' */
+export const COS_GENERATED_IMAGE_PREFIX = process.env.COS_GENERATED_IMAGE_PREFIX || "generated/";
 
 /**
  * 自定义域名（不含协议和末尾 /），例如 'oss.example.com'
@@ -41,6 +43,18 @@ export const COS_ENABLED =
 if (!COS_ENABLED) {
   console.warn("⚠ 腾讯云 COS 环境变量未完整配置，头像上传将回退到本地磁盘存储");
 }
+
+const normalizeCosKey = (key: string): string => {
+  return String(key || "").replace(/^\/+/, "");
+};
+
+export const buildCosPublicUrl = (key: string): string => {
+  const normalizedKey = normalizeCosKey(key);
+  if (COS_DOMAIN) {
+    return `https://${COS_DOMAIN}/${normalizedKey}`;
+  }
+  return `https://${COS_BUCKET}.cos.${COS_REGION}.myqcloud.com/${normalizedKey}`;
+};
 
 export const cosClient = new COS({
   SecretId: COS_SECRET_ID,

@@ -27,12 +27,13 @@ interface NpcTalkModalProps {
   loading: boolean;
   busyText: string | null;
   children: ReactNode;
+  closeDisabled?: boolean;
   onClose: () => void;
 }
 
 const SKELETON_ROW_KEYS = ['npc', 'player', 'npc'] as const;
 
-const NpcTalkModal = memo(({ open, npcName, dialogue, loading, busyText, children, onClose }: NpcTalkModalProps) => {
+const NpcTalkModal = memo(({ open, npcName, dialogue, loading, busyText, children, closeDisabled = false, onClose }: NpcTalkModalProps) => {
   const isMobile = useIsMobile();
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const showSkeleton = loading && dialogue.length === 0;
@@ -60,7 +61,9 @@ const NpcTalkModal = memo(({ open, npcName, dialogue, loading, busyText, childre
       width={isMobile ? 'calc(100vw - 24px)' : 720}
       title={npcName ? `与「${npcName}」对话` : '对话'}
       destroyOnHidden
-      maskClosable
+      closable={!closeDisabled}
+      keyboard={!closeDisabled}
+      maskClosable={!closeDisabled}
       className="npc-talk-modal"
     >
       <div className="npc-talk-shell">

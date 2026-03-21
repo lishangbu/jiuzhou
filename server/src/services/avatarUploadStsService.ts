@@ -24,11 +24,11 @@ import STS from "qcloud-cos-sts";
 import {
   COS_AVATAR_PREFIX,
   COS_BUCKET,
-  COS_DOMAIN,
   COS_ENABLED,
   COS_REGION,
   COS_SECRET_ID,
   COS_SECRET_KEY,
+  buildCosPublicUrl,
 } from "../config/cos.js";
 import {
   AVATAR_UPLOAD_MAX_FILE_SIZE_BYTES,
@@ -197,9 +197,7 @@ export const issueAvatarUploadSts = async (
   }
 
   const key = buildAvatarCosKey(COS_AVATAR_PREFIX, contentType);
-  const avatarUrl = COS_DOMAIN
-    ? `https://${COS_DOMAIN}/${key}`
-    : `https://${COS_BUCKET}.cos.${COS_REGION}.myqcloud.com/${key}`;
+  const avatarUrl = buildCosPublicUrl(key);
   const credential = await requestAvatarUploadCredential(key, contentType);
 
   return {
