@@ -2620,6 +2620,39 @@
       ]
     },
     {
+      "id": "box-012",
+      "name": "合道宝石袋",
+      "category": "consumable",
+      "sub_category": "box",
+      "quality": "天",
+      "stack_max": 9999,
+      "bind_type": "none",
+      "tradeable": true,
+      "icon": "/assets/items/Props-baodai-2.png",
+      "description": "打开后可随机获得1个4~5级宝石。",
+      "long_desc": "用于合道阶段构筑强化，产出区间高于还虚宝石袋。",
+      "tags": [
+        "宝箱",
+        "宝石",
+        "合道",
+        "随机"
+      ],
+      "use_type": "instant",
+      "effect_defs": [
+        {
+          "trigger": "use",
+          "target": "self",
+          "effect_type": "loot",
+          "params": {
+            "loot_type": "random_gem",
+            "min_level": 4,
+            "max_level": 5,
+            "gems_per_use": 1
+          }
+        }
+      ]
+    },
+    {
       "id": "book-generated-technique",
       "name": "《无名功法秘卷》",
       "category": "consumable",

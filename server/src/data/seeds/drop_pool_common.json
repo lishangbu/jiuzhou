@@ -1381,7 +1381,7 @@
       "mode": "prob",
       "entries": [
         {
-          "item_def_id": "box-011",
+          "item_def_id": "box-012",
           "chance": 0.04,
           "qty_min": 1,
           "qty_max": 1,
