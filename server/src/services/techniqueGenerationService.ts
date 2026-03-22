@@ -66,6 +66,11 @@ import {
   TECHNIQUE_RESEARCH_EXPIRED_DRAFT_REFUND_RATE,
   TECHNIQUE_RESEARCH_FULL_REFUND_RATE,
 } from './shared/techniqueResearchRefund.js';
+import {
+  resolveTechniqueResearchFragmentCost,
+  TECHNIQUE_RESEARCH_BASE_FRAGMENT_COST,
+  TECHNIQUE_RESEARCH_COOLDOWN_BYPASS_FRAGMENT_COST,
+} from './shared/techniqueResearchCost.js';
 import { persistGeneratedTechniqueCandidateTx } from './shared/generatedTechniquePersistence.js';
 import { getGeneratedTechniqueDefinitionById } from './generatedTechniqueConfigStore.js';
 
@@ -188,6 +193,7 @@ type TechniqueResearchStatusData = {
   unlocked: boolean;
   fragmentBalance: number;
   fragmentCost: number;
+  cooldownBypassFragmentCost: number;
   cooldownHours: number;
   cooldownUntil: string | null;
   cooldownRemainingSeconds: number;
@@ -223,7 +229,6 @@ const DRAFT_EXPIRE_HOURS = 24;
 const GENERATED_TECHNIQUE_BOOK_ITEM_DEF_ID = 'book-generated-technique';
 const DEFAULT_GENERATED_SKILL_ICON = '/assets/skills/icon_skill_44.png';
 const TECHNIQUE_RESEARCH_FRAGMENT_ITEM_DEF_ID = 'mat-gongfa-canye';
-const TECHNIQUE_RESEARCH_FRAGMENT_COST = 5_000;
 const TECHNIQUE_RESEARCH_EXPIRED_DRAFT_MESSAGE = '草稿已过期，系统已自动返还一半功法残页';
 
 const QUALITY_MAX_LAYER: Record<TechniqueQuality, number> = {
@@ -763,7 +768,8 @@ class TechniqueGenerationService {
         unlockRealm: unlockRes.data.unlockRealm,
         unlocked: unlockRes.data.unlocked,
         fragmentBalance,
-        fragmentCost: TECHNIQUE_RESEARCH_FRAGMENT_COST,
+        fragmentCost: TECHNIQUE_RESEARCH_BASE_FRAGMENT_COST,
+        cooldownBypassFragmentCost: TECHNIQUE_RESEARCH_COOLDOWN_BYPASS_FRAGMENT_COST,
         cooldownHours: cooldownState.cooldownHours,
         cooldownUntil: cooldownState.cooldownUntil,
         cooldownRemainingSeconds: cooldownState.cooldownRemainingSeconds,
@@ -864,7 +870,7 @@ class TechniqueGenerationService {
 
     const techniqueType = resolveTechniqueTypeByRandom();
     const quality = resolveQualityByWeight();
-    const costPoints = TECHNIQUE_RESEARCH_FRAGMENT_COST;
+    const costPoints = resolveTechniqueResearchFragmentCost(shouldUseCooldownBypassToken);
     const fragmentBalance = await this.getResearchFragmentBalanceTx(characterId);
     if (fragmentBalance < costPoints) {
       return {
@@ -1515,10 +1521,15 @@ export const safeGetTechniqueGenerationStatus = async (characterId: number): Pro
           unlockRealm: buildTechniqueResearchUnlockState('凡人', null).unlockRealm,
           unlocked: false,
           fragmentBalance: 0,
-          fragmentCost: TECHNIQUE_RESEARCH_FRAGMENT_COST,
+          fragmentCost: TECHNIQUE_RESEARCH_BASE_FRAGMENT_COST,
+          cooldownBypassFragmentCost: TECHNIQUE_RESEARCH_COOLDOWN_BYPASS_FRAGMENT_COST,
           cooldownHours: buildTechniqueResearchCooldownState(null).cooldownHours,
           cooldownUntil: null,
           cooldownRemainingSeconds: 0,
+          cooldownBypassTokenBypassesCooldown: TECHNIQUE_RESEARCH_COOLDOWN_BYPASS_TOKEN_BYPASSES_COOLDOWN,
+          cooldownBypassTokenCost: TECHNIQUE_RESEARCH_COOLDOWN_BYPASS_TOKEN_COST,
+          cooldownBypassTokenItemName: getTechniqueResearchCooldownBypassTokenName(),
+          cooldownBypassTokenAvailableQty: 0,
           currentDraft: null,
           draftExpireAt: null,
           nameRules: getTechniqueNameRulesView(),

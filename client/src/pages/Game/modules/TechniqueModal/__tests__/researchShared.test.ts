@@ -4,6 +4,7 @@ import {
   formatTechniqueResearchCooldownRemaining,
   resolveTechniqueResearchActionState,
   resolveTechniqueResearchCooldownDisplay,
+  resolveTechniqueResearchCurrentFragmentCost,
   resolveTechniqueResearchSubmitState,
 } from '../researchShared';
 
@@ -14,6 +15,7 @@ const buildStatus = (
   unlocked: true,
   fragmentBalance: 6_000,
   fragmentCost: 5_000,
+  cooldownBypassFragmentCost: 2_500,
   cooldownHours: 72,
   cooldownUntil: null,
   cooldownRemainingSeconds: 0,
@@ -75,6 +77,11 @@ describe('researchShared', () => {
     expect(actionState.canGenerate).toBe(true);
   });
 
+  it('resolveTechniqueResearchCurrentFragmentCost: 启用顿悟符时应切换到折后残页消耗', () => {
+    expect(resolveTechniqueResearchCurrentFragmentCost(buildStatus(), true)).toBe(2_500);
+    expect(resolveTechniqueResearchCurrentFragmentCost(buildStatus(), false)).toBe(5_000);
+  });
+
   it('resolveTechniqueResearchActionState: 未解锁时应禁用开始领悟', () => {
     const actionState = resolveTechniqueResearchActionState(buildStatus({
       unlocked: false,
@@ -91,10 +98,20 @@ describe('researchShared', () => {
 
   it('resolveTechniqueResearchActionState: 功法残页不足时应禁用开始领悟', () => {
     const actionState = resolveTechniqueResearchActionState(buildStatus({
-      fragmentBalance: 4_999,
-    }), false);
+      fragmentBalance: 2_499,
+    }), true);
 
     expect(actionState.canGenerate).toBe(false);
+  });
+
+  it('resolveTechniqueResearchActionState: 启用顿悟符后余额达到折后成本时应允许开始领悟', () => {
+    const actionState = resolveTechniqueResearchActionState(buildStatus({
+      fragmentBalance: 2_500,
+      cooldownUntil: '2026-03-11T10:00:00.000Z',
+      cooldownRemainingSeconds: 3_600,
+    }), true);
+
+    expect(actionState.canGenerate).toBe(true);
   });
 
   it('resolveTechniqueResearchActionState: 有草稿待抄写时应继续禁止开始领悟', () => {

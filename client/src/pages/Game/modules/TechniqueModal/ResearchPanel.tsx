@@ -25,6 +25,7 @@ import type {
 } from './researchShared';
 import {
   hasTechniqueResearchCooldownBypassToken,
+  resolveTechniqueResearchCurrentFragmentCost,
   resolveTechniqueResearchCooldownDisplay,
   resolveTechniqueResearchPanelView,
 } from './researchShared';
@@ -66,6 +67,7 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
 }) => {
   const panelView = resolveTechniqueResearchPanelView(status);
   const cooldownDisplay = resolveTechniqueResearchCooldownDisplay(status, cooldownBypassEnabled);
+  const currentFragmentCost = resolveTechniqueResearchCurrentFragmentCost(status, cooldownBypassEnabled);
   const hasCooldownBypassCapability = Boolean(status?.unlocked)
     && Boolean(status?.cooldownBypassTokenBypassesCooldown)
     && (status?.cooldownHours ?? 0) > 0;
@@ -76,7 +78,7 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
         <div className="tech-subtitle">洞府研修</div>
         <div className="tech-research-stats">
           <div className="tech-research-stat"><span>功法残页</span><strong>{status?.fragmentBalance ?? '--'}</strong></div>
-          <div className="tech-research-stat"><span>单次消耗</span><strong>{status ? `${status.fragmentCost}页` : '--'}</strong></div>
+          <div className="tech-research-stat"><span>单次消耗</span><strong>{status ? `${currentFragmentCost}页` : '--'}</strong></div>
           <div className="tech-research-stat">
             <div className="tech-research-stat-head">
               <span>当前状态</span>
@@ -116,7 +118,7 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
 
         <div className="tech-research-tips">
           <div>1. 洞府研修需境界达到 {status?.unlockRealm ?? '--'} 后开启，未达门槛时无法开始领悟。</div>
-          <div>2. 每次开始领悟固定消耗 {status?.fragmentCost ?? '--'} 页功法残页，残页会从背包与仓库中统一扣除。</div>
+          <div>2. 每次开始领悟固定消耗 {status ? currentFragmentCost : '--'} 页功法残页，残页会从背包与仓库中统一扣除。</div>
           <div>3. {cooldownDisplay.ruleText}</div>
           <div>4. 草稿过期未抄写时，只返还本次消耗的一半功法残页。</div>
           <div>5. 结果进入研修页后即视为已查看，抄写前仍可在此处查看草稿详情。</div>

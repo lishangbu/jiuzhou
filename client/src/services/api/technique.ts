@@ -271,6 +271,7 @@ export interface TechniqueResearchStatusResponse {
     unlocked: boolean;
     fragmentBalance: number;
     fragmentCost: number;
+    cooldownBypassFragmentCost: number;
     cooldownHours: number;
     cooldownUntil: string | null;
     cooldownRemainingSeconds: number;

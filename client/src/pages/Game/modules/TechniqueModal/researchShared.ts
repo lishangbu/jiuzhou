@@ -15,7 +15,7 @@
  *
  * 关键边界条件与坑点：
  * 1. `pending` 只表示生成中，不能亮红点；否则玩家会把“处理中”误解为“已完成待查看”。
- * 2. 功法残页余额判断与冷却按钮禁用必须共用同一组纯函数，避免组件内各自计算导致显示与交互不一致。
+ * 2. 当前残页消耗、余额判断与按钮禁用必须共用同一组纯函数，避免组件内各自计算导致显示与交互不一致。
  */
 import type {
   TechniqueResearchJobDto,
@@ -128,18 +128,29 @@ export const isTechniqueResearchCooldownBlocked = (
     && !shouldTechniqueResearchBypassCooldown(status, cooldownBypassEnabled);
 };
 
+export const resolveTechniqueResearchCurrentFragmentCost = (
+  status: TechniqueResearchStatusData | null,
+  cooldownBypassEnabled: boolean,
+): number => {
+  if (!status) return 0;
+  return cooldownBypassEnabled
+    ? status.cooldownBypassFragmentCost
+    : status.fragmentCost;
+};
+
 export const resolveTechniqueResearchActionState = (
   status: TechniqueResearchStatusData | null,
   cooldownBypassEnabled: boolean,
 ): TechniqueResearchActionState => {
   const panelView = resolveTechniqueResearchPanelView(status);
+  const currentFragmentCost = resolveTechniqueResearchCurrentFragmentCost(status, cooldownBypassEnabled);
   const canGenerate =
     status !== null &&
     status.unlocked &&
     panelView.kind !== 'pending' &&
     panelView.kind !== 'draft' &&
     !isTechniqueResearchCooldownBlocked(status, cooldownBypassEnabled) &&
-    status.fragmentBalance >= status.fragmentCost;
+    status.fragmentBalance >= currentFragmentCost;
 
   return {
     canGenerate,
