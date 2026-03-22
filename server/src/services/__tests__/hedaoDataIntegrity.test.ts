@@ -56,6 +56,14 @@ const HEDAO_MONSTER_IDS = [
   'monster-elite-hedao-jingyu-sipan',
   HEDAO_BOSS_ID,
 ] as const;
+const HEDAO_NORMAL_MONSTER_IDS = [
+  'monster-hedao-jingjia-guard',
+  'monster-hedao-zheguang-lingguan',
+] as const;
+const HEDAO_ELITE_MONSTER_IDS = [
+  'monster-elite-hedao-beishi-xunling',
+  'monster-elite-hedao-jingyu-sipan',
+] as const;
 
 test('合道一期主线、地图与秘境应统一处于开放态', async () => {
   const mainQuestSeed = loadSeed('main_quest_chapter7.json');
@@ -284,6 +292,40 @@ test('合道一期怪物掉落池与套装引用应完整闭环', () => {
     true,
     '噩梦首通奖励缺少物理套装法宝',
   );
+});
+
+test('合道期普通怪、精英怪与 Boss 应携带防暴向基础属性', () => {
+  const monsterSeed = loadSeed('monster_def.json');
+  const monsterById = buildObjectMap(asArray(monsterSeed.monsters), 'id');
+
+  for (const monsterId of HEDAO_NORMAL_MONSTER_IDS) {
+    const monster = monsterById.get(monsterId);
+    const baseAttrs = asObject(monster?.base_attrs);
+    assert.ok(monster, `缺少合道普通怪定义: ${monsterId}`);
+    assert.equal(asText(monster?.realm), '炼神返虚·合道期', `${monsterId} 应属于合道期`);
+    assert.equal(asText(monster?.kind), 'normal', `${monsterId} 应属于普通怪`);
+    assert.equal(Number(baseAttrs?.zhaojia), 0.15, `${monsterId} 应提供 15% 招架`);
+    assert.equal(Number(baseAttrs?.kangbao), 0.15, `${monsterId} 应提供 15% 抗暴`);
+  }
+
+  for (const monsterId of HEDAO_ELITE_MONSTER_IDS) {
+    const monster = monsterById.get(monsterId);
+    const baseAttrs = asObject(monster?.base_attrs);
+    assert.ok(monster, `缺少合道精英怪定义: ${monsterId}`);
+    assert.equal(asText(monster?.realm), '炼神返虚·合道期', `${monsterId} 应属于合道期`);
+    assert.equal(asText(monster?.kind), 'elite', `${monsterId} 应属于精英怪`);
+    assert.equal(Number(baseAttrs?.zhaojia), 0.15, `${monsterId} 应提供 15% 招架`);
+    assert.equal(Number(baseAttrs?.kangbao), 0.15, `${monsterId} 应提供 15% 抗暴`);
+    assert.equal(Number(baseAttrs?.jianbaoshang), 0.2, `${monsterId} 应提供 20% 暴击伤害减免`);
+  }
+
+  const boss = monsterById.get(HEDAO_BOSS_ID);
+  const bossBaseAttrs = asObject(boss?.base_attrs);
+  assert.ok(boss, `缺少合道 Boss 定义: ${HEDAO_BOSS_ID}`);
+  assert.equal(asText(boss?.realm), '炼神返虚·合道期', `${HEDAO_BOSS_ID} 应属于合道期`);
+  assert.equal(asText(boss?.kind), 'boss', `${HEDAO_BOSS_ID} 应属于 Boss`);
+  assert.equal(Number(bossBaseAttrs?.kangbao), 0.15, `${HEDAO_BOSS_ID} 应提供 15% 抗暴`);
+  assert.equal(Number(bossBaseAttrs?.jianbaoshang), 0.2, `${HEDAO_BOSS_ID} 应提供 20% 暴击伤害减免`);
 });
 
 test('合道一期 Boss 应可被运行时解析并携带反伤技能', () => {
