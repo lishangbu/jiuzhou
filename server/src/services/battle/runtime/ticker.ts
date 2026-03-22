@@ -188,6 +188,47 @@ export async function emitBattleProgressUpdate(
   stopBattleTicker(battleId);
 }
 
+/**
+ * 以“终态可重试”的口径派发一次战斗推进结果。
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1. 做什么：统一兜住 `emitBattleProgressUpdate` 在 finished 状态下的异步结算异常，避免一次临时失败就把 ticker 整体停掉。
+ * 2. 做什么：把“继续抛错”与“记录日志并等待下个 tick 重试”收敛到单一入口，避免 ticker / 玩家行动各写一套终态异常分支。
+ * 3. 不做什么：不吞掉进行中状态的异常；若 battle_state 推送前出现真正的逻辑错误，仍交给上层按原语义处理。
+ *
+ * 输入/输出：
+ * - 输入：battleId、BattleEngine。
+ * - 输出：`true` 表示本次推进已正常派发；`false` 表示 finished 结算暂时失败，已保留现场等待后续重试。
+ *
+ * 数据流/状态流：
+ * tick / playerAction -> 本函数 -> emitBattleProgressUpdate
+ * -> 成功：正常推送/结算
+ * -> 终态失败：仅记录日志，保留 active battle 与 ticker，等待下次重试。
+ *
+ * 关键边界条件与坑点：
+ * 1. 只允许 finished 状态走“失败后重试”；进行中状态吞错会掩盖真正的战斗逻辑 bug。
+ * 2. 这里必须复用 BattleEngine 的实时状态判断，而不能信调用前缓存的旧 phase，否则会把已结束战斗误当成进行中错误处理。
+ */
+export async function emitBattleProgressUpdateSafely(
+  battleId: string,
+  engine: BattleEngine,
+): Promise<boolean> {
+  try {
+    await emitBattleProgressUpdate(battleId, engine);
+    return true;
+  } catch (error) {
+    if (engine.getState().phase !== "finished") {
+      throw error;
+    }
+
+    console.error(
+      `[battle] 终态结算失败，保留 ticker 等待后续重试: ${battleId}`,
+      error,
+    );
+    return false;
+  }
+}
+
 // ------ 自动操作 ------
 
 const resolveAutoSkipTargetIds = (
@@ -360,7 +401,7 @@ async function tickBattle(battleId: string): Promise<void> {
 
     const state = engine.getState();
     if (state.phase === "finished") {
-      await emitBattleProgressUpdate(battleId, engine);
+      await emitBattleProgressUpdateSafely(battleId, engine);
       return;
     }
 
@@ -373,7 +414,7 @@ async function tickBattle(battleId: string): Promise<void> {
       clearPlayerTurnTimeoutState(battleId);
       clearWaitingPlayerTurnState(battleId);
       if (engine.getState().phase === "finished") {
-        await emitBattleProgressUpdate(battleId, engine);
+        await emitBattleProgressUpdateSafely(battleId, engine);
       }
       return;
     }
@@ -381,12 +422,12 @@ async function tickBattle(battleId: string): Promise<void> {
     if (currentUnit.type === "player") {
       if (state.currentTeam !== "attacker") {
         engine.aiAction(true);
-        await emitBattleProgressUpdate(battleId, engine);
+        await emitBattleProgressUpdateSafely(battleId, engine);
         return;
       }
       if (isStunned(currentUnit) || isFeared(currentUnit)) {
         engine.aiAction(true);
-        await emitBattleProgressUpdate(battleId, engine);
+        await emitBattleProgressUpdateSafely(battleId, engine);
         return;
       }
       if (
@@ -397,18 +438,18 @@ async function tickBattle(battleId: string): Promise<void> {
         )
       ) {
         engine.aiAction(true);
-        await emitBattleProgressUpdate(battleId, engine);
+        await emitBattleProgressUpdateSafely(battleId, engine);
         return;
       }
       if (!canPlayerUseAnySkillThisTurn(state, currentUnit)) {
         engine.aiAction(true);
-        await emitBattleProgressUpdate(battleId, engine);
+        await emitBattleProgressUpdateSafely(battleId, engine);
         return;
       }
       if (shouldTakeoverPlayerTurnByTimeout(battleId, state, currentUnit)) {
         clearWaitingPlayerTurnState(battleId);
         engine.aiAction(true);
-        await emitBattleProgressUpdate(battleId, engine);
+        await emitBattleProgressUpdateSafely(battleId, engine);
         return;
       }
       if (!shouldEmitWaitingPlayerTurnState(battleId, state, currentUnit)) {
@@ -425,7 +466,7 @@ async function tickBattle(battleId: string): Promise<void> {
     clearPlayerTurnTimeoutState(battleId);
     clearWaitingPlayerTurnState(battleId);
     engine.aiAction();
-    await emitBattleProgressUpdate(battleId, engine);
+    await emitBattleProgressUpdateSafely(battleId, engine);
   } catch (error) {
     console.error(
       `[battle] tickBattle 发生未处理异常，已停止 ticker: ${battleId}`,

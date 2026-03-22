@@ -32,7 +32,10 @@ import {
   removeBattleParticipantIndex,
   setBattleStartCooldownByCharacterIds,
 } from "./runtime/state.js";
-import { emitBattleProgressUpdate, stopBattleTicker } from "./runtime/ticker.js";
+import {
+  emitBattleProgressUpdateSafely,
+  stopBattleTicker,
+} from "./runtime/ticker.js";
 import { removeBattleFromRedis } from "./runtime/persistence.js";
 import { buildBattleAbandonedRealtimePayload } from "./runtime/realtime.js";
 import { settleArenaBattleIfNeeded } from "./pvp.js";
@@ -78,7 +81,7 @@ export async function playerAction(
     if (!result.success) {
       return { success: false, message: result.error || "行动失败" };
     }
-    await emitBattleProgressUpdate(battleId, engine);
+    await emitBattleProgressUpdateSafely(battleId, engine);
 
     return {
       success: true,
