@@ -2524,7 +2524,7 @@
       "stack_max": 9999,
       "bind_type": "none",
       "tradeable": true,
-      "icon": "/assets/items/yangshen_dan.png",
+      "icon": "/assets/items/huanxu-dan.webp",
       "description": "用于养神期冲击还虚期的核心丹药，可显著降低虚蚀反噬风险。",
       "long_desc": "丹方以聚神、引虚、归元为主，需以虚蚀精核稳定药性，属于还虚突破硬门槛材料。",
       "tags": [
