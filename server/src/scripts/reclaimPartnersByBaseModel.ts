@@ -5,25 +5,42 @@
  *
  * 作用（做什么 / 不做什么）：
  * 1) 做什么：按 `partner_recruit_job.requested_base_model` 定位已确认收下的伙伴，输出 dry run 预览，并在显式 `--execute` 时执行回收与补偿。
- * 2) 做什么：统一汇总伙伴灌注消耗经验、当前保留的已学功法书、当前保留功法的升层消耗，避免人工逐个查库。
+ * 2) 做什么：统一汇总伙伴灌注消耗经验、当前保留的已学功法书、当前保留功法的升层消耗，以及当前完整计算后属性，避免人工逐个查库。
  * 3) 不做什么：不处理坊市挂单中或三魂归契占用中的伙伴，不绕过现有占用约束，也不追溯已被覆盖掉的历史打书记录。
  *
  * 输入/输出：
- * - 输入：脚本内 `TARGET_BASE_MODELS` 常量数组；默认 dry run，可用 `--execute` 真正执行。
- * - 输出：控制台摘要，以及可选 `--report-file` JSON 报告；执行模式会为每个成功回收的伙伴补偿 1 个高级招募令（`token-004`）。
+ * - 输入：脚本内 `TARGET_BASE_MODELS` 常量数组，以及固定生成时间截止线 `PARTNER_RECLAIM_GENERATION_CUTOFF_AT`；默认 dry run，可用 `--execute` 真正执行。
+ * - 输出：控制台摘要，以及可选 `--report-file` JSON 报告；摘要与报告都会包含伙伴完整计算属性。执行模式会把高级招募令、灌注经验、功法升级消耗与功法书统一通过系统邮件返还后再删除伙伴。
  *
  * 数据流/状态流：
- * CLI 参数 -> 招募任务/伙伴实例查询 -> 伙伴功法/成长消耗汇总 -> dry run 报告 或 execute 事务（补偿令牌 + 删除伙伴） -> 刷新角色相关缓存。
+ * CLI 参数 -> 招募任务/伙伴实例查询 -> 伙伴功法/成长消耗汇总 -> dry run 报告 或 execute 事务（发送返还邮件 + 删除伙伴） -> 刷新角色相关缓存。
  *
  * 关键边界条件与坑点：
  * 1) 只有当前仍存在于 `character_partner`，且来源为 `partner_recruit` 的伙伴才会被处理；仅有预览、已放弃、已退款的招募任务不会命中。
- * 2) `character_partner_technique.learned_from_item_def_id` 只保留当前仍挂在伙伴身上的后天功法书来源；历史上已被覆盖的打书记录无法从现有表结构中精确追溯。
+ * 2) 生成时间筛选按 `partner_recruit_job.created_at < PARTNER_RECLAIM_GENERATION_CUTOFF_AT` 执行，业务口径是“中国时区 2026-03-23 18:00:00 前”；等于 18:00:00 的记录不会命中。
+ * 3) `character_partner_technique.learned_from_item_def_id` 只保留当前仍挂在伙伴身上的后天功法书来源；历史上已被覆盖的打书记录无法从现有表结构中精确追溯。
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pool, query, withTransaction } from '../config/database.js';
 import { invalidateCharacterComputedCache } from '../services/characterComputedService.js';
-import { addItemToInventory } from '../services/inventory/bag.js';
+import { mailService } from '../services/mailService.js';
+import {
+    PARTNER_RECLAIM_GENERATION_CUTOFF_AT,
+    PARTNER_RECLAIM_GENERATION_CUTOFF_LABEL,
+} from './shared/partnerReclaimGenerationCutoff.js';
+import {
+    buildPartnerReclaimMailContent,
+    buildPartnerReclaimMailRewardPayload,
+    buildPartnerReclaimMailTitle,
+} from './shared/partnerReclaimMailReward.js';
+import {
+    buildPartnerReclaimTargetSelector,
+    buildPartnerReclaimTargetSummary,
+    parsePartnerIdsArg,
+    type PartnerReclaimTargetSelector,
+} from './shared/partnerReclaimTargetSelector.js';
+import { formatPartnerReclaimComputedAttrs } from './shared/partnerReclaimComputedAttrs.js';
 import {
     getItemDefinitionById,
     getPartnerDefinitionById,
@@ -33,7 +50,12 @@ import {
 } from '../services/staticConfigLoader.js';
 import { scheduleActivePartnerBattleCacheRefreshByCharacterId } from '../services/battle/shared/profileCache.js';
 import { calcPartnerUpgradeExpByTargetLevel } from '../services/shared/partnerRules.js';
-import { getPartnerTechniqueStaticMeta } from '../services/shared/partnerView.js';
+import {
+    buildPartnerDisplay,
+    getPartnerTechniqueStaticMeta,
+    type PartnerComputedAttrsDto,
+    type PartnerRow,
+} from '../services/shared/partnerView.js';
 import {
     getTechniqueLayerByTechniqueAndLayerStatic,
     resolveTechniqueCostMultiplierByQuality,
@@ -41,10 +63,10 @@ import {
 } from '../services/shared/techniqueUpgradeRules.js';
 
 type ScriptMode = 'dry-run' | 'execute';
-type CompensationLocation = 'bag' | 'warehouse';
 
 type CliOptions = {
     mode: ScriptMode;
+    partnerIds: number[];
     reportFilePath: string | null;
 };
 
@@ -83,10 +105,20 @@ type TargetPartnerRow = {
     partner_id: number;
     partner_def_id: string;
     partner_nickname: string;
+    partner_avatar: string | null;
     partner_level: number;
     partner_progress_exp: number;
+    partner_growth_max_qixue: number;
+    partner_growth_wugong: number;
+    partner_growth_fagong: number;
+    partner_growth_wufang: number;
+    partner_growth_fafang: number;
+    partner_growth_sudu: number;
     partner_is_active: boolean;
+    partner_obtained_from: string;
+    partner_obtained_ref_id: string | null;
     partner_created_at: Date;
+    partner_updated_at: Date;
     owner_user_id: number;
     owner_character_id: number;
     owner_nickname: string;
@@ -105,6 +137,8 @@ type PartnerTechniqueRow = {
     current_layer: number;
     is_innate: boolean;
     learned_from_item_def_id: string | null;
+    created_at: Date;
+    updated_at: Date;
 };
 
 type TechniqueMaterialRefund = {
@@ -164,6 +198,7 @@ type PartnerTargetSummary = {
     ownerNickname: string;
     blockedReasons: string[];
     reclaimable: boolean;
+    computedAttrs: PartnerComputedAttrsDto;
     trainingRefund: TrainingRefundSummary;
 };
 
@@ -176,22 +211,25 @@ type PartnerExecutionResult = {
     compensationItemDefId: string;
     compensationItemName: string;
     compensationQty: number;
-    compensationLocation: CompensationLocation | null;
-    compensationItemIds: number[];
+    rewardDelivery: 'mail' | null;
+    rewardMailId: number | null;
     message: string;
 };
 
 type ReclaimReport = {
     mode: ScriptMode;
+    targetSelector: PartnerReclaimTargetSelector;
     backupFilePath: string | null;
     compensationItemDefId: string;
     compensationItemName: string;
     compensationQtyPerPartner: number;
     baseModels: string[];
+    partnerIds: number[];
     matchedPartnerCount: number;
     reclaimablePartnerCount: number;
     blockedPartnerCount: number;
     unmatchedBaseModels: string[];
+    unmatchedPartnerIds: number[];
     partners: PartnerTargetSummary[];
     executionResults: PartnerExecutionResult[];
     generatedAt: string;
@@ -201,7 +239,8 @@ const COMPENSATION_ITEM_DEF_ID = 'token-004';
 const COMPENSATION_ITEM_QTY = 1;
 const ACTIVE_FUSION_JOB_STATUSES = ['pending', 'generated_preview'];
 const SCRIPT_OBTAINED_FROM = 'partner_reclaim_script';
-const BACKPACK_FULL_MESSAGE = '背包已满';
+const PARTNER_RECLAIM_MAIL_EXPIRE_DAYS = 30;
+const RECHECK_EXECUTABLE_PARTNER_LOCK_SQL = 'FOR UPDATE OF cp';
 const DEFAULT_BACKUP_DIR = path.resolve(process.cwd(), '.tmp', 'partner-reclaim-backups');
 const TARGET_BASE_MODELS = [
     '法术群体六连击三千法攻',
@@ -250,11 +289,13 @@ const HELP_TEXT = [
     '  pnpm --filter ./server partner:reclaim',
     '  pnpm --filter ./server partner:reclaim -- --report-file=/tmp/reclaim-report.json',
     '  pnpm --filter ./server partner:reclaim -- --execute',
+    '  pnpm --filter ./server partner:reclaim -- --partner-ids=101,102,103',
     '',
     '说明：',
     '  - 底模词列表直接写在脚本内的 TARGET_BASE_MODELS 数组中，需变更时请手动修改脚本。',
+    '  - 传入 --partner-ids=1,2,3 后，脚本只按这些伙伴ID查询，并忽略 TARGET_BASE_MODELS。',
     '  - 默认 dry run，只输出预览和返还明细，不写数据库。',
-    '  - 传入 --execute 后才会真正补偿高级招募令并删除目标伙伴。',
+    '  - 传入 --execute 后才会真正发送返还邮件并删除目标伙伴。',
     '  - 执行模式会在删除前把相关表行写入 .tmp/partner-reclaim-backups 下的备份文件。',
     '  - TARGET_BASE_MODELS 中即使有重复项，脚本也会自动去重。',
 ].join('\n');
@@ -276,6 +317,7 @@ const resolveCompensationItemName = (): string => {
 
 const parseCliOptions = (argv: string[]): CliOptions => {
     let mode: ScriptMode = 'dry-run';
+    let partnerIds: number[] = [];
     let reportFilePath: string | null = null;
 
     for (const arg of argv) {
@@ -299,12 +341,18 @@ const parseCliOptions = (argv: string[]): CliOptions => {
             reportFilePath = value;
             continue;
         }
+        if (arg.startsWith('--partner-ids=')) {
+            const value = normalizeText(arg.slice('--partner-ids='.length));
+            partnerIds = parsePartnerIdsArg(value);
+            continue;
+        }
 
         throw new Error(`不支持的参数：${arg}\n\n${HELP_TEXT}`);
     }
 
     return {
         mode,
+        partnerIds,
         reportFilePath,
     };
 };
@@ -443,10 +491,20 @@ const loadTargetPartners = async (baseModels: string[]): Promise<TargetPartnerRo
         cp.id AS partner_id,
         cp.partner_def_id,
         cp.nickname AS partner_nickname,
+        cp.avatar AS partner_avatar,
         cp.level AS partner_level,
         cp.progress_exp AS partner_progress_exp,
+        cp.growth_max_qixue AS partner_growth_max_qixue,
+        cp.growth_wugong AS partner_growth_wugong,
+        cp.growth_fagong AS partner_growth_fagong,
+        cp.growth_wufang AS partner_growth_wufang,
+        cp.growth_fafang AS partner_growth_fafang,
+        cp.growth_sudu AS partner_growth_sudu,
         cp.is_active AS partner_is_active,
+        cp.obtained_from AS partner_obtained_from,
+        cp.obtained_ref_id AS partner_obtained_ref_id,
         cp.created_at AS partner_created_at,
+        cp.updated_at AS partner_updated_at,
         c.user_id AS owner_user_id,
         c.id AS owner_character_id,
         c.nickname AS owner_nickname,
@@ -481,11 +539,86 @@ const loadTargetPartners = async (baseModels: string[]): Promise<TargetPartnerRo
         LIMIT 1
       ) pfj ON TRUE
       WHERE btrim(prj.requested_base_model) = ANY($1::text[])
+        AND prj.created_at < $3
       ORDER BY btrim(prj.requested_base_model) ASC, cp.created_at DESC, cp.id DESC
     `,
-        [baseModels, ACTIVE_FUSION_JOB_STATUSES],
+        [baseModels, ACTIVE_FUSION_JOB_STATUSES, PARTNER_RECLAIM_GENERATION_CUTOFF_AT],
     );
     return result.rows;
+};
+
+const loadTargetPartnersByIds = async (partnerIds: number[]): Promise<TargetPartnerRow[]> => {
+    const normalizedPartnerIds = [...new Set(partnerIds.filter((partnerId) => partnerId > 0))];
+    if (normalizedPartnerIds.length <= 0) return [];
+
+    const result = await query<TargetPartnerRow>(
+        `
+      SELECT
+        cp.id AS partner_id,
+        cp.partner_def_id,
+        cp.nickname AS partner_nickname,
+        cp.avatar AS partner_avatar,
+        cp.level AS partner_level,
+        cp.progress_exp AS partner_progress_exp,
+        cp.growth_max_qixue AS partner_growth_max_qixue,
+        cp.growth_wugong AS partner_growth_wugong,
+        cp.growth_fagong AS partner_growth_fagong,
+        cp.growth_wufang AS partner_growth_wufang,
+        cp.growth_fafang AS partner_growth_fafang,
+        cp.growth_sudu AS partner_growth_sudu,
+        cp.is_active AS partner_is_active,
+        cp.obtained_from AS partner_obtained_from,
+        cp.obtained_ref_id AS partner_obtained_ref_id,
+        cp.created_at AS partner_created_at,
+        cp.updated_at AS partner_updated_at,
+        c.user_id AS owner_user_id,
+        c.id AS owner_character_id,
+        c.nickname AS owner_nickname,
+        prj.id AS recruit_job_id,
+        prj.requested_base_model,
+        prj.created_at AS recruit_created_at,
+        mpl.id AS active_market_listing_id,
+        pfj.fusion_job_id AS active_fusion_job_id,
+        pfj.status AS active_fusion_status
+      FROM character_partner cp
+      JOIN partner_recruit_job prj
+        ON cp.obtained_from = 'partner_recruit'
+       AND cp.obtained_ref_id = prj.id
+      JOIN characters c
+        ON c.id = cp.character_id
+      LEFT JOIN LATERAL (
+        SELECT id
+        FROM market_partner_listing
+        WHERE partner_id = cp.id
+          AND status = 'active'
+        ORDER BY id DESC
+        LIMIT 1
+      ) mpl ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT j.id AS fusion_job_id, j.status
+        FROM partner_fusion_job_material m
+        JOIN partner_fusion_job j
+          ON j.id = m.fusion_job_id
+        WHERE m.partner_id = cp.id
+          AND j.status = ANY($2::text[])
+        ORDER BY j.created_at DESC
+        LIMIT 1
+      ) pfj ON TRUE
+      WHERE cp.id = ANY($1::int[])
+      ORDER BY array_position($1::int[], cp.id), cp.created_at DESC, cp.id DESC
+    `,
+        [normalizedPartnerIds, ACTIVE_FUSION_JOB_STATUSES],
+    );
+    return result.rows;
+};
+
+const loadTargetPartnersBySelector = async (
+    selector: PartnerReclaimTargetSelector,
+): Promise<TargetPartnerRow[]> => {
+    if (selector.mode === 'partner-ids') {
+        return loadTargetPartnersByIds(selector.partnerIds);
+    }
+    return loadTargetPartners(selector.baseModels);
 };
 
 const loadPartnerTechniques = async (partnerIds: number[]): Promise<Map<number, PartnerTechniqueRow[]>> => {
@@ -501,7 +634,9 @@ const loadPartnerTechniques = async (partnerIds: number[]): Promise<Map<number, 
         technique_id,
         current_layer,
         is_innate,
-        learned_from_item_def_id
+        learned_from_item_def_id,
+        created_at,
+        updated_at
       FROM character_partner_technique
       WHERE partner_id = ANY($1::int[])
       ORDER BY created_at ASC, id ASC
@@ -654,6 +789,42 @@ const buildPartnerName = (row: TargetPartnerRow): string => {
     return normalizeText(definition?.name) || row.partner_def_id;
 };
 
+const toPartnerDisplayRow = (row: TargetPartnerRow): PartnerRow => {
+    return {
+        id: row.partner_id,
+        character_id: row.owner_character_id,
+        partner_def_id: row.partner_def_id,
+        nickname: row.partner_nickname,
+        avatar: row.partner_avatar,
+        level: row.partner_level,
+        progress_exp: row.partner_progress_exp,
+        growth_max_qixue: row.partner_growth_max_qixue,
+        growth_wugong: row.partner_growth_wugong,
+        growth_fagong: row.partner_growth_fagong,
+        growth_wufang: row.partner_growth_wufang,
+        growth_fafang: row.partner_growth_fafang,
+        growth_sudu: row.partner_growth_sudu,
+        is_active: row.partner_is_active,
+        obtained_from: row.partner_obtained_from,
+        obtained_ref_id: row.partner_obtained_ref_id,
+        created_at: row.partner_created_at,
+        updated_at: row.partner_updated_at,
+    };
+};
+
+const buildPartnerComputedAttrs = (row: TargetPartnerRow, techniqueRows: PartnerTechniqueRow[]): PartnerComputedAttrsDto => {
+    const definition = getPartnerDefinitionById(row.partner_def_id);
+    if (!definition) {
+        throw new Error(`伙伴模板不存在: ${row.partner_def_id}`);
+    }
+
+    return buildPartnerDisplay({
+        row: toPartnerDisplayRow(row),
+        definition,
+        techniqueRows,
+    }).computedAttrs;
+};
+
 const buildPartnerSummaries = (
     partnerRows: TargetPartnerRow[],
     techniqueMap: Map<number, PartnerTechniqueRow[]>,
@@ -661,6 +832,7 @@ const buildPartnerSummaries = (
     return partnerRows.map((row) => {
         const blockedReasons = buildBlockedReasons(row);
         const techniqueRows = techniqueMap.get(row.partner_id) ?? [];
+        const computedAttrs = buildPartnerComputedAttrs(row, techniqueRows);
         return {
             partnerId: row.partner_id,
             partnerDefId: row.partner_def_id,
@@ -678,6 +850,7 @@ const buildPartnerSummaries = (
             ownerNickname: normalizeText(row.owner_nickname) || String(row.owner_character_id),
             blockedReasons,
             reclaimable: blockedReasons.length === 0,
+            computedAttrs,
             trainingRefund: buildTrainingRefundSummary(row, techniqueRows),
         };
     });
@@ -694,13 +867,22 @@ const printReportSummary = (report: ReclaimReport): void => {
     if (report.backupFilePath) {
         console.log(`备份文件：${report.backupFilePath}`);
     }
-    console.log(`目标底模数：${report.baseModels.length}`);
+    const targetSummary = buildPartnerReclaimTargetSummary({
+        selector: report.targetSelector,
+        unmatchedBaseModels: report.unmatchedBaseModels,
+        unmatchedPartnerIds: report.unmatchedPartnerIds,
+    });
+    console.log(targetSummary.targetCountLine);
+    if (report.targetSelector.mode === 'base-models') {
+        console.log(`生成时间截止：${PARTNER_RECLAIM_GENERATION_CUTOFF_LABEL}`);
+    }
     console.log(`命中伙伴数：${report.matchedPartnerCount}`);
     console.log(`可回收伙伴数：${report.reclaimablePartnerCount}`);
     console.log(`阻塞伙伴数：${report.blockedPartnerCount}`);
-    console.log(`补偿：${report.compensationItemName} x ${report.compensationQtyPerPartner}`);
-    if (report.unmatchedBaseModels.length > 0) {
-        console.log(`未命中底模（${report.unmatchedBaseModels.length}）：${report.unmatchedBaseModels.join('、')}`);
+    console.log('返还方式：系统邮件');
+    console.log(`补偿：${report.compensationItemName} x ${report.compensationQtyPerPartner}（与训练返还明细一并发邮件）`);
+    if (targetSummary.unmatchedLine) {
+        console.log(targetSummary.unmatchedLine);
     }
 
     for (const partner of report.partners) {
@@ -719,6 +901,9 @@ const printReportSummary = (report: ReclaimReport): void => {
                 `  当前保留功法升级返还：灵石 ${partner.trainingRefund.techniqueUpgradeRefund.spiritStones}，经验 ${partner.trainingRefund.techniqueUpgradeRefund.exp}`,
             ].join('\n'),
         );
+        for (const attrsLine of formatPartnerReclaimComputedAttrs(partner.computedAttrs)) {
+            console.log(`  伙伴属性：${attrsLine}`);
+        }
         if (partner.trainingRefund.techniqueUpgradeRefund.materials.length > 0) {
             console.log(
                 `  当前保留功法升级材料：${partner.trainingRefund.techniqueUpgradeRefund.materials
@@ -734,85 +919,86 @@ const printReportSummary = (report: ReclaimReport): void => {
 
 const buildReport = async (params: {
     mode: ScriptMode;
-    baseModels: string[];
+    targetSelector: PartnerReclaimTargetSelector;
     backupFilePath: string | null;
 }): Promise<ReclaimReport> => {
     await refreshGeneratedTechniqueSnapshots();
     await refreshGeneratedPartnerSnapshots();
 
-    const partnerRows = await loadTargetPartners(params.baseModels);
+    const partnerRows = await loadTargetPartnersBySelector(params.targetSelector);
     const techniqueMap = await loadPartnerTechniques(partnerRows.map((row) => row.partner_id));
     const partners = buildPartnerSummaries(partnerRows, techniqueMap);
     const matchedBaseModelSet = new Set(partners.map((partner) => partner.baseModel));
+    const matchedPartnerIdSet = new Set(partners.map((partner) => partner.partnerId));
+    const baseModels = params.targetSelector.mode === 'base-models' ? params.targetSelector.baseModels : [];
+    const partnerIds = params.targetSelector.mode === 'partner-ids' ? params.targetSelector.partnerIds : [];
 
     return {
         mode: params.mode,
+        targetSelector: params.targetSelector,
         backupFilePath: params.backupFilePath,
         compensationItemDefId: COMPENSATION_ITEM_DEF_ID,
         compensationItemName: resolveCompensationItemName(),
         compensationQtyPerPartner: COMPENSATION_ITEM_QTY,
-        baseModels: params.baseModels,
+        baseModels,
+        partnerIds,
         matchedPartnerCount: partners.length,
         reclaimablePartnerCount: partners.filter((partner) => partner.reclaimable).length,
         blockedPartnerCount: partners.filter((partner) => !partner.reclaimable).length,
-        unmatchedBaseModels: params.baseModels.filter((baseModel) => !matchedBaseModelSet.has(baseModel)),
+        unmatchedBaseModels: baseModels.filter((baseModel) => !matchedBaseModelSet.has(baseModel)),
+        unmatchedPartnerIds: partnerIds.filter((partnerId) => !matchedPartnerIdSet.has(partnerId)),
         partners,
         executionResults: [],
         generatedAt: new Date().toISOString(),
     };
 };
 
-const grantCompensationToken = async (params: {
-    characterId: number;
-    userId: number;
+const sendPartnerReclaimRewardMail = async (params: {
+    partner: PartnerTargetSummary;
+    ownerUserId: number;
+    ownerCharacterId: number;
+    generationId: string;
 }): Promise<{
     success: boolean;
     message: string;
-    location: CompensationLocation | null;
-    itemIds: number[];
+    mailId: number | null;
 }> => {
-    const bagResult = await addItemToInventory(
-        params.characterId,
-        params.userId,
-        COMPENSATION_ITEM_DEF_ID,
-        COMPENSATION_ITEM_QTY,
-        {
-            location: 'bag',
-            obtainedFrom: SCRIPT_OBTAINED_FROM,
-        },
-    );
-    if (bagResult.success) {
-        return {
-            success: true,
-            message: bagResult.message,
-            location: 'bag',
-            itemIds: bagResult.itemIds ?? [],
-        };
-    }
-    if (bagResult.message !== BACKPACK_FULL_MESSAGE) {
-        return {
-            success: false,
-            message: bagResult.message,
-            location: null,
-            itemIds: [],
-        };
-    }
+    const rewardPayload = buildPartnerReclaimMailRewardPayload({
+        compensationItemDefId: COMPENSATION_ITEM_DEF_ID,
+        compensationQty: COMPENSATION_ITEM_QTY,
+        partnerSpentExp: params.partner.trainingRefund.partnerSpentExp,
+        learnedTechniqueBooks: params.partner.trainingRefund.learnedTechniqueBooks,
+        techniqueUpgradeRefund: params.partner.trainingRefund.techniqueUpgradeRefund,
+    });
 
-    const warehouseResult = await addItemToInventory(
-        params.characterId,
-        params.userId,
-        COMPENSATION_ITEM_DEF_ID,
-        COMPENSATION_ITEM_QTY,
-        {
-            location: 'warehouse',
-            obtainedFrom: SCRIPT_OBTAINED_FROM,
+    const mailResult = await mailService.sendMail({
+        recipientUserId: params.ownerUserId,
+        recipientCharacterId: params.ownerCharacterId,
+        senderType: 'system',
+        senderName: '系统',
+        mailType: 'reward',
+        title: buildPartnerReclaimMailTitle(),
+        content: buildPartnerReclaimMailContent({
+            partnerNickname: params.partner.partnerNickname,
+            partnerName: params.partner.partnerName,
+            baseModel: params.partner.baseModel,
+        }),
+        attachRewards: rewardPayload,
+        expireDays: PARTNER_RECLAIM_MAIL_EXPIRE_DAYS,
+        source: SCRIPT_OBTAINED_FROM,
+        sourceRefId: params.generationId,
+        metadata: {
+            partnerId: params.partner.partnerId,
+            partnerDefId: params.partner.partnerDefId,
+            partnerNickname: params.partner.partnerNickname,
+            baseModel: params.partner.baseModel,
         },
-    );
+    });
+
     return {
-        success: warehouseResult.success,
-        message: warehouseResult.message,
-        location: warehouseResult.success ? 'warehouse' : null,
-        itemIds: warehouseResult.itemIds ?? [],
+        success: mailResult.success,
+        message: mailResult.message,
+        mailId: mailResult.mailId ?? null,
     };
 };
 
@@ -861,7 +1047,7 @@ const recheckExecutablePartner = async (partnerId: number): Promise<TargetPartne
         LIMIT 1
       ) pfj ON TRUE
       WHERE cp.id = $1
-      FOR UPDATE
+      ${RECHECK_EXECUTABLE_PARTNER_LOCK_SQL}
     `,
         [partnerId, ACTIVE_FUSION_JOB_STATUSES],
     );
@@ -886,8 +1072,8 @@ const executeReclaim = async (
                 compensationItemDefId: COMPENSATION_ITEM_DEF_ID,
                 compensationItemName,
                 compensationQty: COMPENSATION_ITEM_QTY,
-                compensationLocation: null,
-                compensationItemIds: [],
+                rewardDelivery: null,
+                rewardMailId: null,
                 message: `跳过：${partner.blockedReasons.join('；')}`,
             });
             continue;
@@ -905,8 +1091,8 @@ const executeReclaim = async (
                     compensationItemDefId: COMPENSATION_ITEM_DEF_ID,
                     compensationItemName,
                     compensationQty: COMPENSATION_ITEM_QTY,
-                    compensationLocation: null,
-                    compensationItemIds: [],
+                    rewardDelivery: null,
+                    rewardMailId: null,
                     message: '跳过：伙伴已不存在或已不再属于招募来源',
                 };
             }
@@ -922,18 +1108,20 @@ const executeReclaim = async (
                     compensationItemDefId: COMPENSATION_ITEM_DEF_ID,
                     compensationItemName,
                     compensationQty: COMPENSATION_ITEM_QTY,
-                    compensationLocation: null,
-                    compensationItemIds: [],
+                    rewardDelivery: null,
+                    rewardMailId: null,
                     message: `跳过：${blockedReasons.join('；')}`,
                 };
             }
 
-            const grantResult = await grantCompensationToken({
-                characterId: lockedRow.owner_character_id,
-                userId: lockedRow.owner_user_id,
+            const rewardMailResult = await sendPartnerReclaimRewardMail({
+                partner,
+                ownerUserId: lockedRow.owner_user_id,
+                ownerCharacterId: lockedRow.owner_character_id,
+                generationId: normalizeText(lockedRow.recruit_job_id),
             });
-            if (!grantResult.success || !grantResult.location) {
-                throw new Error(`补偿 ${compensationItemName} 失败：${grantResult.message}`);
+            if (!rewardMailResult.success || rewardMailResult.mailId === null) {
+                throw new Error(`发送回收返还邮件失败：${rewardMailResult.message}`);
             }
 
             const backupPayload = await loadPartnerBackupPayload({
@@ -968,9 +1156,9 @@ const executeReclaim = async (
                 compensationItemDefId: COMPENSATION_ITEM_DEF_ID,
                 compensationItemName,
                 compensationQty: COMPENSATION_ITEM_QTY,
-                compensationLocation: grantResult.location,
-                compensationItemIds: grantResult.itemIds,
-                message: `已回收伙伴，并补偿 ${compensationItemName} x ${COMPENSATION_ITEM_QTY}`,
+                rewardDelivery: 'mail',
+                rewardMailId: rewardMailResult.mailId,
+                message: `已回收伙伴，并发送返还邮件 #${rewardMailResult.mailId}`,
             };
         });
 
@@ -994,7 +1182,11 @@ const ensureCompensationItemConfigured = (): void => {
 const main = async (): Promise<void> => {
     ensureCompensationItemConfigured();
     const options = parseCliOptions(process.argv.slice(2));
-    const baseModels = loadBaseModels();
+    const baseModels = options.partnerIds.length > 0 ? [] : loadBaseModels();
+    const targetSelector = buildPartnerReclaimTargetSelector({
+        baseModels,
+        partnerIds: options.partnerIds,
+    });
     const backupFilePath = options.mode === 'execute' ? buildDefaultBackupFilePath() : null;
     if (backupFilePath) {
         await ensureParentDirectory(backupFilePath);
@@ -1002,7 +1194,7 @@ const main = async (): Promise<void> => {
     }
     const report = await buildReport({
         mode: options.mode,
-        baseModels,
+        targetSelector,
         backupFilePath,
     });
 

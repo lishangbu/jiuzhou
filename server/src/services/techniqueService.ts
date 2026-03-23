@@ -1,3 +1,4 @@
+import { query } from '../config/database.js';
 import { getItemDefinitionsByIds, getSkillDefinitions, getTechniqueDefinitions, getTechniqueLayerDefinitions } from './staticConfigLoader.js';
 import { resolveSkillTriggerType } from '../shared/skillTriggerType.js';
 import { resolveQualityRankFromName } from './shared/itemQuality.js';
@@ -67,6 +68,14 @@ export type SkillDefRow = {
   enabled: boolean;
 };
 
+export type TechniqueDetailRow = {
+  technique: TechniqueDefRow;
+  layers: TechniqueLayerRow[];
+  skills: SkillDefRow[];
+};
+
+export type TechniqueLayerVisibility = 'preview' | 'learned';
+
 const coerceCostMaterials = (raw: unknown): Array<{ itemId: string; qty: number }> => {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -105,6 +114,42 @@ const scaleTechniqueBaseCostByQuality = (baseCost: number, qualityMultiplier: nu
   const normalizedBaseCost = Math.max(0, Math.floor(Number(baseCost) || 0));
   const normalizedMultiplier = Math.max(1, Math.floor(Number(qualityMultiplier) || 1));
   return normalizedBaseCost * normalizedMultiplier;
+};
+
+const normalizeCharacterId = (characterIdRaw: number | null | undefined): number | null => {
+  const characterId = Number(characterIdRaw);
+  if (!Number.isFinite(characterId) || characterId <= 0) return null;
+  return Math.floor(characterId);
+};
+
+const canCharacterViewTechniqueSensitiveLayers = async (
+  techniqueId: string,
+  characterIdRaw: number | null | undefined,
+): Promise<boolean> => {
+  const characterId = normalizeCharacterId(characterIdRaw);
+  if (!characterId) return false;
+
+  const result = await query(
+    'SELECT 1 FROM character_technique WHERE character_id = $1 AND technique_id = $2 LIMIT 1',
+    [characterId, techniqueId],
+  );
+  return Number(result.rowCount ?? 0) > 0;
+};
+
+export const applyTechniqueLayerVisibility = (
+  layers: TechniqueLayerRow[],
+  visibility: TechniqueLayerVisibility,
+): TechniqueLayerRow[] => {
+  if (visibility === 'learned') return layers;
+
+  // 把“未学习只能看预览”的裁剪规则收敛在这里，避免坊市、背包和详情页各自维护一套敏感字段判断。
+  return layers.map((layer) => ({
+    ...layer,
+    cost_spirit_stones: 0,
+    cost_exp: 0,
+    cost_materials: [],
+    passives: [],
+  }));
 };
 
 type TechniqueDefEntry = ReturnType<typeof getTechniqueDefinitions>[number];
@@ -234,13 +279,22 @@ export const getSkillsByTechniqueId = async (techniqueId: string): Promise<Skill
 };
 
 export const getTechniqueDetailById = async (
-  techniqueId: string
-): Promise<{ technique: TechniqueDefRow; layers: TechniqueLayerRow[]; skills: SkillDefRow[] } | null> => {
+  techniqueId: string,
+  options?: { viewerCharacterId?: number | null },
+): Promise<TechniqueDetailRow | null> => {
   const technique = await getTechniqueDefById(techniqueId);
   if (!technique) return null;
-  const [layers, skills] = await Promise.all([
+
+  const [layers, skills, canViewSensitiveLayers] = await Promise.all([
     getTechniqueLayersByTechniqueId(techniqueId),
     getSkillsByTechniqueId(techniqueId),
+    canCharacterViewTechniqueSensitiveLayers(techniqueId, options?.viewerCharacterId),
   ]);
-  return { technique, layers, skills };
+
+  const visibility: TechniqueLayerVisibility = canViewSensitiveLayers ? 'learned' : 'preview';
+  return {
+    technique,
+    layers: applyTechniqueLayerVisibility(layers, visibility),
+    skills,
+  };
 };
