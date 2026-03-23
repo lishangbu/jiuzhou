@@ -31,10 +31,15 @@ import { getRoomInMap } from '../mapService.js';
 import { getCharacterUserId } from '../sect/db.js';
 import type {
   IdleBattleReplaySnapshot,
+  IdleBattleRewardSettlementPlan,
   IdleSessionRow,
   RewardItemEntry,
 } from './types.js';
-import { resolveIdleBattleRewards } from './idleBattleRewardResolver.js';
+import {
+  buildIdleBattleRewardSettlementPlan,
+  buildIdleRewardParticipant,
+  settleIdleBattleRewardSettlementPlan,
+} from './idleBattleRewardResolver.js';
 import { toPgTextArrayLiteral } from './pgTextArrayLiteral.js';
 import { rowToIdleSessionRow } from './rowMappers.js';
 import { idleSessionService } from './idleSessionService.js';
@@ -46,6 +51,15 @@ import {
   resetIdleSessionSummaryDelta,
   type IdleSessionSummaryState,
 } from './idleSessionSummary.js';
+import {
+  appendIdleRewardWindowBatch,
+  createIdleRewardWindowState,
+  getIdleRewardWindowFlushPayload,
+  resetIdleRewardWindowDelta,
+  shouldFlushIdleRewardWindow,
+  type IdleRewardWindowBatch,
+  type IdleRewardWindowState,
+} from './idleRewardWindow.js';
 import {
   clearIdleExecutionLoopRegistry,
   registerIdleExecutionLoop,
@@ -66,40 +80,20 @@ type WorkerBatchResult = {
 };
 
 type SingleBatchResult = WorkerBatchResult & {
-  expGained: number;
-  silverGained: number;
-  itemsGained: RewardItemEntry[];
-  bagFullFlag: boolean;
+  rewardPlan: IdleBattleRewardSettlementPlan;
 };
 
 type BatchBuffer = {
-  batches: Array<{
-    id: string;
-    sessionId: string;
-    batchIndex: number;
-    result: string;
-    roundCount: number;
-    randomSeed: number;
-    expGained: number;
-    silverGained: number;
-    itemsGained: RewardItemEntry[];
-    bagFullFlag: boolean;
-    replaySnapshot: IdleBattleReplaySnapshot | null;
-    monsterIds: string[];
-  }>;
+  rewardWindow: IdleRewardWindowState;
   summaryState: IdleSessionSummaryState;
-  lastFlushAt: number;
 };
 
 // ============================================
 // 常量配置
 // ============================================
 
-/** 批量写入阈值：积累多少场战斗后触发 flush */
-const FLUSH_BATCH_SIZE = 10;
-
 /** 批量写入时间阈值：距上次 flush 超过多少毫秒后触发 */
-const FLUSH_INTERVAL_MS = 5_000;
+const FLUSH_INTERVAL_MS = 30_000;
 
 /** 会话状态查库间隔：仅用于开战前预检查，避免每轮都重复查询 idle_sessions */
 const SESSION_STATUS_CHECK_INTERVAL_MS = 15_000;
@@ -111,8 +105,11 @@ const SESSION_STATUS_CHECK_INTERVAL_MS = 15_000;
 /** 执行循环 Map（sessionId → timeoutHandle）*/
 const activeLoops = new Map<string, ReturnType<typeof setTimeout>>();
 
-/** 活跃缓冲区 Map（sessionId → { characterId, buffer }）*/
-const activeBuffers = new Map<string, { characterId: number; buffer: BatchBuffer }>();
+/** 活跃缓冲区 Map（sessionId → { session, userId, buffer }）*/
+const activeBuffers = new Map<
+  string,
+  { session: IdleSessionRow; userId: number; buffer: BatchBuffer }
+>();
 
 /** 立即唤醒回调（sessionId → wakeNow） */
 const loopWakeHandlers = new Map<string, () => void>();
@@ -134,42 +131,77 @@ const loopRuntimeStates = new Map<
 
 function createBuffer(session: Pick<IdleSessionRow, 'rewardItems' | 'bagFullFlag'>): BatchBuffer {
   return {
-    batches: [],
+    rewardWindow: createIdleRewardWindowState(),
     summaryState: createIdleSessionSummaryState(session),
-    lastFlushAt: Date.now(),
   };
 }
 
 function shouldFlush(buffer: BatchBuffer): boolean {
-  return (
-    buffer.batches.length >= FLUSH_BATCH_SIZE ||
-    Date.now() - buffer.lastFlushAt >= FLUSH_INTERVAL_MS
-  );
+  return shouldFlushIdleRewardWindow({
+    pendingBatchCount: buffer.rewardWindow.batches.length,
+    lastFlushAt: buffer.rewardWindow.lastFlushAt,
+    now: Date.now(),
+    flushIntervalMs: FLUSH_INTERVAL_MS,
+  });
 }
 
 /**
  * 将内存缓冲区批量写入 DB
  */
 async function flushBuffer(
-  _characterId: number,
-  sessionId: string,
+  session: IdleSessionRow,
+  userId: number,
   buffer: BatchBuffer,
 ): Promise<void> {
-  if (buffer.batches.length === 0) return;
+  const flushPayload = getIdleRewardWindowFlushPayload(buffer.rewardWindow);
+  if (flushPayload.batches.length === 0) return;
 
-  const batches = buffer.batches.splice(0);
-  const summaryPayload = getIdleSessionSummaryFlushPayload(buffer.summaryState);
-  buffer.lastFlushAt = Date.now();
+  const batches = flushPayload.batches;
+  const nextSummaryState = createIdleSessionSummaryState(buffer.summaryState.snapshot);
+  const participant = buildIdleRewardParticipant(session, userId);
 
   try {
     await withTransactionAuto(async () => {
+      const settledBatches: Array<
+        IdleRewardWindowBatch & {
+          expGained: number;
+          silverGained: number;
+          itemsGained: RewardItemEntry[];
+          bagFullFlag: boolean;
+        }
+      > = [];
+
+      for (const batch of batches) {
+        const settledReward = await settleIdleBattleRewardSettlementPlan(
+          participant,
+          {
+            expGained: batch.expGained,
+            silverGained: batch.silverGained,
+            previewItems: batch.previewItems,
+            dropPlans: batch.dropPlans,
+          },
+        );
+        appendBattleResultToIdleSessionSummary(nextSummaryState, {
+          ...settledReward,
+          result: batch.result,
+        });
+        settledBatches.push({
+          ...batch,
+          expGained: settledReward.expGained,
+          silverGained: settledReward.silverGained,
+          itemsGained: settledReward.itemsGained,
+          bagFullFlag: settledReward.bagFullFlag,
+        });
+      }
+
+      const summaryPayload = getIdleSessionSummaryFlushPayload(nextSummaryState);
       const values = batches
         .map(
           (b, i) =>
             `($${i * 11 + 1}, $${i * 11 + 2}, $${i * 11 + 3}, $${i * 11 + 4}, $${i * 11 + 5}, $${i * 11 + 6}, $${i * 11 + 7}, $${i * 11 + 8}, $${i * 11 + 9}, $${i * 11 + 10}, $${i * 11 + 11}, NOW())`,
         )
         .join(', ');
-      const params = batches.flatMap((b) => [
+      const params = settledBatches.flatMap((b) => [
         b.id,
         b.sessionId,
         b.batchIndex,
@@ -193,16 +225,23 @@ async function flushBuffer(
       );
 
       await idleSessionService.updateSessionSummary(
-        sessionId,
+        session.id,
         summaryPayload.delta,
         summaryPayload.snapshot,
       );
     });
+    buffer.summaryState.snapshot = nextSummaryState.snapshot;
     resetIdleSessionSummaryDelta(buffer.summaryState);
+    resetIdleRewardWindowDelta(buffer.rewardWindow, Date.now());
   } catch (err) {
     console.error(`[IdleBattleExecutor] flush 失败:`, err);
-    // flush 失败时将 batches 放回缓冲区（下次重试）
-    buffer.batches.unshift(...batches);
+    return;
+  }
+
+  try {
+    await getGameServer().pushCharacterUpdate(userId);
+  } catch (err) {
+    console.error(`[IdleBattleExecutor] flush 后角色快照推送失败:`, err);
   }
 }
 
@@ -216,8 +255,8 @@ export async function flushAllBuffers(): Promise<void> {
   console.log(`[IdleBattleExecutor] 正在刷写 ${entries.length} 个会话的缓冲区...`);
 
   const results = await Promise.allSettled(
-    entries.map(([sessionId, { characterId, buffer }]) =>
-      flushBuffer(characterId, sessionId, buffer),
+    entries.map(([, { session, userId, buffer }]) =>
+      flushBuffer(session, userId, buffer),
     ),
   );
 
@@ -260,7 +299,7 @@ export function startExecutionLoop(session: IdleSessionRow, userId: number): voi
 
   registerIdleExecutionLoop(session.id);
   loopRuntimeStates.set(session.id, runtime);
-  activeBuffers.set(session.id, { characterId: session.characterId, buffer });
+  activeBuffers.set(session.id, { session, userId, buffer });
 
   function clearLoopRuntimeState(): void {
     unregisterIdleExecutionLoop(session.id);
@@ -274,7 +313,7 @@ export function startExecutionLoop(session: IdleSessionRow, userId: number): voi
     stop: Extract<TerminationCheckResult, { terminate: true }>
   ): Promise<void> {
     if (shouldFlush(buffer) || stop.terminate) {
-      await flushBuffer(session.characterId, session.id, buffer);
+      await flushBuffer(session, userId, buffer);
     }
 
     clearLoopRuntimeState();
@@ -347,36 +386,31 @@ export function startExecutionLoop(session: IdleSessionRow, userId: number): voi
       });
 
       // 3. 奖励统一复用普通执行器逻辑（主线程结算，避免 Worker 与主流程分叉）
-      const rewardSnapshot = await resolveIdleBattleRewards(
+      const rewardPlan = await buildIdleBattleRewardSettlementPlan(
         workerResult.monsterIds,
-        session,
-        userId,
+        buildIdleRewardParticipant(session, userId),
         workerResult.result,
       );
       const batchResult: SingleBatchResult = {
         ...workerResult,
-        expGained: rewardSnapshot.expGained,
-        silverGained: rewardSnapshot.silverGained,
-        itemsGained: rewardSnapshot.itemsGained,
-        bagFullFlag: rewardSnapshot.bagFullFlag,
+        rewardPlan,
       };
 
       // 4. 追加结果到缓冲区
-      buffer.batches.push({
+      appendIdleRewardWindowBatch(buffer.rewardWindow, {
         id: randomUUID(),
         sessionId: session.id,
         batchIndex,
         result: batchResult.result,
         roundCount: batchResult.roundCount,
         randomSeed: batchResult.randomSeed,
-        expGained: batchResult.expGained,
-        silverGained: batchResult.silverGained,
-        itemsGained: batchResult.itemsGained,
-        bagFullFlag: batchResult.bagFullFlag,
+        expGained: batchResult.rewardPlan.expGained,
+        silverGained: batchResult.rewardPlan.silverGained,
+        previewItems: batchResult.rewardPlan.previewItems,
+        dropPlans: batchResult.rewardPlan.dropPlans,
         replaySnapshot: batchResult.replaySnapshot,
         monsterIds: batchResult.monsterIds,
       });
-      appendBattleResultToIdleSessionSummary(buffer.summaryState, batchResult);
       batchIndex++;
 
       // 5. 实时推送本场摘要
@@ -385,20 +419,18 @@ export function startExecutionLoop(session: IdleSessionRow, userId: number): voi
           sessionId: session.id,
           batchIndex: batchIndex - 1,
           result: batchResult.result,
-          expGained: batchResult.expGained,
-          silverGained: batchResult.silverGained,
-          itemsGained: batchResult.itemsGained,
+          expGained: batchResult.rewardPlan.expGained,
+          silverGained: batchResult.rewardPlan.silverGained,
+          itemsGained: batchResult.rewardPlan.previewItems,
           roundCount: batchResult.roundCount,
         });
       } catch {
         // 忽略推送错误
       }
 
-      const shouldStopAfterBattle = await checkTerminationConditions(session, runtime, {
-        forceDbStatusCheck: true,
-      });
+      const shouldStopAfterBattle = checkTerminationConditionsWithoutDb(session, runtime);
       if (shouldFlush(buffer) || shouldStopAfterBattle.terminate) {
-        await flushBuffer(session.characterId, session.id, buffer);
+        await flushBuffer(session, userId, buffer);
       }
 
       if (shouldStopAfterBattle.terminate) {

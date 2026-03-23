@@ -19,8 +19,7 @@ import { getTransactionClient, isInTransaction, query } from '../config/database
  *
  * 数据流/状态流：
  * - 调用方进入事务后调用本模块；
- * - 本模块使用 `pg_try_advisory_xact_lock` 进行非阻塞尝试；
- * - 未拿到锁时按固定间隔轮询，直到拿到锁或超时；
+ * - 本模块使用 `pg_advisory_xact_lock` 直接阻塞等待锁；
  * - 事务提交/回滚后，xact lock 由 PostgreSQL 自动释放。
  *
  * 关键边界条件与坑点：
@@ -28,9 +27,6 @@ import { getTransactionClient, isInTransaction, query } from '../config/database
  * 2. 多角色加锁必须按升序统一顺序，避免不同调用链加锁顺序反转导致的死锁环。
  */
 const INVENTORY_MUTEX_NAMESPACE = 3101;
-const INVENTORY_MUTEX_RETRY_INTERVAL_MS = 50;
-const INVENTORY_MUTEX_MAX_WAIT_MS = 45000;
-
 type InventoryMutexQueryRunner = Pick<PoolClient, 'query'>;
 
 const normalizeCharacterIds = (characterIds: number[]): number[] =>
@@ -38,42 +34,13 @@ const normalizeCharacterIds = (characterIds: number[]): number[] =>
     .filter((id) => Number.isInteger(id) && id > 0)
     .sort((a, b) => a - b);
 
-const sleep = async (ms: number): Promise<void> => {
-  await new Promise((resolve) => setTimeout(resolve, ms));
-};
-
-/**
- * 尝试获取单个角色背包互斥锁（非阻塞）
- * 使用统一 query() 入口，自动走事务连接
- */
-const tryLockCharacterInventoryMutexWithRunner = async (
-  runner: InventoryMutexQueryRunner,
-  characterId: number
-): Promise<boolean> => {
-  const sql = 'SELECT pg_try_advisory_xact_lock($1::integer, $2::integer) AS locked';
-  const params: [number, number] = [INVENTORY_MUTEX_NAMESPACE, characterId];
-  const result = await runner.query(sql, params) as QueryResult<{ locked: boolean }>;
-  return result.rows[0]?.locked === true;
-};
-
 const waitForCharacterInventoryMutexWithRunner = async (
   runner: InventoryMutexQueryRunner,
   characterId: number,
 ): Promise<void> => {
-  const startAt = Date.now();
-  while (true) {
-    const locked = await tryLockCharacterInventoryMutexWithRunner(runner, characterId);
-    if (locked) return;
-
-    const waitedMs = Date.now() - startAt;
-    if (waitedMs >= INVENTORY_MUTEX_MAX_WAIT_MS) {
-      throw new Error(
-        `获取角色背包互斥锁超时: characterId=${characterId}, waitedMs=${waitedMs}, maxWaitMs=${INVENTORY_MUTEX_MAX_WAIT_MS}`
-      );
-    }
-
-    await sleep(INVENTORY_MUTEX_RETRY_INTERVAL_MS);
-  }
+  const sql = 'SELECT pg_advisory_xact_lock($1::integer, $2::integer)';
+  const params: [number, number] = [INVENTORY_MUTEX_NAMESPACE, characterId];
+  await runner.query(sql, params) as QueryResult;
 };
 
 /**

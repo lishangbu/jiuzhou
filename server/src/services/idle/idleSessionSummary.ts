@@ -20,7 +20,8 @@
  *
  * 关键边界条件与坑点：
  *   1. reward_items 只按 itemDefId 合并数量，itemName 以首个条目为准；这是当前挂机汇总展示的唯一口径。
- *   2. flush 失败时不能提前清空 delta，否则会出现批次未重试但汇总已丢失；因此 reset 必须只在 flush 成功后调用。
+ *   2. bagFullFlag 代表“本窗口曾触发邮件补发”，不是“后续掉落暂停”。
+ *   3. flush 失败时不能提前清空 delta，否则会出现批次未重试但汇总已丢失；因此 reset 必须只在 flush 成功后调用。
  */
 
 import type { IdleSessionRow, RewardItemEntry } from './types.js';

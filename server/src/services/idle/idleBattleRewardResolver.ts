@@ -1,76 +1,108 @@
 /**
- * IdleBattleRewardResolver — 挂机战斗奖励统一结算入口
+ * IdleBattleRewardResolver — 挂机奖励的“先计算、后兑现”统一入口
  *
- * 作用：
- *   复用 quickDistributeRewards 作为挂机战斗奖励的唯一结算逻辑，
- *   供普通执行器与 Worker 执行器共同调用，保证奖励规则一致。
- *   不负责战斗模拟，不负责批量落库。
+ * 作用（做什么 / 不做什么）：
+ * 1. 做什么：把挂机奖励拆成“单场奖励计划”与“真实结算结果”两个阶段，供 30 秒窗口复用。
+ * 2. 做什么：保留兼容入口 `resolveIdleBattleRewards`，供旧执行链路按“即时结算”语义继续工作。
+ * 3. 不做什么：不承载战斗模拟，不做窗口 flush 时机控制。
  *
  * 输入/输出：
- *   - resolveIdleBattleRewards(monsterIds, session, userId, battleResult)
- *     输入怪物列表、会话上下文、用户 ID 与战斗胜负；
- *     返回单场奖励快照（exp/silver/items/bagFullFlag）。
+ * - buildIdleBattleRewardSettlementPlan(monsterIds, participant, battleResult)
+ *   输入怪物列表、单角色参与者与胜负，输出单场奖励计划（预览收益 + 后续兑现计划）。
+ * - settleIdleBattleRewardSettlementPlan(plan, participant)
+ *   输入奖励计划与参与者，输出真实入包后的最终收益结果。
+ * - resolveIdleBattleRewards(monsterIds, session, userId, battleResult)
+ *   兼容旧行为：内部等价于“先 build，再 settle”。
  *
- * 数据流：
- *   战斗结果（attacker_win/defender_win/draw）→ rewardResolver
- *   → quickDistributeRewards（统一奖励规则）
- *   → 执行器缓冲区（后续统一落库与汇总）
+ * 数据流/状态流：
+ * 战斗结果 -> 奖励计划 -> 30 秒窗口缓存 -> flush 时真实兑现
+ * 兼容路径：战斗结果 -> 奖励计划 -> 立即兑现 -> 直接返回最终收益
  *
  * 关键边界条件与坑点：
- *   1. 非 attacker_win 或无 monsterIds 时直接返回零奖励，避免无效 DB 写入。
- *   2. quickDistributeRewards 失败时仅置 bagFullFlag=true，不抛异常，保持挂机循环可持续。
+ * 1. 非 attacker_win 或无 monsterIds 时直接返回空计划/空收益，避免无效事务。
+ * 2. 预览收益中的物品是“已算出的掉落预览”，最终真实入包结果可能因自动分解/邮件补发发生变化。
  */
 
-import { battleDropService, type BattleParticipant } from '../battleDropService.js';
-import type { IdleSessionRow, RewardItemEntry } from './types.js';
+import {
+  battleDropService,
+  type BattleParticipant,
+  type SinglePlayerRewardSettlementResult,
+} from '../battleDropService.js';
+import type {
+  IdleBattleRewardSettlementPlan,
+  IdleSessionRow,
+} from './types.js';
 
-export interface IdleBattleRewardSnapshot {
-  expGained: number;
-  silverGained: number;
-  itemsGained: RewardItemEntry[];
-  bagFullFlag: boolean;
-}
-
-const EMPTY_REWARD: IdleBattleRewardSnapshot = {
+const EMPTY_PLAN: IdleBattleRewardSettlementPlan = {
   expGained: 0,
   silverGained: 0,
-  itemsGained: [],
-  bagFullFlag: false,
+  previewItems: [],
+  dropPlans: [],
 };
 
+const buildIdleRewardParticipant = (
+  session: Pick<IdleSessionRow, 'characterId' | 'sessionSnapshot'>,
+  userId: number,
+): BattleParticipant => ({
+  userId,
+  characterId: session.characterId,
+  nickname: String(session.characterId),
+  realm: session.sessionSnapshot.realm,
+});
+
+export async function buildIdleBattleRewardSettlementPlan(
+  monsterIds: string[],
+  participant: BattleParticipant,
+  battleResult: 'attacker_win' | 'defender_win' | 'draw',
+): Promise<IdleBattleRewardSettlementPlan> {
+  if (battleResult !== 'attacker_win' || monsterIds.length === 0) {
+    return EMPTY_PLAN;
+  }
+
+  return battleDropService.planSinglePlayerBattleRewards(
+    monsterIds,
+    participant,
+    true,
+  );
+}
+
+export async function settleIdleBattleRewardSettlementPlan(
+  participant: BattleParticipant,
+  plan: IdleBattleRewardSettlementPlan,
+): Promise<SinglePlayerRewardSettlementResult> {
+  if (
+    plan.expGained <= 0 &&
+    plan.silverGained <= 0 &&
+    plan.previewItems.length === 0 &&
+    plan.dropPlans.length === 0
+  ) {
+    return {
+      expGained: 0,
+      silverGained: 0,
+      itemsGained: [],
+      bagFullFlag: false,
+    };
+  }
+
+  return battleDropService.settleSinglePlayerBattleRewardPlan(participant, plan);
+}
+
 /**
- * 统一计算单场挂机奖励。
+ * 兼容旧执行器的即时结算入口。
  */
 export async function resolveIdleBattleRewards(
   monsterIds: string[],
   session: IdleSessionRow,
   userId: number,
   battleResult: 'attacker_win' | 'defender_win' | 'draw',
-): Promise<IdleBattleRewardSnapshot> {
-  if (battleResult !== 'attacker_win' || monsterIds.length === 0) {
-    return EMPTY_REWARD;
-  }
-
-  const participant: BattleParticipant = {
-    userId,
-    characterId: session.characterId,
-    nickname: String(session.characterId),
-    realm: session.sessionSnapshot.realm,
-  };
-
-  const distributeResult = await battleDropService.quickDistributeRewards(monsterIds, [participant], true);
-  if (!distributeResult.success) {
-    return { ...EMPTY_REWARD, bagFullFlag: true };
-  }
-
-  return {
-    expGained: distributeResult.rewards.exp,
-    silverGained: distributeResult.rewards.silver,
-    itemsGained: distributeResult.rewards.items.map((item) => ({
-      itemDefId: item.itemDefId,
-      itemName: item.itemName,
-      quantity: item.quantity,
-    })),
-    bagFullFlag: false,
-  };
+): Promise<SinglePlayerRewardSettlementResult> {
+  const participant = buildIdleRewardParticipant(session, userId);
+  const plan = await buildIdleBattleRewardSettlementPlan(
+    monsterIds,
+    participant,
+    battleResult,
+  );
+  return settleIdleBattleRewardSettlementPlan(participant, plan);
 }
+
+export { buildIdleRewardParticipant };

@@ -127,7 +127,7 @@ const IdleStatusIndicator: React.FC<IdleStatusIndicatorProps> = ({
         <span>+{activeSession.totalSilver.toLocaleString()}</span>
       </div>
       {activeSession.bagFullFlag && (
-        <div className="idle-status-tooltip-warn">背包已满，物品掉落已暂停</div>
+        <div className="idle-status-tooltip-warn">背包空间不足时，部分物品会通过邮件补发</div>
       )}
     </div>
   );
@@ -168,7 +168,7 @@ const IdleStatusIndicator: React.FC<IdleStatusIndicatorProps> = ({
 
         {/* 背包满警告点 */}
         {activeSession.bagFullFlag && (
-          <span className="idle-status-bag-full" title="背包已满" aria-label="背包已满" />
+          <span className="idle-status-bag-full" title="存在邮件补发" aria-label="存在邮件补发" />
         )}
       </div>
     </Tooltip>

@@ -123,6 +123,7 @@ export interface SessionSnapshot {
  * 挂机会话行（idle_sessions 表的 TypeScript 映射）
  * - status 联合字面量：active → stopping → completed | interrupted
  * - rewardItems 为累计物品奖励列表，每次战斗胜利后追加合并
+ * - bagFullFlag 表示本次挂机期间出现过“背包空间不足，改走邮件补发”的情况
  * - viewedAt 为 null 表示玩家尚未查看本次挂机结果（用于触发回放弹窗）
  */
 export interface IdleSessionRow {
@@ -195,6 +196,30 @@ export interface RewardItemEntry {
   itemDefId: string;
   itemName: string;
   quantity: number;
+}
+
+/**
+ * 挂机奖励计划中的单条掉落兑现项。
+ * - 作用：把“每场已经计算好的掉落事实”与“后续 30 秒窗口统一真实入包”解耦。
+ * - 约束：这里只保存兑现所需的最小字段，不保存任何 DB 运行态信息。
+ */
+export interface IdleRewardPlanDropEntry {
+  itemDefId: string;
+  quantity: number;
+  bindType: string;
+  qualityWeights?: Record<string, number>;
+}
+
+/**
+ * 单场挂机奖励兑现计划。
+ * - previewItems：给实时 Socket/UI 展示的预览收益。
+ * - dropPlans：flush 时真实入包/邮件补发所需的兑现计划。
+ */
+export interface IdleBattleRewardSettlementPlan {
+  expGained: number;
+  silverGained: number;
+  previewItems: RewardItemEntry[];
+  dropPlans: IdleRewardPlanDropEntry[];
 }
 
 // ============================================

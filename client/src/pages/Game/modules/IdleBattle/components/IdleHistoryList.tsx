@@ -170,7 +170,7 @@ const IdleHistoryList: React.FC<IdleHistoryListProps> = ({
 
                 {/* 背包满提示 */}
                 {session.bagFullFlag && (
-                  <div className="idle-history-bag-warn">背包已满，部分物品未获取</div>
+                  <div className="idle-history-bag-warn">背包空间不足时，部分物品已通过邮件补发</div>
                 )}
               </div>
             ))}

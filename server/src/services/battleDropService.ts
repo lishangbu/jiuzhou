@@ -39,6 +39,11 @@ import {
 import { resolveQualityRankFromName } from './shared/itemQuality.js';
 import { lockCharacterRewardSettlementTargets } from './shared/characterRewardTargetLock.js';
 import { getRealmOrderIndex } from './shared/realmRules.js';
+import type {
+  IdleBattleRewardSettlementPlan,
+  IdleRewardPlanDropEntry,
+  RewardItemEntry,
+} from './idle/types.js';
 
 // ============================================
 // 类型定义
@@ -138,6 +143,13 @@ export interface BattleParticipant {
   nickname: string;
   realm: string;
   fuyuan?: number;
+}
+
+export interface SinglePlayerRewardSettlementResult {
+  expGained: number;
+  silverGained: number;
+  itemsGained: RewardItemEntry[];
+  bagFullFlag: boolean;
 }
 
 /**
@@ -477,6 +489,329 @@ class BattleDropService {
 
     // 合并相同物品
     return this.mergeDrops(allDrops);
+  }
+
+  private mergeIdleRewardDropPlans(
+    dropPlans: IdleRewardPlanDropEntry[],
+  ): IdleRewardPlanDropEntry[] {
+    return this.mergeDrops(
+      dropPlans.map((drop) => ({
+        itemDefId: drop.itemDefId,
+        quantity: drop.quantity,
+        bindType: drop.bindType,
+        ...(drop.qualityWeights ? { qualityWeights: drop.qualityWeights } : {}),
+      })),
+    ).map((drop) => ({
+      itemDefId: drop.itemDefId,
+      quantity: drop.quantity,
+      bindType: drop.bindType,
+      ...(drop.qualityWeights ? { qualityWeights: drop.qualityWeights } : {}),
+    }));
+  }
+
+  private buildPreviewItemsFromDropPlans(
+    dropPlans: IdleRewardPlanDropEntry[],
+  ): RewardItemEntry[] {
+    return dropPlans.map((drop) => ({
+      itemDefId: drop.itemDefId,
+      itemName: this.getRewardItemMeta(drop.itemDefId).name,
+      quantity: drop.quantity,
+    }));
+  }
+
+  private async buildSinglePlayerBattleRewardPlanFromMonsters(
+    monsters: MonsterData[],
+    participant: BattleParticipant,
+    options: DistributeBattleRewardsOptions = {},
+  ): Promise<IdleBattleRewardSettlementPlan> {
+    const isDungeonBattle = options.isDungeonBattle === true;
+    const participantFuyuan = (() => {
+      const raw = Number(participant.fuyuan ?? 1);
+      return Number.isFinite(raw) ? raw : 1;
+    })();
+
+    let expGainedRaw = 0;
+    let silverGainedRaw = 0;
+    const dropPlans: IdleRewardPlanDropEntry[] = [];
+
+    for (const monster of monsters) {
+      const suppressionMultiplier = this.getRealmSuppressionMultiplier(
+        participant.realm,
+        monster.realm,
+      );
+      const monsterExp = Math.max(0, Number(monster.exp_reward) || 0);
+      const silverMin = Math.max(0, Number(monster.silver_reward_min) || 0);
+      const silverMax = Math.max(silverMin, Number(monster.silver_reward_max) || silverMin);
+
+      expGainedRaw += monsterExp * suppressionMultiplier;
+      silverGainedRaw += this.randomInt(silverMin, silverMax) * suppressionMultiplier;
+
+      if (!monster.drop_pool_id) {
+        continue;
+      }
+
+      const dropPool = await this.getDropPool(monster.drop_pool_id);
+      if (!dropPool) {
+        continue;
+      }
+
+      const drops = this.rollDrops(dropPool, participantFuyuan, {
+        isDungeonBattle,
+        monsterKind: normalizeMonsterKind(monster.kind),
+        monsterRealm: monster.realm,
+        playerRealm: participant.realm,
+        realmSuppressionMultiplier: suppressionMultiplier,
+      });
+
+      for (const drop of drops) {
+        const quantity = Math.max(0, Math.floor(Number(drop.quantity) || 0));
+        if (quantity <= 0) {
+          continue;
+        }
+        dropPlans.push({
+          itemDefId: drop.itemDefId,
+          quantity,
+          bindType: drop.bindType,
+          ...(drop.qualityWeights ? { qualityWeights: drop.qualityWeights } : {}),
+        });
+      }
+    }
+
+    const mergedDropPlans = this.mergeIdleRewardDropPlans(dropPlans);
+
+    return {
+      expGained: Math.max(0, Math.floor(expGainedRaw)),
+      silverGained: Math.max(0, Math.floor(silverGainedRaw)),
+      previewItems: this.buildPreviewItemsFromDropPlans(mergedDropPlans),
+      dropPlans: mergedDropPlans,
+    };
+  }
+
+  async planSinglePlayerBattleRewards(
+    monsterIds: string[],
+    participant: BattleParticipant,
+    isVictory: boolean,
+    options: DistributeBattleRewardsOptions = {},
+  ): Promise<IdleBattleRewardSettlementPlan> {
+    if (!isVictory || monsterIds.length === 0) {
+      return {
+        expGained: 0,
+        silverGained: 0,
+        previewItems: [],
+        dropPlans: [],
+      };
+    }
+
+    const monsters = this.resolveRewardMonsters(monsterIds);
+    if (monsters.length === 0) {
+      return {
+        expGained: 0,
+        silverGained: 0,
+        previewItems: [],
+        dropPlans: [],
+      };
+    }
+
+    return this.buildSinglePlayerBattleRewardPlanFromMonsters(
+      monsters,
+      participant,
+      options,
+    );
+  }
+
+  async settleSinglePlayerBattleRewardPlan(
+    participant: BattleParticipant,
+    plan: IdleBattleRewardSettlementPlan,
+  ): Promise<SinglePlayerRewardSettlementResult> {
+    return withTransactionAuto(() =>
+      this.settleSinglePlayerBattleRewardPlanInTransaction(participant, plan),
+    );
+  }
+
+  private async settleSinglePlayerBattleRewardPlanInTransaction(
+    participant: BattleParticipant,
+    plan: IdleBattleRewardSettlementPlan,
+  ): Promise<SinglePlayerRewardSettlementResult> {
+    const receiverCharacterId = Number(participant.characterId);
+    if (!Number.isInteger(receiverCharacterId) || receiverCharacterId <= 0) {
+      return {
+        expGained: 0,
+        silverGained: 0,
+        itemsGained: [],
+        bagFullFlag: false,
+      };
+    }
+
+    const pendingCharacterRewardDeltas = new Map<number, CharacterRewardDelta>();
+    addCharacterRewardDelta(pendingCharacterRewardDeltas, receiverCharacterId, {
+      exp: plan.expGained,
+      silver: plan.silverGained,
+    });
+
+    const settledItems = new Map<string, RewardItemEntry>();
+    const collectCounts = new Map<string, { itemDefId: string; qty: number }>();
+    const pendingMailItems: MailAttachItem[] = [];
+
+    const appendSettledItem = (
+      itemDefId: string,
+      itemName: string,
+      quantity: number,
+    ): void => {
+      const existing = settledItems.get(itemDefId);
+      if (existing) {
+        existing.quantity += quantity;
+        return;
+      }
+      settledItems.set(itemDefId, { itemDefId, itemName, quantity });
+    };
+
+    const appendCollectCount = (itemDefId: string, qty: number): void => {
+      const existing = collectCounts.get(itemDefId);
+      if (existing) {
+        existing.qty += qty;
+        return;
+      }
+      collectCounts.set(itemDefId, { itemDefId, qty });
+    };
+
+    let totalSilver = plan.silverGained;
+    let autoDisassembleSetting = normalizeAutoDisassembleSetting({
+      enabled: false,
+      rules: undefined,
+    });
+
+    if (plan.dropPlans.length > 0) {
+      await lockCharacterRewardSettlementTargets([receiverCharacterId]);
+
+      const settingResult = await query(
+        `
+          SELECT auto_disassemble_enabled, auto_disassemble_rules
+          FROM characters
+          WHERE id = $1
+          LIMIT 1
+        `,
+        [receiverCharacterId],
+      );
+
+      const row = settingResult.rows[0] as
+        | { auto_disassemble_enabled: boolean | null; auto_disassemble_rules: unknown }
+        | undefined;
+      if (row) {
+        autoDisassembleSetting = normalizeAutoDisassembleSetting({
+          enabled: row.auto_disassemble_enabled,
+          rules: row.auto_disassemble_rules,
+        });
+      }
+    }
+
+    for (const dropPlan of plan.dropPlans) {
+      const sourceMeta = this.getRewardItemMeta(dropPlan.itemDefId);
+      const createOptions: CreateItemOptions = {
+        location: 'bag',
+        bindType: dropPlan.bindType,
+        obtainedFrom: 'battle_drop',
+      };
+      if (sourceMeta.category === 'equipment') {
+        createOptions.equipOptions = {
+          fuyuan: Number.isFinite(Number(participant.fuyuan)) ? Number(participant.fuyuan) : 1,
+          ...(dropPlan.qualityWeights ? { qualityWeights: dropPlan.qualityWeights } : {}),
+        };
+      }
+
+      const grantResult = await grantRewardItemWithAutoDisassemble({
+        characterId: receiverCharacterId,
+        itemDefId: dropPlan.itemDefId,
+        qty: dropPlan.quantity,
+        bindType: dropPlan.bindType,
+        itemMeta: {
+          itemName: sourceMeta.name,
+          category: sourceMeta.category,
+          subCategory: sourceMeta.subCategory,
+          effectDefs: sourceMeta.effectDefs,
+          qualityRank: sourceMeta.qualityRank,
+          disassemblable: sourceMeta.disassemblable,
+        },
+        autoDisassembleSetting,
+        sourceObtainedFrom: 'battle_drop',
+        sourceEquipOptions: createOptions.equipOptions,
+        createItem: async ({ itemDefId, qty, bindType, obtainedFrom, equipOptions }) => {
+          return itemService.createItem(
+            participant.userId,
+            receiverCharacterId,
+            itemDefId,
+            qty,
+            {
+              location: 'bag',
+              obtainedFrom,
+              ...(bindType ? { bindType } : {}),
+              ...(equipOptions ? { equipOptions } : {}),
+            },
+          );
+        },
+        addSilver: async (ownerCharacterId, silverGain) => {
+          const safeSilver = Math.max(0, Math.floor(Number(silverGain) || 0));
+          if (safeSilver <= 0) {
+            return { success: true, message: '无需增加银两' };
+          }
+          addCharacterRewardDelta(pendingCharacterRewardDeltas, ownerCharacterId, {
+            silver: safeSilver,
+          });
+          return { success: true, message: '银两增加成功' };
+        },
+      });
+
+      for (const warning of grantResult.warnings) {
+        console.warn(`挂机奖励兑现告警: ${warning}`);
+      }
+
+      for (const mailItem of grantResult.pendingMailItems) {
+        pendingMailItems.push(mailItem);
+      }
+
+      if (grantResult.gainedSilver > 0) {
+        totalSilver += grantResult.gainedSilver;
+      }
+
+      for (const granted of grantResult.grantedItems) {
+        const grantedMeta =
+          granted.itemDefId === dropPlan.itemDefId
+            ? sourceMeta
+            : this.getRewardItemMeta(granted.itemDefId);
+        appendCollectCount(granted.itemDefId, granted.qty);
+        appendSettledItem(granted.itemDefId, grantedMeta.name, granted.qty);
+      }
+    }
+
+    for (const { itemDefId, qty } of collectCounts.values()) {
+      await recordCollectItemEvent(receiverCharacterId, itemDefId, qty);
+    }
+
+    if (pendingMailItems.length > 0) {
+      const chunkSize = 10;
+      for (let index = 0; index < pendingMailItems.length; index += chunkSize) {
+        const chunk = pendingMailItems.slice(index, index + chunkSize);
+        const mailResult = await sendSystemMail(
+          participant.userId,
+          receiverCharacterId,
+          '战斗掉落补发',
+          '由于背包空间不足，部分战斗掉落已通过邮件补发，请前往邮箱领取。',
+          { items: chunk },
+          30,
+        );
+        if (!mailResult.success) {
+          console.warn(`挂机掉落补发邮件发送失败: ${mailResult.message}`);
+        }
+      }
+    }
+
+    await applyCharacterRewardDeltas(pendingCharacterRewardDeltas);
+
+    return {
+      expGained: plan.expGained,
+      silverGained: totalSilver,
+      itemsGained: Array.from(settledItems.values()),
+      bagFullFlag: pendingMailItems.length > 0,
+    };
   }
 
 /**
