@@ -39,6 +39,7 @@ test('buildPartnerRecruitTextModelRequest: 应显式传入 seed 并在 prompt �
     quality?: string;
     promptNoiseHash?: string;
     baseModel?: string;
+    constraints?: string[];
   };
 
   assert.equal(request.seed, seed);
@@ -46,6 +47,10 @@ test('buildPartnerRecruitTextModelRequest: 应显式传入 seed 并在 prompt �
   assert.equal(parsedUserMessage.promptNoiseHash, buildPartnerRecruitPromptNoiseHash(seed));
   assert.equal(request.baseModel, resolvePartnerRecruitBaseModelBySeed(seed));
   assert.equal(parsedUserMessage.baseModel, resolvePartnerRecruitBaseModelBySeed(seed));
+  assert.equal(
+    parsedUserMessage.constraints?.some((rule) => rule.includes('仅作为伙伴主体形态、种族特征、气质与文风倾向参考')) ?? false,
+    false,
+  );
 });
 
 test('buildPartnerRecruitTextModelRequest: 传入自定义底模时应优先使用玩家输入', () => {
@@ -56,9 +61,14 @@ test('buildPartnerRecruitTextModelRequest: 传入自定义底模时应优先使�
   });
   const parsedUserMessage = JSON.parse(request.userMessage) as {
     baseModel?: string;
+    constraints?: string[];
   };
 
   assert.equal(request.requestedBaseModel, '雪狐');
   assert.equal(request.baseModel, '雪狐');
   assert.equal(parsedUserMessage.baseModel, '雪狐');
+  assert.equal(
+    parsedUserMessage.constraints?.includes('玩家指定的底模「雪狐」仅作为伙伴主体形态、种族特征、气质、文风与属性倾向参考，不得作为基础属性、成长数值、天生功法收益或整体强度的具体数值参考'),
+    true,
+  );
 });

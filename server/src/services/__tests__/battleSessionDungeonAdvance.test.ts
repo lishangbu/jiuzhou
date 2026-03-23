@@ -21,6 +21,7 @@
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import * as database from '../../config/database.js';
 import * as gameServerModule from '../../game/gameServer.js';
 import { dungeonService } from '../dungeon/service.js';
 import {
@@ -108,6 +109,8 @@ test('markBattleSessionFinished: 秘境胜利后应由服务端自动推进下�
   const nextBattleId = 'dungeon-battle-auto-advance-next';
   const sessionId = 'dungeon-battle-auto-advance-session';
   const instanceId = 'dungeon-instance-auto-advance';
+  let inTransaction = false;
+  let observedTransaction = false;
   const emitted: Array<{
     userId: number;
     event: string;
@@ -147,9 +150,19 @@ test('markBattleSessionFinished: 秘境胜利后应由服务端自动推进下�
     return 1 as unknown as ReturnType<typeof setTimeout>;
   }) as typeof setTimeout);
   t.mock.method(globalThis, 'clearTimeout', (() => undefined) as typeof clearTimeout);
+  t.mock.method(database, 'withTransactionAuto', async <T>(callback: () => Promise<T>) => {
+    inTransaction = true;
+    try {
+      return await callback();
+    } finally {
+      inTransaction = false;
+    }
+  });
   t.mock.method(dungeonService, 'nextDungeonInstance', async (userId: number, requestInstanceId: string) => {
     assert.equal(userId, 1);
     assert.equal(requestInstanceId, instanceId);
+    observedTransaction = inTransaction;
+    assert.equal(inTransaction, true, '秘境自动推进进入结算前必须已经建立事务上下文');
     return {
       success: true as const,
       data: {
@@ -196,6 +209,7 @@ test('markBattleSessionFinished: 秘境胜利后应由服务端自动推进下�
   assert.equal(session?.currentBattleId, nextBattleId);
   assert.equal(session?.nextAction, 'none');
   assert.equal(session?.canAdvance, false);
+  assert.equal(observedTransaction, true);
 
   assert.deepEqual(emitted.map((entry) => entry.userId), [1, 2]);
   for (const entry of emitted) {

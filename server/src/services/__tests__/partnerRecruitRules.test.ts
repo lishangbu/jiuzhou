@@ -190,6 +190,22 @@ test('buildPartnerRecruitPromptInput: 应向 AI 注入青木小偶参考模板',
   assert.equal(referencePartnerExample?.partner?.levelAttrGains?.qixue_huifu, 0.2);
 });
 
+test('buildPartnerRecruitPromptInput: 玩家指定底模时应声明可作属性倾向参考但不作具体数值参考', () => {
+  const promptInput = buildPartnerRecruitPromptInput('天', {
+    baseModel: DEFAULT_BASE_MODEL,
+    isPlayerProvidedBaseModel: true,
+  }) as {
+    constraints?: string[];
+  };
+
+  assert.equal(
+    promptInput.constraints?.includes(
+      `玩家指定的底模「${DEFAULT_BASE_MODEL}」仅作为伙伴主体形态、种族特征、气质、文风与属性倾向参考，不得作为基础属性、成长数值、天生功法收益或整体强度的具体数值参考`,
+    ),
+    true,
+  );
+});
+
 test('buildPartnerRecruitPromptInput: 应放开 role 枚举并要求显式提供 combatStyle 与基础类型', () => {
   const promptInput = buildPartnerRecruitPromptInput('黄', {
     baseModel: DEFAULT_BASE_MODEL,
