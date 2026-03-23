@@ -25,6 +25,7 @@
 
 import crypto from 'crypto';
 import { getBattleLogCursor } from '../../battle/logStream.js';
+import { withTransactionAuto } from '../../config/database.js';
 import { getGameServer } from '../../game/gameServer.js';
 import { battleParticipants } from '../battle/runtime/state.js';
 import { getBattleState } from '../battle/queries.js';
@@ -649,7 +650,11 @@ export const advanceBattleSession = async (
 
   if (session.type === 'dungeon') {
     const context = session.context as { instanceId: string };
-    const dungeonRes = await dungeonService.nextDungeonInstance(userId, context.instanceId);
+    // 秘境推进在通关结算阶段会获取奖励目标锁，事务边界必须在 BattleSession 入口就明确建立，
+    // 避免把“必须有事务”的约束隐式散落给更深层的秘境结算逻辑。
+    const dungeonRes = await withTransactionAuto(() =>
+      dungeonService.nextDungeonInstance(userId, context.instanceId),
+    );
     if (!dungeonRes.success || !dungeonRes.data) {
       return {
         success: false,

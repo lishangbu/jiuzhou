@@ -351,6 +351,7 @@ export const buildGeneratedPartnerTextModelRequest = (params: {
     systemMessage: PARTNER_GENERATION_PROMPT_SYSTEM_MESSAGE,
     userMessage: JSON.stringify(buildPartnerRecruitPromptInput(params.quality, {
       baseModel: baseModelSelection.baseModel,
+      isPlayerProvidedBaseModel: baseModelSelection.requestedBaseModel !== null,
       promptNoiseHash,
       fusionReferencePartners: params.fusionReferencePartners,
     })),

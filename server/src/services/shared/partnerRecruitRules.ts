@@ -21,6 +21,7 @@
 import {
   getPartnerDefinitionById,
   type PartnerBaseAttrConfig,
+  type PartnerDefConfig,
 } from '../staticConfigLoader.js';
 import {
   buildTextModelPromptNoiseHash,
@@ -101,6 +102,7 @@ type TextLengthRange = {
 
 export type PartnerRecruitPromptInputOptions = {
   baseModel: string;
+  isPlayerProvidedBaseModel?: boolean;
   promptNoiseHash?: string;
   fusionReferencePartners?: PartnerRecruitFusionReferencePartner[];
 };
@@ -209,6 +211,7 @@ const PARTNER_RECRUIT_TECHNIQUE_SLOT_COUNT_BY_QUALITY: Record<PartnerRecruitQual
   地: 5,
   天: 6,
 };
+const PARTNER_RECRUIT_REFERENCE_PARTNER_ID = 'partner-qingmu-xiaoou';
 
 const getPartnerRecruitPassiveValueConstraint = (
   key: PartnerRecruitPassiveKey,
@@ -242,7 +245,7 @@ const QUALITY_ROLL_TABLE: ReadonlyArray<{ quality: PartnerRecruitQuality; weight
   { quality: '黄', weight: 4 },
   { quality: '玄', weight: 3 },
   { quality: '地', weight: 2 },
-  { quality: '天', weight: 1 },
+  { quality: '天', weight: 100 },
 ];
 
 const asString = (raw: unknown): string => (typeof raw === 'string' ? raw.trim() : '');
@@ -255,6 +258,14 @@ const asInt = (raw: unknown): number => {
 const asFiniteNumber = (raw: unknown): number => {
   const n = Number(raw);
   return Number.isFinite(n) ? n : Number.NaN;
+};
+
+const getPartnerRecruitReferenceDefinition = (): PartnerDefConfig => {
+  const definition = getPartnerDefinitionById(PARTNER_RECRUIT_REFERENCE_PARTNER_ID);
+  if (!definition) {
+    throw new Error(`缺少伙伴招募参考模板：${PARTNER_RECRUIT_REFERENCE_PARTNER_ID}`);
+  }
+  return definition;
 };
 
 const isPartnerRecruitQuality = (raw: unknown): raw is PartnerRecruitQuality => {
@@ -595,15 +606,12 @@ export const resolvePartnerRecruitTechniqueSlotCount = (
   return PARTNER_RECRUIT_TECHNIQUE_SLOT_COUNT_BY_QUALITY[quality];
 };
 
-const PARTNER_RECRUIT_REFERENCE_PARTNER_ID = 'partner-qingmu-xiaoou';
-
 export const buildPartnerRecruitPromptNoiseHash = (seed: number): string => {
   return buildTextModelPromptNoiseHash('partner-recruit', seed);
 };
 
 const buildPartnerRecruitReferenceExample = (): Record<string, unknown> | null => {
-  const definition = getPartnerDefinitionById(PARTNER_RECRUIT_REFERENCE_PARTNER_ID);
-  if (!definition) return null;
+  const definition = getPartnerRecruitReferenceDefinition();
   return {
     partner: {
       name: definition.name,
@@ -665,6 +673,9 @@ export const buildPartnerRecruitPromptInput = (
       '顶层字段必须且只能使用 requiredTopLevelKeys，禁止使用 forbiddenAliasKeys 中的别名字段',
       ...PARTNER_RECRUIT_FORM_RULES,
       `本次伙伴基础类型固定为「${options.baseModel}」；伙伴主体形态、种族特征与描述必须围绕该基础类型展开，可做仙侠化变体，但禁止偏离成其他基础类型`,
+      ...(options.isPlayerProvidedBaseModel
+        ? [`玩家指定的底模「${options.baseModel}」仅作为伙伴主体形态、种族特征、气质、文风与属性流派倾向参考，不得作为基础属性、成长数值、天生功法收益或整体强度的具体数值参考`]
+        : []),
       `伙伴名字 ${PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.partnerName.min}-${PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.partnerName.max} 个中文字符，不得包含标点或空格`,
       `伙伴描述 ${PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.partnerDescription.min}-${PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.partnerDescription.max} 个中文字符`,
       `伙伴角色 role 为自由发挥的中文职业称谓，长度 ${PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.partnerRole.min}-${PARTNER_RECRUIT_TEXT_LENGTH_LIMITS.partnerRole.max} 个中文字符`,
