@@ -1388,113 +1388,106 @@
           "show_in_ui": true
         },
         {
-          "item_def_id": "set-zhaogu-head",
-          "chance": 0.08,
-          "qty_min": 1,
-          "qty_max": 1,
-          "show_in_ui": true
-        },
-        {
           "item_def_id": "set-zhaogu-clothes",
-          "chance": 0.07,
+          "chance": 0.04,
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true
         },
         {
           "item_def_id": "set-zhaogu-gloves",
-          "chance": 0.08,
+          "chance": 0.04,
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true
         },
         {
           "item_def_id": "set-zhaogu-pants",
-          "chance": 0.07,
+          "chance": 0.04,
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true
         },
         {
           "item_def_id": "set-zhaogu-necklace",
-          "chance": 0.06,
+          "chance": 0.04,
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true
         },
         {
           "item_def_id": "set-zhaogu-accessory",
-          "chance": 0.06,
-          "qty_min": 1,
-          "qty_max": 1,
-          "show_in_ui": true
-        },
-        {
-          "item_def_id": "set-zhaogu-weapon",
-          "chance": 0.035,
-          "qty_min": 1,
-          "qty_max": 1,
-          "show_in_ui": true
-        },
-        {
-          "item_def_id": "set-zhaogu-artifact",
-          "chance": 0.045,
-          "qty_min": 1,
-          "qty_max": 1,
-          "show_in_ui": true
-        },
-        {
-          "item_def_id": "set-xuanlv-head",
-          "chance": 0.08,
+          "chance": 0.04,
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true
         },
         {
           "item_def_id": "set-xuanlv-clothes",
-          "chance": 0.07,
+          "chance": 0.04,
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true
         },
         {
           "item_def_id": "set-xuanlv-gloves",
-          "chance": 0.08,
+          "chance": 0.04,
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true
         },
         {
           "item_def_id": "set-xuanlv-pants",
-          "chance": 0.07,
+          "chance": 0.04,
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true
         },
         {
           "item_def_id": "set-xuanlv-necklace",
-          "chance": 0.06,
+          "chance": 0.04,
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true
         },
         {
           "item_def_id": "set-xuanlv-accessory",
-          "chance": 0.06,
+          "chance": 0.04,
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true
         },
         {
-          "item_def_id": "set-xuanlv-weapon",
-          "chance": 0.035,
+          "item_def_id": "set-suijing-clothes",
+          "chance": 0.04,
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true
         },
         {
-          "item_def_id": "set-xuanlv-artifact",
-          "chance": 0.045,
+          "item_def_id": "set-suijing-gloves",
+          "chance": 0.04,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-suijing-pants",
+          "chance": 0.04,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-suijing-necklace",
+          "chance": 0.04,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-suijing-accessory",
+          "chance": 0.04,
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true

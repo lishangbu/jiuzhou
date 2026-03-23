@@ -2265,6 +2265,27 @@
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-zhaogu-head",
+          "chance": 0.03,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-xuanlv-head",
+          "chance": 0.03,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-suijing-head",
+          "chance": 0.03,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
         }
       ],
       "common_pool_ids": []
@@ -2291,6 +2312,27 @@
         {
           "item_def_id": "box-011",
           "chance": 0.24,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-zhaogu-head",
+          "chance": 0.03,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-xuanlv-head",
+          "chance": 0.03,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "set-suijing-head",
+          "chance": 0.03,
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true
