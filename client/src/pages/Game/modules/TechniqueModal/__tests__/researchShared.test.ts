@@ -23,6 +23,7 @@ const buildStatus = (
   cooldownBypassTokenCost: 1,
   cooldownBypassTokenItemName: '顿悟符',
   cooldownBypassTokenAvailableQty: 1,
+  burningWordPromptMaxLength: 1,
   currentDraft: null,
   draftExpireAt: null,
   nameRules: {
@@ -45,6 +46,7 @@ describe('researchShared', () => {
         generationId: 'gen-1',
         status: 'pending',
         quality: '玄',
+        burningWordPrompt: null,
         draftTechniqueId: null,
         startedAt: '2026-03-08T10:00:00.000Z',
         finishedAt: null,
@@ -120,6 +122,7 @@ describe('researchShared', () => {
         generationId: 'gen-2',
         status: 'generated_draft',
         quality: '地',
+        burningWordPrompt: '焰',
         draftTechniqueId: 'draft-1',
         startedAt: '2026-03-08T10:00:00.000Z',
         finishedAt: '2026-03-08T10:05:00.000Z',

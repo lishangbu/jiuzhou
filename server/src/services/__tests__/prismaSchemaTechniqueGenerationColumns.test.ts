@@ -69,4 +69,9 @@ test('technique_generation_job: Prisma schema 应声明任务恢复依赖列', (
     /\bused_cooldown_bypass_token\s+Boolean\b/,
     'technique_generation_job 缺少 used_cooldown_bypass_token 列定义',
   );
+  assertModelHasField(
+    'technique_generation_job',
+    /\bburning_word_prompt\s+String\?\s+@db\.VarChar\(8\)/,
+    'technique_generation_job 缺少 burning_word_prompt 列定义',
+  );
 });

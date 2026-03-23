@@ -17,7 +17,7 @@
  * 1. `pending` 时不能再允许重复点击“开始领悟”，否则会误导玩家可以并发生成。
  * 2. 冷却展示必须仅消费共享纯函数，避免这里和按钮禁用条件各算一套剩余时间。
  */
-import { Button, Switch, Tag } from 'antd';
+import { Button, Input, Switch, Tag } from 'antd';
 import { getItemQualityLabel, getItemQualityTagClassName } from '../../shared/itemQuality';
 import type {
   TechniqueResearchStatusData,
@@ -33,6 +33,9 @@ import {
   mapResearchPreviewSkillToDetail,
   renderSkillCardDetails,
 } from './skillDetailShared';
+import {
+  buildTechniqueResearchBurningWordTagText,
+} from './researchPromptShared';
 
 type ResearchPanelProps = {
   status: TechniqueResearchStatusData | null;
@@ -42,12 +45,21 @@ type ResearchPanelProps = {
   discardSubmitting: boolean;
   publishSubmitting: boolean;
   cooldownBypassEnabled: boolean;
+  burningWordPromptInput: string;
   submitState: TechniqueResearchSubmitState;
   onGenerateDraft: () => void;
+  onBurningWordPromptChange: (nextValue: string) => void;
   onCooldownBypassEnabledChange: (nextEnabled: boolean) => void;
   onRefresh: () => void;
   onDiscardDraft: (generationId: string) => void;
   onCopyResearchBook: (generationId: string, suggestedName: string) => void;
+};
+
+const renderTechniqueResearchBurningWordTag = (
+  burningWordPrompt: string | null | undefined,
+): React.ReactNode => {
+  if (!burningWordPrompt) return null;
+  return <Tag color="geekblue">{buildTechniqueResearchBurningWordTagText(burningWordPrompt)}</Tag>;
 };
 
 const ResearchPanel: React.FC<ResearchPanelProps> = ({
@@ -58,8 +70,10 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
   discardSubmitting,
   publishSubmitting,
   cooldownBypassEnabled,
+  burningWordPromptInput,
   submitState,
   onGenerateDraft,
+  onBurningWordPromptChange,
   onCooldownBypassEnabledChange,
   onRefresh,
   onDiscardDraft,
@@ -68,6 +82,11 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
   const panelView = resolveTechniqueResearchPanelView(status);
   const cooldownDisplay = resolveTechniqueResearchCooldownDisplay(status, cooldownBypassEnabled);
   const currentFragmentCost = resolveTechniqueResearchCurrentFragmentCost(status, cooldownBypassEnabled);
+  const burningWordPromptMaxLength = status?.burningWordPromptMaxLength ?? 1;
+  const burningWordPromptInputDisabled = !status?.unlocked
+    || panelView.kind === 'pending'
+    || panelView.kind === 'draft'
+    || generateSubmitting;
   const hasCooldownBypassCapability = Boolean(status?.unlocked)
     && Boolean(status?.cooldownBypassTokenBypassesCooldown)
     && (status?.cooldownHours ?? 0) > 0;
@@ -100,20 +119,32 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
         </div>
 
         <div className="tech-research-actions">
-          <div className="tech-research-primary-action">
-            <Button
-              className="tech-research-generate-button"
-              type="primary"
-              loading={generateSubmitting}
-              disabled={!submitState.canSubmit}
-              onClick={onGenerateDraft}
-            >
-              开始领悟
+          {panelView.kind === 'pending' ? (
+            <Button className="tech-research-refresh-button" loading={refreshing} onClick={onRefresh}>
+              刷新状态
             </Button>
-          </div>
-          <Button className="tech-research-refresh-button" loading={refreshing} onClick={onRefresh}>
-            刷新
-          </Button>
+          ) : (
+            <div className="tech-research-action-row">
+              <Input
+                className="tech-research-burning-word-input"
+                value={burningWordPromptInput}
+                onChange={(event) => onBurningWordPromptChange(event.target.value)}
+                placeholder="留空随机"
+                maxLength={burningWordPromptMaxLength}
+                disabled={burningWordPromptInputDisabled}
+                prefix={<span className="tech-research-burning-word-prefix">焚诀</span>}
+              />
+              <Button
+                className="tech-research-generate-button"
+                type="primary"
+                loading={generateSubmitting}
+                disabled={!submitState.canSubmit}
+                onClick={onGenerateDraft}
+              >
+                开始领悟
+              </Button>
+            </div>
+          )}
         </div>
 
         <div className="tech-research-tips">
@@ -139,6 +170,7 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
               推演可能需要较长时间，请耐心等待结果。当前推演完成前无法开启新的洞府研修。
             </div>
             <div className="tech-research-status-meta">
+              {renderTechniqueResearchBurningWordTag(panelView.job.burningWordPrompt)}
               <Tag color="processing">推演中</Tag>
               <Tag color="default">任务 #{panelView.job.generationId}</Tag>
             </div>
@@ -147,6 +179,9 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
         {!loading && panelView.kind === 'failed' ? (
           <div className="tech-research-status-card is-failed">
             <div className="tech-research-status-title">本次洞府研修未能成法</div>
+            <div className="tech-research-status-meta">
+              {renderTechniqueResearchBurningWordTag(panelView.job.burningWordPrompt)}
+            </div>
             <div className="tech-research-status-desc">{panelView.errorMessage}</div>
             <div className="tech-research-status-foot">本次结果已结束，可在条件满足时重新开始领悟。</div>
           </div>
@@ -162,6 +197,7 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({
                   </Tag>
                   <Tag color="default">{panelView.preview.type}</Tag>
                   <Tag color="default">最高{panelView.preview.maxLayer}层</Tag>
+                  {renderTechniqueResearchBurningWordTag(panelView.job.burningWordPrompt)}
                 </div>
               </div>
               <div className="tech-research-draft-expire">

@@ -73,6 +73,11 @@ import {
 } from './shared/techniqueResearchCost.js';
 import { persistGeneratedTechniqueCandidateTx } from './shared/generatedTechniquePersistence.js';
 import { getGeneratedTechniqueDefinitionById } from './generatedTechniqueConfigStore.js';
+import {
+  TECHNIQUE_BURNING_WORD_PROMPT_MAX_LENGTH,
+  buildTechniqueBurningWordPromptContext,
+  guardTechniqueBurningWordPrompt,
+} from './shared/techniqueBurningWordPrompt.js';
 
 export type TechniqueGenerationStatus =
   | 'pending'
@@ -180,6 +185,7 @@ export type TechniqueResearchJobView = {
   generationId: string;
   status: TechniqueGenerationStatus;
   quality: TechniqueQuality;
+  burningWordPrompt: string | null;
   draftTechniqueId: string | null;
   startedAt: string;
   finishedAt: string | null;
@@ -201,6 +207,7 @@ type TechniqueResearchStatusData = {
   cooldownBypassTokenCost: number;
   cooldownBypassTokenItemName: string;
   cooldownBypassTokenAvailableQty: number;
+  burningWordPromptMaxLength: number;
   currentDraft: GeneratedDraftRow | null;
   draftExpireAt: string | null;
   nameRules: ReturnType<typeof getTechniqueNameRulesView>;
@@ -400,14 +407,16 @@ const generateCandidateWithRetry = async (args: {
   characterId: number;
   techniqueType: GeneratedTechniqueType;
   quality: TechniqueQuality;
+  promptContext?: Record<string, unknown>;
 }): Promise<{ candidate: TechniqueGenerationCandidate; modelName: string; attemptCount: number; promptSnapshot: string }> => {
-  const { generationId, characterId, techniqueType, quality } = args;
+  const { generationId, characterId, techniqueType, quality, promptContext } = args;
   return generateTechniqueCandidateWithRetryCore({
     generationId,
     characterId,
     techniqueType,
     quality,
     maxLayer: QUALITY_MAX_LAYER[quality],
+    promptContext,
   });
 };
 
@@ -661,6 +670,7 @@ class TechniqueGenerationService {
             j.id AS generation_id,
             j.status,
             j.quality_rolled,
+            j.burning_word_prompt,
             j.draft_technique_id,
             j.created_at,
             j.finished_at,
@@ -741,6 +751,7 @@ class TechniqueGenerationService {
             generationId: asString(currentJobRow.generation_id),
             status: (asString(currentJobRow.status) as TechniqueGenerationStatus) || 'pending',
             quality: (asString(currentJobRow.quality_rolled) as TechniqueQuality) || '黄',
+            burningWordPrompt: asString(currentJobRow.burning_word_prompt) || null,
             draftTechniqueId: asString(currentJobRow.draft_technique_id) || null,
             draftExpireAt: toIsoString(currentJobRow.draft_expire_at),
             startedAt: toIsoString(currentJobRow.created_at) || new Date().toISOString(),
@@ -777,6 +788,7 @@ class TechniqueGenerationService {
         cooldownBypassTokenCost: TECHNIQUE_RESEARCH_COOLDOWN_BYPASS_TOKEN_COST,
         cooldownBypassTokenItemName,
         cooldownBypassTokenAvailableQty,
+        burningWordPromptMaxLength: TECHNIQUE_BURNING_WORD_PROMPT_MAX_LENGTH,
         currentDraft,
         draftExpireAt: currentDraft?.draftExpireAt ?? null,
         nameRules: getTechniqueNameRulesView(),
@@ -788,7 +800,11 @@ class TechniqueGenerationService {
   }
 
   @Transactional
-  private async createGenerationJobTx(characterId: number, cooldownBypassEnabled: boolean): Promise<ServiceResult<{
+  private async createGenerationJobTx(
+    characterId: number,
+    cooldownBypassEnabled: boolean,
+    burningWordPrompt: string | null | undefined,
+  ): Promise<ServiceResult<{
     generationId: string;
     techniqueType: GeneratedTechniqueType;
     quality: TechniqueQuality;
@@ -796,6 +812,14 @@ class TechniqueGenerationService {
     weekKey: string;
   }>> {
     await this.refundExpiredDraftJobsTx(characterId);
+    const burningWordPromptValidation = await guardTechniqueBurningWordPrompt(burningWordPrompt);
+    if (!burningWordPromptValidation.success) {
+      return {
+        success: false,
+        message: burningWordPromptValidation.message,
+        code: burningWordPromptValidation.code,
+      };
+    }
 
     const unlockRes = await this.getTechniqueResearchUnlockStateTx(characterId, true);
     if (!unlockRes.success) {
@@ -917,16 +941,26 @@ class TechniqueGenerationService {
           quality_rolled,
           cost_points,
           used_cooldown_bypass_token,
+          burning_word_prompt,
           draft_expire_at,
           created_at,
           updated_at
         ) VALUES (
-          $1, $2, $3, 'pending', $4, $5, $6, $7,
+          $1, $2, $3, 'pending', $4, $5, $6, $7, $8,
           NULL,
           NOW(), NOW()
         )
       `,
-      [generationId, characterId, weekKey, techniqueType, quality, costPoints, shouldUseCooldownBypassToken],
+      [
+        generationId,
+        characterId,
+        weekKey,
+        techniqueType,
+        quality,
+        costPoints,
+        shouldUseCooldownBypassToken,
+        burningWordPromptValidation.value,
+      ],
     );
 
     return {
@@ -1117,11 +1151,24 @@ class TechniqueGenerationService {
     const { characterId, generationId, techniqueType, quality } = args;
 
     try {
+      const jobRes = await query(
+        `
+          SELECT burning_word_prompt
+          FROM technique_generation_job
+          WHERE id = $1 AND character_id = $2
+          LIMIT 1
+        `,
+        [generationId, characterId],
+      );
+      const burningWordPrompt = asString(
+        (jobRes.rows[0] as Record<string, unknown> | undefined)?.burning_word_prompt,
+      ) || null;
       const generated = await generateCandidateWithRetry({
         generationId,
         characterId,
         techniqueType,
         quality,
+        promptContext: buildTechniqueBurningWordPromptContext(burningWordPrompt),
       });
       const executionResult = await generateTechniqueCandidateWithIcons({
         quality,
@@ -1189,13 +1236,21 @@ class TechniqueGenerationService {
     }
   }
 
-  async generateTechniqueDraft(characterId: number, cooldownBypassEnabled: boolean): Promise<ServiceResult<{
+  async generateTechniqueDraft(
+    characterId: number,
+    cooldownBypassEnabled: boolean,
+    burningWordPrompt: string | null | undefined,
+  ): Promise<ServiceResult<{
     generationId: string;
     techniqueType: GeneratedTechniqueType;
     quality: TechniqueQuality;
     status: 'pending';
   }>> {
-    const createRes = await this.createGenerationJobTx(characterId, cooldownBypassEnabled);
+    const createRes = await this.createGenerationJobTx(
+      characterId,
+      cooldownBypassEnabled,
+      burningWordPrompt,
+    );
     if (!createRes.success) {
       return { success: false, message: createRes.message, code: createRes.code };
     }

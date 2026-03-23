@@ -336,12 +336,12 @@
     line-height: 1.4;
   }
 
-  .ant-table-thead > tr > th {
+  .ant-table-thead>tr>th {
     font-size: 11px;
     padding: 6px 8px;
   }
 
-  .ant-table-tbody > tr > td {
+  .ant-table-tbody>tr>td {
     font-size: 11px;
     padding: 6px 8px;
     vertical-align: middle;
@@ -428,9 +428,8 @@
 }
 
 .tech-research-actions {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   margin-bottom: 10px;
   padding: 12px;
@@ -441,7 +440,6 @@
 }
 
 .tech-research-actions--single {
-  grid-template-columns: minmax(0, 1fr);
   gap: 0;
   margin-bottom: 0;
   padding: 0;
@@ -450,6 +448,7 @@
 }
 
 .tech-research-actions--draft-result {
+  display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 0;
@@ -458,13 +457,32 @@
   background: transparent;
 }
 
-.tech-research-primary-action {
-  min-width: 0;
+/* 焚诀输入 + 开始领悟 单行排列；pending 态切换为刷新按钮 */
+.tech-research-action-row {
   display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tech-research-burning-word-input.ant-input-affix-wrapper {
+  width: 110px;
+  flex: none;
+
+  .ant-input {
+    text-align: center;
+  }
+}
+
+.tech-research-burning-word-prefix {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .tech-research-generate-button.ant-btn {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
 }
 
 .tech-research-refresh-button.ant-btn {
@@ -699,7 +717,7 @@
   transform: translateY(-1px);
 }
 
-.tech-research-skill-card > .skill-card-details {
+.tech-research-skill-card>.skill-card-details {
   flex: 1;
 }
 
@@ -869,25 +887,24 @@
   }
 
   .tech-research-actions {
-    grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
     padding: 10px;
   }
 
   .tech-research-actions--single {
-    grid-template-columns: minmax(0, 1fr);
     gap: 0;
     padding: 0;
   }
 
   .tech-research-actions--draft-result {
+    display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
     padding: 0;
   }
 
-  .tech-research-refresh-button.ant-btn {
-    min-width: 84px;
+  .tech-research-burning-word-input.ant-input-affix-wrapper {
+    width: 100px;
   }
 
   .tech-research-draft-head {
@@ -1281,12 +1298,12 @@
     font-size: 11px;
   }
 
-  .ant-table-thead > tr > th {
+  .ant-table-thead>tr>th {
     font-size: 11px;
     padding: 6px 8px;
   }
 
-  .ant-table-tbody > tr > td {
+  .ant-table-tbody>tr>td {
     font-size: 11px;
     padding: 6px 8px;
     vertical-align: top;
@@ -1403,7 +1420,7 @@
   color: var(--text-color);
 }
 
-.tech-layer-mobile-section + .tech-layer-mobile-section {
+.tech-layer-mobile-section+.tech-layer-mobile-section {
   margin-top: 8px;
 }
 

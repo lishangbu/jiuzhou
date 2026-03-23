@@ -229,6 +229,7 @@ export type TechniqueResearchJobDto = {
   generationId: string;
   status: 'pending' | 'generated_draft' | 'published' | 'failed' | 'refunded';
   quality: '黄' | '玄' | '地' | '天';
+  burningWordPrompt: string | null;
   draftTechniqueId: string | null;
   startedAt: string;
   finishedAt: string | null;
@@ -279,6 +280,7 @@ export interface TechniqueResearchStatusResponse {
     cooldownBypassTokenCost: number;
     cooldownBypassTokenItemName: string;
     cooldownBypassTokenAvailableQty: number;
+    burningWordPromptMaxLength: number;
     currentDraft: TechniqueResearchDraftDto | null;
     draftExpireAt: string | null;
     nameRules: TechniqueResearchNameRulesDto;
@@ -307,10 +309,12 @@ export const generateTechniqueResearchDraft = (
   characterId: number,
   params: {
     cooldownBypassEnabled: boolean;
+    burningWordPrompt?: string;
   },
 ): Promise<TechniqueResearchGenerateResponse> => {
   return api.post(`/character/${characterId}/technique/research/generate`, {
     cooldownBypassEnabled: params.cooldownBypassEnabled,
+    burningWordPrompt: params.burningWordPrompt,
   });
 };
 

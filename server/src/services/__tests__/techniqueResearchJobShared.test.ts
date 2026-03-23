@@ -29,6 +29,7 @@ const buildInput = (
   generationId: 'gen-1',
   status: 'pending',
   quality: '玄',
+  burningWordPrompt: null,
   draftTechniqueId: null,
   draftExpireAt: null,
   startedAt: '2026-03-07T10:00:00.000Z',
@@ -44,6 +45,7 @@ test('generated_draft 且未查看时应返回成功结果红点', () => {
   const state = buildTechniqueResearchJobState(
     buildInput({
       status: 'generated_draft',
+      burningWordPrompt: '焰',
       draftTechniqueId: 'tech-gen-1',
       finishedAt: '2026-03-07T10:01:00.000Z',
       preview: {
@@ -63,6 +65,7 @@ test('generated_draft 且未查看时应返回成功结果红点', () => {
   assert.equal(state.hasUnreadResult, true);
   assert.equal(state.resultStatus, 'generated_draft');
   assert.equal(state.currentJob?.preview?.aiSuggestedName, '玄霜剑典');
+  assert.equal(state.currentJob?.burningWordPrompt, '焰');
 });
 
 test('generated_draft 已查看后不应继续亮红点', () => {

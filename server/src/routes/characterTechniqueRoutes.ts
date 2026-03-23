@@ -109,10 +109,19 @@ router.post('/:characterId/technique/research/generate', asyncHandler(async (req
   ) {
     throw new BusinessError('cooldownBypassEnabled 参数无效');
   }
+  const burningWordPromptRaw = req.body?.burningWordPrompt;
+  if (
+    burningWordPromptRaw !== undefined
+    && burningWordPromptRaw !== null
+    && typeof burningWordPromptRaw !== 'string'
+  ) {
+    throw new BusinessError('burningWordPrompt 参数无效');
+  }
 
   const result = await techniqueGenerationService.generateTechniqueDraft(
     characterId,
     cooldownBypassEnabledRaw === true,
+    typeof burningWordPromptRaw === 'string' ? burningWordPromptRaw : undefined,
   );
   if (result.success) {
     await safePushCharacterUpdate(userId);

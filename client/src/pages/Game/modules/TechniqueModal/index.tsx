@@ -41,6 +41,11 @@ import {
   normalizeTechniqueResearchCustomNameInput,
   resolveTechniqueResearchPublishErrorMessage,
 } from './researchNaming';
+import {
+  getTechniqueResearchBurningWordInputLength,
+  normalizeTechniqueResearchBurningWordInput,
+  resolveTechniqueResearchBurningWordRequestValue,
+} from './researchPromptShared';
 import { getSkillInlineSummary, renderSkillInlineDetails, renderSkillTooltip } from './skillDetailShared';
 import {
   formatTechniqueBonusAmount,
@@ -56,9 +61,9 @@ import './index.scss';
 
 type TechQuality = '黄' | '玄' | '地' | '天';
 
-type TechniqueSkill = { 
-  id: string; 
-  name: string; 
+type TechniqueSkill = {
+  id: string;
+  name: string;
   icon: string;
   // 完整技能数据用于Tooltip显示
   description?: string;
@@ -374,6 +379,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
   const [generateSubmitting, setGenerateSubmitting] = useState(false);
   const [discardSubmitting, setDiscardSubmitting] = useState(false);
   const [researchCooldownBypassEnabled, setResearchCooldownBypassEnabled] = useState(false);
+  const [researchBurningWordInput, setResearchBurningWordInput] = useState('');
   const [publishSubmitting, setPublishSubmitting] = useState(false);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [publishTargetGenerationId, setPublishTargetGenerationId] = useState('');
@@ -403,6 +409,11 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
   const hasResearchCooldownBypassToken = useMemo(
     () => hasTechniqueResearchCooldownBypassToken(researchStatus),
     [researchStatus],
+  );
+  const researchBurningWordMaxLength = researchStatus?.burningWordPromptMaxLength ?? 1;
+  const researchBurningWordInputLength = useMemo(
+    () => getTechniqueResearchBurningWordInputLength(researchBurningWordInput),
+    [researchBurningWordInput],
   );
 
   useEffect(() => {
@@ -606,6 +617,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
     try {
       const generateRes = await generateTechniqueResearchDraft(characterId, {
         cooldownBypassEnabled: researchCooldownBypassEnabled,
+        burningWordPrompt: resolveTechniqueResearchBurningWordRequestValue(researchBurningWordInput),
       });
       if (!generateRes?.success || !generateRes.data) {
         throw new Error(generateRes?.message || '生成失败');
@@ -623,6 +635,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
     generateSubmitting,
     message,
     refreshResearchStatus,
+    researchBurningWordInput,
     researchCooldownBypassEnabled,
     researchSubmitState.canSubmit,
   ]);
@@ -1250,8 +1263,14 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
         discardSubmitting={discardSubmitting}
         publishSubmitting={publishSubmitting}
         cooldownBypassEnabled={researchCooldownBypassEnabled}
+        burningWordPromptInput={researchBurningWordInput}
         submitState={researchSubmitState}
         onGenerateDraft={() => void handleGenerateResearchDraft()}
+        onBurningWordPromptChange={(nextValue) => {
+          setResearchBurningWordInput(
+            normalizeTechniqueResearchBurningWordInput(nextValue, researchBurningWordMaxLength),
+          );
+        }}
         onCooldownBypassEnabledChange={setResearchCooldownBypassEnabled}
         onRefresh={() => void refreshResearchStatus('manual')}
         onDiscardDraft={(generationId) => handleDiscardResearchDraft(generationId)}
@@ -1290,6 +1309,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
       maskClosable
       afterOpenChange={(visible) => {
         if (!visible) {
+          setResearchBurningWordInput('');
           resetResearchPublishState();
           return;
         }
@@ -1300,6 +1320,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
         setActiveTechId('');
         setDetailTechnique(null);
         setUpgradeCost(null);
+        setResearchBurningWordInput('');
         resetResearchPublishState();
       }}
     >

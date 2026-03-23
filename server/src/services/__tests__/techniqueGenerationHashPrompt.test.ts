@@ -53,6 +53,30 @@ test('buildTechniqueGenerationTextModelRequest: 应显式传入 seed 并在 prom
   assert.equal(parsedUserMessage.extraContext?.source, 'unit-test');
 });
 
+test('buildTechniqueGenerationTextModelRequest: 一字焚诀语境应保留在 extraContext 中', () => {
+  const request = buildTechniqueGenerationTextModelRequest({
+    techniqueType: '法诀',
+    quality: '地',
+    maxLayer: 7,
+    seed: 20260323,
+    promptContext: {
+      techniqueBurningWordPrompt: '焰',
+    },
+  });
+  const parsedUserMessage = JSON.parse(request.userMessage) as {
+    extraContext?: { techniqueBurningWordPrompt?: string };
+    constraints?: { generalRules?: string[] };
+  };
+
+  assert.equal(parsedUserMessage.extraContext?.techniqueBurningWordPrompt, '焰');
+  assert.equal(
+    parsedUserMessage.constraints?.generalRules?.includes(
+      '若 extraContext.techniqueBurningWordPrompt 存在，它表示玩家提供的一字焚诀意象；请围绕该字延展功法命名、描述、技能意象与文风，但不要解释这个提示词，也不要把它输出成额外字段或固定前缀',
+    ),
+    true,
+  );
+});
+
 test('buildTechniqueGenerationRetryPromptContext: 应保留原语境并注入重复 effect 纠偏约束', () => {
   const promptContext = buildTechniqueGenerationRetryPromptContext({
     promptContext: { source: 'unit-test' },
