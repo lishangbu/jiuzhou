@@ -11,8 +11,14 @@
 import type { NextFunction, Request, Response } from 'express';
 import { verifyToken } from '../services/authService.js';
 import { getCharacterIdByUserId } from '../services/shared/characterId.js';
+import { waitForUserConnectionSlot } from '../shared/userConnectionSlots.js';
 
 const AUTH_INVALID_MESSAGE = '登录状态无效，请重新登录';
+const HTTP_USER_QUEUE_TIMEOUT_MESSAGE = '当前账号请求排队超时，请稍后再试';
+const MAX_CONCURRENT_HTTP_REQUESTS_PER_USER = 6;
+const HTTP_USER_QUEUE_WAIT_MS = 5_000;
+
+let httpRequestSlotCounter = 0;
 
 const readBearerToken = (req: Request): string | null => {
   const authHeader = req.headers.authorization;
@@ -29,7 +35,54 @@ const parseUserIdFromToken = (token: string): number | null => {
   return userId;
 };
 
-export const requireAuth = (req: Request, res: Response, next: NextFunction): void => {
+const nextHttpRequestSlotId = (): string => {
+  httpRequestSlotCounter += 1;
+  return `http-request:${httpRequestSlotCounter}`;
+};
+
+const waitForUserHttpRequestSlot = async (
+  res: Response,
+  userId: number,
+): Promise<boolean> => {
+  const abortController = new AbortController();
+  const abortWaiting = (): void => {
+    abortController.abort();
+  };
+  res.once('close', abortWaiting);
+
+  const lease = await waitForUserConnectionSlot({
+    channel: 'http-request',
+    userId,
+    slotId: nextHttpRequestSlotId(),
+    limit: MAX_CONCURRENT_HTTP_REQUESTS_PER_USER,
+    waitMs: HTTP_USER_QUEUE_WAIT_MS,
+    signal: abortController.signal,
+  });
+  res.off('close', abortWaiting);
+
+  if (!lease) {
+    return false;
+  }
+
+  let released = false;
+  const release = (): void => {
+    if (released) {
+      return;
+    }
+    released = true;
+    lease.release();
+  };
+
+  res.once('finish', release);
+  res.once('close', release);
+  return true;
+};
+
+const rejectUserHttpRequestQueueTimeout = (res: Response): void => {
+  res.status(503).json({ success: false, message: HTTP_USER_QUEUE_TIMEOUT_MESSAGE });
+};
+
+export const requireAuth = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const token = readBearerToken(req);
   if (!token) {
     res.status(401).json({ success: false, message: AUTH_INVALID_MESSAGE });
@@ -39,6 +92,14 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction): vo
   const userId = parseUserIdFromToken(token);
   if (!userId) {
     res.status(401).json({ success: false, message: AUTH_INVALID_MESSAGE });
+    return;
+  }
+
+  const acquired = await waitForUserHttpRequestSlot(res, userId);
+  if (!acquired) {
+    if (!res.writableEnded) {
+      rejectUserHttpRequestQueueTimeout(res);
+    }
     return;
   }
 
@@ -60,6 +121,14 @@ export const requireCharacter = async (req: Request, res: Response, next: NextFu
   const userId = parseUserIdFromToken(token);
   if (!userId) {
     res.status(401).json({ success: false, message: AUTH_INVALID_MESSAGE });
+    return;
+  }
+
+  const acquired = await waitForUserHttpRequestSlot(res, userId);
+  if (!acquired) {
+    if (!res.writableEnded) {
+      rejectUserHttpRequestQueueTimeout(res);
+    }
     return;
   }
 

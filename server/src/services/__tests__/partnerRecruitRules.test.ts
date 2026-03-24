@@ -30,6 +30,7 @@ import {
   resolvePartnerRecruitQualityRateEntries,
   resolvePartnerRecruitQualityForGeneratedPreviewSuccess,
   resolvePartnerRecruitTechniqueSlotCount,
+  shouldForcePartnerRecruitHeavenQuality,
   validatePartnerRecruitDraft,
 } from '../shared/partnerRecruitRules.js';
 import {
@@ -125,6 +126,21 @@ test('resolvePartnerRecruitHeavenGuaranteeState: 连续 19 次成功生成未出
   });
 });
 
+test('shouldForcePartnerRecruitHeavenQuality: 仅 development 环境应开启本地必出天级', () => {
+  assert.equal(shouldForcePartnerRecruitHeavenQuality('development'), true);
+  assert.equal(shouldForcePartnerRecruitHeavenQuality('test'), false);
+  assert.equal(shouldForcePartnerRecruitHeavenQuality('production'), false);
+  assert.equal(shouldForcePartnerRecruitHeavenQuality(undefined), false);
+});
+
+test('resolvePartnerRecruitHeavenGuaranteeState: development 环境下应统一视为下次必出天级', () => {
+  assert.deepEqual(resolvePartnerRecruitHeavenGuaranteeState(0, 'development'), {
+    generatedNonHeavenCount: 0,
+    remainingUntilGuaranteedHeaven: 1,
+    isGuaranteedHeavenOnNextGeneratedPreview: true,
+  });
+});
+
 test('resolvePartnerRecruitQualityRateEntries: 保底态下应只展示天级 100% 概率', () => {
   assert.deepEqual(resolvePartnerRecruitQualityRateEntries(19), [
     { quality: '黄', weight: 0, rate: 0 },
@@ -134,8 +150,21 @@ test('resolvePartnerRecruitQualityRateEntries: 保底态下应只展示天级 10
   ]);
 });
 
+test('resolvePartnerRecruitQualityRateEntries: development 环境下应展示天级 100% 概率', () => {
+  assert.deepEqual(resolvePartnerRecruitQualityRateEntries(0, 'development'), [
+    { quality: '黄', weight: 0, rate: 0 },
+    { quality: '玄', weight: 0, rate: 0 },
+    { quality: '地', weight: 0, rate: 0 },
+    { quality: '天', weight: 1, rate: 100 },
+  ]);
+});
+
 test('resolvePartnerRecruitQualityForGeneratedPreviewSuccess: 保底态下成功生成时应直接产出天级', () => {
   assert.equal(resolvePartnerRecruitQualityForGeneratedPreviewSuccess(19), '天');
+});
+
+test('resolvePartnerRecruitQualityForGeneratedPreviewSuccess: development 环境下成功生成时应直接产出天级', () => {
+  assert.equal(resolvePartnerRecruitQualityForGeneratedPreviewSuccess(0, 'development'), '天');
 });
 
 test('resolvePartnerRecruitGeneratedNonHeavenCountAfterSuccess: 非天成功生成应累计，天级成功生成应重置', () => {

@@ -226,6 +226,31 @@ const PARTNER_RECRUIT_TECHNIQUE_SLOT_COUNT_BY_QUALITY: Record<PartnerRecruitQual
 const PARTNER_RECRUIT_REFERENCE_PARTNER_ID = 'partner-qingmu-xiaoou';
 export const PARTNER_RECRUIT_HEAVEN_GUARANTEE_TRIGGER_COUNT = 20;
 
+/**
+ * 本地开发环境天级直出开关
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1) 做什么：集中定义伙伴招募在本地开发环境下是否直接进入“下次必出天级”的统一口径。
+ * 2) 做什么：让概率展示、保底文案与实际生成品质共享同一环境判断，避免 service、状态 DTO、前端展示各写一套分支。
+ * 3) 不做什么：不改动正式环境概率表，不处理冷却，不覆盖测试环境。
+ *
+ * 输入/输出：
+ * - 输入：可选运行环境字符串，默认读取 `process.env.NODE_ENV`。
+ * - 输出：当前环境是否应强制按“天级必出”处理。
+ *
+ * 数据流/状态流：
+ * 运行环境 -> shouldForcePartnerRecruitHeavenQuality -> 保底状态 / 品质概率展示 / 实际品质生成。
+ *
+ * 关键边界条件与坑点：
+ * 1) 只认 `development`，不能把 `test`、空值或其他自定义环境一并放开，否则会污染测试口径。
+ * 2) 必须由共享规则统一消费；如果调用方自行判断环境，就会重新出现“面板显示一套、实际生成另一套”的重复逻辑。
+ */
+export const shouldForcePartnerRecruitHeavenQuality = (
+  nodeEnv: string | undefined = process.env.NODE_ENV,
+): boolean => {
+  return nodeEnv === 'development';
+};
+
 const getPartnerRecruitPassiveValueConstraint = (
   key: PartnerRecruitPassiveKey,
   quality: PartnerRecruitQuality,
@@ -573,8 +598,16 @@ const normalizePartnerRecruitGeneratedNonHeavenCount = (raw: number): number => 
 
 export const resolvePartnerRecruitHeavenGuaranteeState = (
   generatedNonHeavenCount: number,
+  nodeEnv: string | undefined = process.env.NODE_ENV,
 ): PartnerRecruitHeavenGuaranteeState => {
   const normalizedCount = normalizePartnerRecruitGeneratedNonHeavenCount(generatedNonHeavenCount);
+  if (shouldForcePartnerRecruitHeavenQuality(nodeEnv)) {
+    return {
+      generatedNonHeavenCount: normalizedCount,
+      remainingUntilGuaranteedHeaven: 1,
+      isGuaranteedHeavenOnNextGeneratedPreview: true,
+    };
+  }
   const guaranteeThreshold = PARTNER_RECRUIT_HEAVEN_GUARANTEE_TRIGGER_COUNT - 1;
   return {
     generatedNonHeavenCount: normalizedCount,
@@ -617,8 +650,9 @@ export const resolvePartnerRecruitQualityByWeight = (): PartnerRecruitQuality =>
  */
 export const resolvePartnerRecruitQualityRateEntries = (
   generatedNonHeavenCount = 0,
+  nodeEnv: string | undefined = process.env.NODE_ENV,
 ): PartnerRecruitQualityRateEntry[] => {
-  const guaranteeState = resolvePartnerRecruitHeavenGuaranteeState(generatedNonHeavenCount);
+  const guaranteeState = resolvePartnerRecruitHeavenGuaranteeState(generatedNonHeavenCount, nodeEnv);
   if (guaranteeState.isGuaranteedHeavenOnNextGeneratedPreview) {
     return QUALITY_ROLL_TABLE.map((entry) => ({
       quality: entry.quality,
@@ -636,8 +670,9 @@ export const resolvePartnerRecruitQualityRateEntries = (
 
 export const resolvePartnerRecruitQualityForGeneratedPreviewSuccess = (
   generatedNonHeavenCount: number,
+  nodeEnv: string | undefined = process.env.NODE_ENV,
 ): PartnerRecruitQuality => {
-  const guaranteeState = resolvePartnerRecruitHeavenGuaranteeState(generatedNonHeavenCount);
+  const guaranteeState = resolvePartnerRecruitHeavenGuaranteeState(generatedNonHeavenCount, nodeEnv);
   if (guaranteeState.isGuaranteedHeavenOnNextGeneratedPreview) {
     return '天';
   }

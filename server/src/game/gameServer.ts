@@ -36,6 +36,9 @@ import { getMonthCardActiveMapByCharacterIds } from "../services/shared/monthCar
 import { assertChatPhoneBindingReady } from "../services/marketPhoneBindingService.js";
 import { AsyncShutdownGate } from "../utils/asyncShutdownGate.js";
 import { emitLatestGameTimeSnapshot } from "../services/gameTimeService.js";
+import {
+  waitForUserConnectionSlot,
+} from "../shared/userConnectionSlots.js";
 
 // 玩家会话
 interface PlayerSession {
@@ -95,6 +98,8 @@ const assignCharacterDelta = <TKey extends keyof CharacterAttributes>(
 
 const ONLINE_PLAYERS_EMIT_INTERVAL_MS = 3000;
 const CHARACTER_PUSH_DEBOUNCE_MS = 80;
+const MAX_CONCURRENT_GAME_AUTH_PER_USER = 1;
+const GAME_AUTH_QUEUE_WAIT_MS = 3_000;
 type AsyncSocketHandler<TArgs extends SocketTaskArg[]> = (...args: TArgs) => Promise<void>;
 
 // 游戏服务器类
@@ -146,6 +151,13 @@ class GameServer {
 
       // 玩家认证并加入游戏
       socket.on("game:auth", this.createSocketTask(async (token: string) => {
+        const authWaitAbortController = new AbortController();
+        const abortWaiting = (): void => {
+          authWaitAbortController.abort();
+        };
+        socket.once("disconnect", abortWaiting);
+
+        let authLease: { release: () => void } | null = null;
         try {
           const { valid, decoded } = verifyToken(token);
           if (!valid || !decoded) {
@@ -155,6 +167,29 @@ class GameServer {
 
           const userId = decoded.id;
           const sessionToken = decoded.sessionToken;
+
+          authLease = await waitForUserConnectionSlot({
+            channel: "game-auth",
+            userId,
+            slotId: `game-auth:${socket.id}:${randomUUID()}`,
+            limit: MAX_CONCURRENT_GAME_AUTH_PER_USER,
+            waitMs: GAME_AUTH_QUEUE_WAIT_MS,
+            signal: authWaitAbortController.signal,
+          });
+          if (!authLease) {
+            if (!socket.disconnected) {
+              socket.emit("game:error", { message: "当前账号连接排队超时，请稍后再试" });
+            }
+            socket.disconnect();
+            return;
+          }
+          socket.off("disconnect", abortWaiting);
+
+          if (socket.disconnected) {
+            authLease.release();
+            authLease = null;
+            return;
+          }
 
           // 验证会话token
           const sessionResult = await verifySession(userId, sessionToken);
@@ -249,6 +284,11 @@ class GameServer {
         } catch (error) {
           console.error("游戏认证错误:", error);
           socket.emit("game:error", { message: "服务器错误" });
+        } finally {
+          socket.off("disconnect", abortWaiting);
+          if (authLease) {
+            authLease.release();
+          }
         }
       }));
 
