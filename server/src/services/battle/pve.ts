@@ -51,26 +51,62 @@ import {
 } from "./shared/startPolicy.js";
 import { uniqueStringIds, randomIntInclusive } from "./shared/helpers.js";
 import { buildBattleSnapshotState } from "./runtime/realtime.js";
+import { createScopedLogger } from "../../utils/logger.js";
+import { createSlowOperationLogger } from "../../utils/slowOperationLogger.js";
+
+const battlePveLogger = createScopedLogger("battle.pve");
 
 export async function startPVEBattle(
   userId: number,
   monsterIds: string[],
 ): Promise<BattleResult> {
+  const slowLogger = createSlowOperationLogger({
+    label: "battle.startPVEBattle",
+    fields: {
+      userId,
+      requestedMonsterCount: monsterIds.length,
+    },
+  });
+
   try {
     const characterBase = await getCharacterComputedByUserId(userId);
+    slowLogger.mark("getCharacterComputedByUserId", {
+      characterLoaded: Boolean(characterBase),
+    });
     if (!characterBase) {
+      slowLogger.flush({
+        success: false,
+        reason: "character_missing",
+      });
       return { success: false, message: "角色不存在" };
     }
     const characterId = Number(characterBase.id);
 
     const idleReject = await rejectIfIdling(characterId);
-    if (idleReject) return idleReject;
+    slowLogger.mark("rejectIfIdling", {
+      idleBlocked: Boolean(idleReject),
+    });
+    if (idleReject) {
+      slowLogger.flush({
+        success: false,
+        reason: "idle_blocked",
+      });
+      return idleReject;
+    }
 
     const characterBattleLoadout = await getCharacterBattleLoadoutByCharacterId(characterId);
+    slowLogger.mark("getCharacterBattleLoadoutByCharacterId", {
+      loadoutLoaded: Boolean(characterBattleLoadout),
+    });
     if (!characterBattleLoadout) {
+      slowLogger.flush({
+        success: false,
+        reason: "battle_loadout_missing",
+      });
       return { success: false, message: "角色战斗资料不存在" };
     }
     const monthCardActiveMap = await getMonthCardActiveMapByCharacterIds([characterId]);
+    slowLogger.mark("getMonthCardActiveMapByCharacterIds");
     const characterWithSetBonus: CharacterData = {
       ...characterBase,
       monthCardActive: monthCardActiveMap.get(characterId) ?? false,
@@ -78,6 +114,10 @@ export async function startPVEBattle(
     };
 
     if (characterWithSetBonus.qixue <= 0) {
+      slowLogger.flush({
+        success: false,
+        reason: "qixue_empty",
+      });
       return { success: false, message: "气血不足，无法战斗" };
     }
     const selfInBattleResult = buildCharacterInBattleResult(
@@ -85,10 +125,20 @@ export async function startPVEBattle(
       "character_in_battle",
       "角色正在战斗中",
     );
-    if (selfInBattleResult) return selfInBattleResult;
+    if (selfInBattleResult) {
+      slowLogger.flush({
+        success: false,
+        reason: "already_in_battle",
+      });
+      return selfInBattleResult;
+    }
     if (shouldValidateBattleStarterCooldown(PLAYER_DRIVEN_PVE_BATTLE_START_POLICY)) {
       const selfCooldown = validateBattleStartCooldown(characterId);
       if (selfCooldown) {
+        slowLogger.flush({
+          success: false,
+          reason: "battle_start_cooldown",
+        });
         return buildBattleStartCooldownResult(
           selfCooldown,
           "battle_start_cooldown",
@@ -102,12 +152,20 @@ export async function startPVEBattle(
     );
     const selectedMonsterId = requestedMonsterIds[0];
     if (!selectedMonsterId) {
+      slowLogger.flush({
+        success: false,
+        reason: "monster_missing",
+      });
       return { success: false, message: "请指定战斗目标" };
     }
 
     const mapId = characterBase.current_map_id || "";
     const roomId = characterBase.current_room_id || "";
     if (!mapId || !roomId) {
+      slowLogger.flush({
+        success: false,
+        reason: "position_invalid",
+      });
       return { success: false, message: "角色位置异常，无法战斗" };
     }
 
@@ -119,7 +177,14 @@ export async function startPVEBattle(
     );
 
     const room = await roomPromise;
+    slowLogger.mark("getRoomInMap", {
+      roomLoaded: Boolean(room),
+    });
     if (!room) {
+      slowLogger.flush({
+        success: false,
+        reason: "room_missing",
+      });
       return { success: false, message: "当前房间不存在，无法战斗" };
     }
 
@@ -132,12 +197,25 @@ export async function startPVEBattle(
 
     for (const id of requestedMonsterIds) {
       if (!roomMonsterIdSet.has(id)) {
+        slowLogger.flush({
+          success: false,
+          reason: "monster_not_in_room",
+        });
         return { success: false, message: "战斗目标不在当前房间" };
       }
     }
 
     const preparedTeam = await preparedTeamPromise;
-    if (!preparedTeam.success) return preparedTeam.result;
+    slowLogger.mark("prepareTeamBattleParticipants", {
+      teamPrepared: preparedTeam.success,
+    });
+    if (!preparedTeam.success) {
+      slowLogger.flush({
+        success: false,
+        reason: "team_prepare_failed",
+      });
+      return preparedTeam.result;
+    }
     const { validTeamMembers, participantUserIds } = preparedTeam;
 
     const partnerMemberPromise =
@@ -147,6 +225,9 @@ export async function startPVEBattle(
       });
     await syncBattleStartResourcesForUsers(participantUserIds, {
       context: "同步战前资源（普通战斗）",
+    });
+    slowLogger.mark("syncBattleStartResourcesForUsers", {
+      participantUserCount: participantUserIds.length,
     });
 
     const playerCount = validTeamMembers.length + 1;
@@ -168,12 +249,20 @@ export async function startPVEBattle(
 
     for (const id of finalMonsterIds) {
       if (!roomMonsterIdSet.has(id)) {
+        slowLogger.flush({
+          success: false,
+          reason: "resolved_monster_not_in_room",
+        });
         return { success: false, message: "战斗目标不在当前房间" };
       }
     }
 
     const monsterResolveResult = resolveOrderedMonsters(finalMonsterIds);
     if (!monsterResolveResult.success) {
+      slowLogger.flush({
+        success: false,
+        reason: "resolve_monsters_failed",
+      });
       return { success: false, message: monsterResolveResult.error };
     }
     const monsters = monsterResolveResult.monsters;
@@ -182,6 +271,7 @@ export async function startPVEBattle(
     const battleId = `battle-${userId}-${Date.now()}`;
 
     const partnerMember = await partnerMemberPromise;
+    slowLogger.mark("buildConfiguredPartnerBattleMember");
 
     const battleState = createPVEBattle(
       battleId,
@@ -197,6 +287,14 @@ export async function startPVEBattle(
 
     const engine = new BattleEngine(battleState);
     registerStartedBattle(battleId, engine, participantUserIds);
+    slowLogger.mark("registerStartedBattle", {
+      battleId,
+      participantUserCount: participantUserIds.length,
+    });
+    slowLogger.flush({
+      success: true,
+      battleId,
+    });
 
     return {
       success: true,
@@ -211,7 +309,15 @@ export async function startPVEBattle(
       },
     };
   } catch (error) {
-    console.error("发起战斗失败:", error);
+    slowLogger.flush({
+      success: false,
+      reason: "exception",
+    });
+    battlePveLogger.error({
+      userId,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+    }, "发起战斗失败");
     return { success: false, message: "发起战斗失败" };
   }
 }
@@ -346,7 +452,12 @@ export const startResolvedPVEBattleByPolicy = async (params: {
       },
     };
   } catch (error) {
-    console.error(params.errorMessage, error);
+    battlePveLogger.error({
+      battleId: params.battleId,
+      userId: params.userId,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+    }, params.errorMessage);
     return { success: false, message: params.errorMessage };
   }
 };
@@ -382,7 +493,11 @@ const startDungeonPVEBattleByPolicy = async (
       errorMessage: '发起秘境战斗失败',
     });
   } catch (error) {
-    console.error("发起秘境战斗失败:", error);
+    battlePveLogger.error({
+      userId,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+    }, "发起秘境战斗失败");
     return { success: false, message: "发起秘境战斗失败" };
   }
 };

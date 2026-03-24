@@ -44,6 +44,10 @@ import {
   getAttachedBattleSessionSnapshot,
   markBattleSessionAbandoned,
 } from "../battleSession/index.js";
+import { createScopedLogger } from "../../utils/logger.js";
+import { createSlowOperationLogger } from "../../utils/slowOperationLogger.js";
+
+const battleActionLogger = createScopedLogger("battle.action");
 
 export async function playerAction(
   userId: number,
@@ -51,10 +55,24 @@ export async function playerAction(
   skillId: string,
   targetIds: string[],
 ): Promise<BattleResult> {
+  const slowLogger = createSlowOperationLogger({
+    label: "api/battle/action",
+    fields: {
+      userId,
+      battleId,
+      skillId,
+      targetCount: targetIds.length,
+    },
+  });
+
   try {
     const engine = activeBattles.get(battleId);
 
     if (!engine) {
+      slowLogger.flush({
+        success: false,
+        reason: "battle_missing",
+      });
       return { success: false, message: "战斗不存在或已结束" };
     }
 
@@ -65,30 +83,67 @@ export async function playerAction(
       !participants.includes(userId) &&
       state.teams.attacker.odwnerId !== userId
     ) {
+      slowLogger.flush({
+        success: false,
+        reason: "forbidden",
+      });
       return { success: false, message: "无权操作此战斗" };
     }
 
     const currentUnit = engine.getCurrentUnit();
     if (!currentUnit) {
+      slowLogger.flush({
+        success: false,
+        reason: "no_current_unit",
+      });
       return { success: false, message: "没有当前行动单位" };
     }
     if (currentUnit.type !== "player" || state.currentTeam !== "attacker") {
+      slowLogger.flush({
+        success: false,
+        reason: "not_player_turn",
+      });
       return { success: false, message: "当前不是玩家行动回合" };
     }
 
     const result = engine.playerAction(userId, skillId, targetIds);
+    slowLogger.mark("engine.playerAction", {
+      actionSuccess: result.success,
+      phaseAfterAction: engine.getState().phase,
+    });
 
     if (!result.success) {
+      slowLogger.flush({
+        success: false,
+        reason: "engine_rejected",
+      });
       return { success: false, message: result.error || "行动失败" };
     }
     await emitBattleProgressUpdateSafely(battleId, engine);
+    slowLogger.mark("emitBattleProgressUpdateSafely", {
+      finalPhase: engine.getState().phase,
+    });
+    slowLogger.flush({
+      success: true,
+      battleFinished: engine.getState().phase === "finished",
+    });
 
     return {
       success: true,
       message: "行动已提交",
     };
   } catch (error) {
-    console.error("玩家行动失败:", error);
+    slowLogger.flush({
+      success: false,
+      reason: "exception",
+    });
+    battleActionLogger.error({
+      battleId,
+      userId,
+      skillId,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+    }, "玩家行动失败");
     return { success: false, message: "行动失败" };
   }
 }
@@ -135,7 +190,11 @@ export async function abandonBattle(
         void gameServer.pushCharacterUpdate(participantUserId);
       }
     } catch (error) {
-      console.warn(`[battle] 推送 waiting_transition 退出事件失败: ${battleId}`, error);
+      battleActionLogger.warn({
+        battleId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+      }, "推送 waiting_transition 退出事件失败");
     }
 
     return {
@@ -197,7 +256,11 @@ export async function abandonBattle(
       await settleArenaBattleIfNeeded(battleId, "defender_win");
     }
   } catch (error) {
-    console.warn("放弃战斗时竞技场结算失败:", error);
+    battleActionLogger.warn({
+      battleId,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+    }, "放弃战斗时竞技场结算失败");
   }
 
   try {
@@ -233,7 +296,11 @@ export async function abandonBattle(
       }
     }
   } catch (error) {
-    console.warn(`[battle] 推送放弃战斗事件失败: ${battleId}`, error);
+    battleActionLogger.warn({
+      battleId,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+    }, "推送放弃战斗事件失败");
   }
 
   activeBattles.delete(battleId);

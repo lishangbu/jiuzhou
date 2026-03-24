@@ -65,6 +65,13 @@ import {
   getPveResumeIntentByUserId,
   upsertPveResumeIntent,
 } from './pveResumeIntent.js';
+import { createScopedLogger } from '../../utils/logger.js';
+import {
+  createSlowOperationLogger,
+  type SlowLogFields,
+} from '../../utils/slowOperationLogger.js';
+
+const battleSessionLogger = createScopedLogger('battle.session');
 
 type BattleSessionResponse =
   | {
@@ -251,7 +258,12 @@ const emitDungeonSessionAutoAdvanceSnapshot = (params: {
       gameServer.emitToUser(userId, 'battle:update', payload);
     }
   } catch (error) {
-    console.warn('[battleSession] 推送秘境自动推进快照失败:', error);
+    battleSessionLogger.warn({
+      battleId: params.session.currentBattleId,
+      sessionId: params.session.sessionId,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+    }, '推送秘境自动推进快照失败');
   }
 };
 
@@ -443,7 +455,13 @@ const notifyBattleSessionEndedUsers = (params: {
       gameServer.emitToUser(userId, 'battle:update', payload);
     }
   } catch (error) {
-    console.warn('[battleSession] 推送会话终态退出事件失败:', error);
+    battleSessionLogger.warn({
+      battleId: params.battleId,
+      actorUserId: params.actorUserId,
+      sessionId: params.session.sessionId,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+    }, '推送会话终态退出事件失败');
   }
 };
 
@@ -634,17 +652,50 @@ export const advanceBattleSession = async (
   if (!session.canAdvance) {
     return { success: false, message: '当前战斗会话不可推进' };
   }
+  const slowLogger = createSlowOperationLogger({
+    label: 'api/battle-session/advance',
+    fields: {
+      userId,
+      sessionId,
+      sessionType: session.type,
+      nextAction: session.nextAction,
+    },
+  });
+  const flushAndReturn = (
+    response: BattleSessionResponse,
+    fields?: SlowLogFields,
+  ): BattleSessionResponse => {
+    slowLogger.flush({
+      success: response.success,
+      ...(fields ?? {}),
+    });
+    return response;
+  };
   clearDungeonSessionAutoAdvanceTimer(session.sessionId);
   const endNotificationScope = options?.endNotificationScope ?? 'peers_only';
 
   if (session.type === 'pve') {
     if (session.nextAction === 'return_to_map') {
-      return completeSessionReturnToMap(userId, session, endNotificationScope);
+      const response = await completeSessionReturnToMap(userId, session, endNotificationScope);
+      slowLogger.mark('completeSessionReturnToMap', {
+        finished: true,
+      });
+      return flushAndReturn(response, {
+        finished: true,
+      });
     }
     const context = session.context as { monsterIds: string[] };
     const battleRes = await startPVEBattle(userId, context.monsterIds);
+    slowLogger.mark('startPVEBattle', {
+      battleStarted: Boolean(battleRes.success && battleRes.data?.battleId),
+    });
     if (!battleRes.success || !battleRes.data?.battleId) {
-      return { success: false, message: battleRes.message || '开启下一场战斗失败' };
+      return flushAndReturn(
+        { success: false, message: battleRes.message || '开启下一场战斗失败' },
+        {
+          reason: 'start_pve_battle_failed',
+        },
+      );
     }
     const updated = updateBattleSessionRecord(session.sessionId, {
       currentBattleId: String(battleRes.data.battleId),
@@ -657,11 +708,26 @@ export const advanceBattleSession = async (
       canAdvance: false,
       lastResult: null,
     });
+    slowLogger.mark('updateBattleSessionRecord', {
+      sessionUpdated: Boolean(updated),
+    });
     if (!updated) {
-      return { success: false, message: '战斗会话不存在' };
+      return flushAndReturn(
+        { success: false, message: '战斗会话不存在' },
+        {
+          reason: 'session_missing_after_pve_advance',
+        },
+      );
     }
     await syncPveResumeIntentForSession(updated);
-    return buildSessionSuccess(updated, battleRes.data.state, false);
+    slowLogger.mark('syncPveResumeIntentForSession');
+    return flushAndReturn(
+      buildSessionSuccess(updated, battleRes.data.state, false),
+      {
+        finished: false,
+        battleId: String(battleRes.data.battleId),
+      },
+    );
   }
 
   if (session.type === 'dungeon') {
@@ -669,11 +735,17 @@ export const advanceBattleSession = async (
     // 统一复用 dungeonService 自己的 @Transactional 入口，避免 BattleSession
     // 再额外包一层事务适配，让“秘境推进的事务单一入口”始终集中在 dungeonService。
     const dungeonRes = await dungeonService.nextDungeonInstance(userId, context.instanceId);
+    slowLogger.mark('dungeonService.nextDungeonInstance', {
+      dungeonAdvanceSuccess: dungeonRes.success,
+      dungeonFinished: Boolean(dungeonRes.success && dungeonRes.data?.finished),
+    });
     if (!dungeonRes.success || !dungeonRes.data) {
-      return {
+      return flushAndReturn({
         success: false,
         message: dungeonRes.success ? '推进秘境失败' : (dungeonRes.message || '推进秘境失败'),
-      };
+      }, {
+        reason: 'dungeon_advance_failed',
+      });
     }
     if (dungeonRes.data.finished || !dungeonRes.data.battleId) {
       const settledBattleId = session.currentBattleId;
@@ -688,8 +760,16 @@ export const advanceBattleSession = async (
           canAdvance: false,
         },
       });
+      slowLogger.mark('finalizeBattleSession', {
+        sessionFinalized: Boolean(snapshot),
+      });
       if (!snapshot) {
-        return { success: false, message: '战斗会话不存在' };
+        return flushAndReturn(
+          { success: false, message: '战斗会话不存在' },
+          {
+            reason: 'session_missing_after_dungeon_finish',
+          },
+        );
       }
       if (settledBattleId) {
         notifyBattleSessionEndedUsers({
@@ -698,8 +778,15 @@ export const advanceBattleSession = async (
           battleId: settledBattleId,
           endNotificationScope,
         });
+        slowLogger.mark('notifyBattleSessionEndedUsers');
       }
-      return buildSessionSuccess(snapshot, undefined, true);
+      return flushAndReturn(
+        buildSessionSuccess(snapshot, undefined, true),
+        {
+          finished: true,
+          dungeonStatus: dungeonRes.data.status,
+        },
+      );
     }
     const updated = updateBattleSessionRecord(session.sessionId, {
       currentBattleId: String(dungeonRes.data.battleId),
@@ -712,23 +799,60 @@ export const advanceBattleSession = async (
       canAdvance: false,
       lastResult: null,
     });
+    slowLogger.mark('updateBattleSessionRecord', {
+      sessionUpdated: Boolean(updated),
+    });
     if (!updated) {
-      return { success: false, message: '战斗会话不存在' };
+      return flushAndReturn(
+        { success: false, message: '战斗会话不存在' },
+        {
+          reason: 'session_missing_after_dungeon_advance',
+        },
+      );
     }
-    return buildSessionSuccess(updated, dungeonRes.data.state, false);
+    return flushAndReturn(
+      buildSessionSuccess(updated, dungeonRes.data.state, false),
+      {
+        finished: false,
+        battleId: String(dungeonRes.data.battleId),
+        dungeonStatus: dungeonRes.data.status,
+      },
+    );
   }
 
   if (session.type === 'tower') {
     if (session.nextAction === 'return_to_map') {
-      return completeSessionReturnToMap(userId, session, endNotificationScope);
+      const response = await completeSessionReturnToMap(userId, session, endNotificationScope);
+      slowLogger.mark('completeSessionReturnToMap', {
+        finished: true,
+      });
+      return flushAndReturn(response, {
+        finished: true,
+      });
     }
-    return advanceTowerRun({
+    const response = await advanceTowerRun({
       userId,
       session,
     });
+    const towerFinished =
+      response.success && 'finished' in response.data
+        ? Boolean(response.data.finished)
+        : false;
+    slowLogger.mark('advanceTowerRun', {
+      finished: towerFinished,
+    });
+    return flushAndReturn(response, {
+      finished: towerFinished,
+    });
   }
 
-  return completeSessionReturnToMap(userId, session, endNotificationScope);
+  const response = await completeSessionReturnToMap(userId, session, endNotificationScope);
+  slowLogger.mark('completeSessionReturnToMap', {
+    finished: true,
+  });
+  return flushAndReturn(response, {
+    finished: true,
+  });
 };
 
 export const markBattleSessionFinished = async (

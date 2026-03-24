@@ -71,6 +71,10 @@ import {
   settleTowerBattle,
 } from "../tower/service.js";
 import { getTowerBattleRuntime } from "../tower/runtime.js";
+import { createScopedLogger } from "../../utils/logger.js";
+import { createSlowOperationLogger } from "../../utils/slowOperationLogger.js";
+
+const battleSettlementLogger = createScopedLogger("battle.settlement");
 
 type ResolvedSettlementParticipants = {
   participants: BattleParticipant[];
@@ -177,6 +181,13 @@ async function finishBattleCore(
   engine: BattleEngine,
   monsters: MonsterData[],
 ): Promise<BattleResult> {
+  const slowLogger = createSlowOperationLogger({
+    label: "battle.finishBattle",
+    fields: {
+      battleId,
+      monsterCount: monsters.length,
+    },
+  });
   const state = engine.getState();
   const result = engine.getResult();
   const finalLogDelta = consumeBattleLogDelta(battleId);
@@ -187,6 +198,10 @@ async function finishBattleCore(
     state,
     participantUserIds,
   );
+  slowLogger.mark("resolveSettlementParticipants", {
+    participantCount: participants.length,
+    notificationUserCount: notificationUserIds.length,
+  });
   const participantCount = Math.max(1, participants.length);
   const isVictory = result.result === "attacker_win";
   const isDungeonBattle = battleId.startsWith("dungeon-battle-");
@@ -235,10 +250,14 @@ async function finishBattleCore(
           battleId,
           result: result.result as "attacker_win" | "defender_win" | "draw",
         });
+        slowLogger.mark("applyTowerPostBattleResourceChange");
         towerRewardsData = await settleTowerBattle({
           battleId,
           result: result.result as "attacker_win" | "defender_win" | "draw",
           participants: rewardParticipants,
+        });
+        slowLogger.mark("settleTowerBattle", {
+          rewardParticipantCount: rewardParticipants.length,
         });
       } else {
         dropResult = await battleDropService.distributeBattleRewards(
@@ -247,6 +266,9 @@ async function finishBattleCore(
           true,
           { isDungeonBattle },
         );
+        slowLogger.mark("distributeBattleRewards", {
+          rewardParticipantCount: rewardParticipants.length,
+        });
 
         for (const participant of participants) {
           const computed = await getCharacterComputedByCharacterId(participant.characterId);
@@ -257,6 +279,7 @@ async function finishBattleCore(
             lingqi: computed.lingqi,
           });
         }
+        slowLogger.mark("restoreCharacterResourcesAfterVictory");
       }
 
       try {
@@ -276,18 +299,27 @@ async function finishBattleCore(
           }
         }
       } catch (error) {
-        console.warn("[battle] 记录击杀怪物事件失败:", error);
+        battleSettlementLogger.warn({
+          battleId,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          errorStack: error instanceof Error ? error.stack : undefined,
+        }, "记录击杀怪物事件失败");
       }
+      slowLogger.mark("recordKillMonsterEvent");
     } else if (result.result === "defender_win") {
       if (isTowerBattle) {
         await applyTowerPostBattleResourceChange({
           battleId,
           result: result.result as "attacker_win" | "defender_win" | "draw",
         });
+        slowLogger.mark("applyTowerPostBattleResourceChange");
         await settleTowerBattle({
           battleId,
           result: result.result as "attacker_win" | "defender_win" | "draw",
           participants: rewardParticipants,
+        });
+        slowLogger.mark("settleTowerBattle", {
+          rewardParticipantCount: rewardParticipants.length,
         });
       } else {
         for (const participant of participants) {
@@ -300,12 +332,16 @@ async function finishBattleCore(
             { minQixue: 1 },
           );
         }
+        slowLogger.mark("applyFailureResourceLoss");
       }
     } else if (isTowerBattle && result.result === "draw") {
       await settleTowerBattle({
         battleId,
         result: result.result as "attacker_win" | "defender_win" | "draw",
         participants: rewardParticipants,
+      });
+      slowLogger.mark("settleTowerBattle", {
+        rewardParticipantCount: rewardParticipants.length,
       });
     }
   }
@@ -379,6 +415,7 @@ async function finishBattleCore(
     battleId,
     result.result as "attacker_win" | "defender_win" | "draw",
   );
+  slowLogger.mark("markBattleSessionFinished");
   if (sessionSnapshot) {
     battleResult.data = {
       ...battleResult.data,
@@ -392,9 +429,14 @@ async function finishBattleCore(
         battleId,
         result.result as "attacker_win" | "defender_win" | "draw",
       );
+      slowLogger.mark("settleArenaBattleIfNeeded");
     }
   } catch (error) {
-    console.warn("竞技场战斗结算失败:", error);
+    battleSettlementLogger.warn({
+      battleId,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+    }, "竞技场战斗结算失败");
   }
 
   activeBattles.delete(state.battleId);
@@ -448,9 +490,19 @@ async function finishBattleCore(
         });
       }
     }
+    slowLogger.mark("emitFinishedRealtime");
   } catch (error) {
-    console.warn(`[battle] 推送战斗结束事件失败: ${battleId}`, error);
+    battleSettlementLogger.warn({
+      battleId,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+    }, "推送战斗结束事件失败");
   }
+
+  slowLogger.flush({
+    result: result.result,
+    notificationUserCount: notificationUserIds.length,
+  });
 
   return battleResult;
 }
