@@ -19,7 +19,7 @@
  * 2) 冷却判断与状态接口必须共用同一套纯函数，否则前端倒计时与服务端拦截会在临界秒不一致。
  */
 import {
-  getPartnerDefinitionById,
+  getStaticPartnerDefinitionById,
   type PartnerBaseAttrConfig,
   type PartnerDefConfig,
 } from '../staticConfigLoader.js';
@@ -299,7 +299,7 @@ const asFiniteNumber = (raw: unknown): number => {
 };
 
 const getPartnerRecruitReferenceDefinition = (): PartnerDefConfig => {
-  const definition = getPartnerDefinitionById(PARTNER_RECRUIT_REFERENCE_PARTNER_ID);
+  const definition = getStaticPartnerDefinitionById(PARTNER_RECRUIT_REFERENCE_PARTNER_ID);
   if (!definition) {
     throw new Error(`缺少伙伴招募参考模板：${PARTNER_RECRUIT_REFERENCE_PARTNER_ID}`);
   }

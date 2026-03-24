@@ -149,7 +149,7 @@ export const loadActivePartnerBattleMember = async (
   }
 
   const partnerRow = rows.rows[0] as ActivePartnerBattleRow;
-  const partnerDef = getPartnerDefinitionById(partnerRow.partner_def_id);
+  const partnerDef = await getPartnerDefinitionById(partnerRow.partner_def_id);
   if (!partnerDef) {
     throw new Error(`伙伴模板不存在: ${partnerRow.partner_def_id}`);
   }

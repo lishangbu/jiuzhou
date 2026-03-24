@@ -22,7 +22,7 @@ import type { SkillData } from '../../battle/battleFactory.js';
 import type { SkillTriggerType } from '../../shared/skillTriggerType.js';
 import { resolveSkillTriggerType } from '../../shared/skillTriggerType.js';
 import {
-  getPartnerDefinitionById,
+  getPartnerDefinitionsByIds,
   getPartnerGrowthConfig,
   getSkillDefinitions,
   getTechniqueDefinitions,
@@ -789,14 +789,17 @@ export const attachPartnerTradeState = (
   };
 };
 
-export const buildPartnerDetails = (params: {
+export const buildPartnerDetails = async (params: {
   rows: PartnerRow[];
   techniqueMap: Map<number, PartnerTechniqueRow[]>;
   tradeStateMap?: Map<number, { tradeStatus: PartnerTradeStatus; marketListingId: number | null }>;
   fusionStateMap?: Map<number, PartnerFusionLockState>;
-}): PartnerDetailDto[] => {
-  return params.rows.map((row) => {
-    const definition = getPartnerDefinitionById(row.partner_def_id);
+}): Promise<PartnerDetailDto[]> => {
+  const definitionMap = await getPartnerDefinitionsByIds(
+    params.rows.map((row) => row.partner_def_id),
+  );
+  return Promise.all(params.rows.map(async (row) => {
+    const definition = definitionMap.get(row.partner_def_id) ?? null;
     if (!definition) {
       throw new Error(`伙伴模板不存在: ${row.partner_def_id}`);
     }
@@ -813,5 +816,5 @@ export const buildPartnerDetails = (params: {
         fusionState: params.fusionStateMap?.get(row.id),
       },
     );
-  });
+  }));
 };

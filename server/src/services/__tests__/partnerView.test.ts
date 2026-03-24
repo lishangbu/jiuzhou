@@ -119,8 +119,8 @@ test('buildPartnerBattleSkillData: 应按传入顺序输出完整伙伴战斗技
   );
 });
 
-test('buildPartnerDisplay: 应优先使用伙伴实例头像，没有实例头像时回退模板头像', () => {
-  const definition = getPartnerDefinitionById('partner-qingmu-xiaoou');
+test('buildPartnerDisplay: 应优先使用伙伴实例头像，没有实例头像时回退模板头像', async () => {
+  const definition = await getPartnerDefinitionById('partner-qingmu-xiaoou');
   assert.ok(definition, '测试依赖的伙伴模板 partner-qingmu-xiaoou 不存在');
 
   const baseRow: PartnerRow = {

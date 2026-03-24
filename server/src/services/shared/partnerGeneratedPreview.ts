@@ -565,10 +565,10 @@ export const buildGeneratedPartnerPreviewFromDefinition = (
   };
 };
 
-export const buildGeneratedPartnerPreviewByPartnerDefId = (
+export const buildGeneratedPartnerPreviewByPartnerDefId = async (
   partnerDefId: string,
-): GeneratedPartnerPreviewDto | null => {
-  const definition = getPartnerDefinitionById(partnerDefId);
+) : Promise<GeneratedPartnerPreviewDto | null> => {
+  const definition = await getPartnerDefinitionById(partnerDefId);
   if (!definition) return null;
   return buildGeneratedPartnerPreviewFromDefinition(definition);
 };

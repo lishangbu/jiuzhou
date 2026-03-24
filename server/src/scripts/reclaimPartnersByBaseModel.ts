@@ -785,8 +785,8 @@ const buildBlockedReasons = (row: TargetPartnerRow): string[] => {
     return blockedReasons;
 };
 
-const buildPartnerName = (row: TargetPartnerRow): string => {
-    const definition = getPartnerDefinitionById(row.partner_def_id);
+const buildPartnerName = async (row: TargetPartnerRow): Promise<string> => {
+    const definition = await getPartnerDefinitionById(row.partner_def_id);
     return normalizeText(definition?.name) || row.partner_def_id;
 };
 
@@ -813,8 +813,11 @@ const toPartnerDisplayRow = (row: TargetPartnerRow): PartnerRow => {
     };
 };
 
-const buildPartnerComputedAttrs = (row: TargetPartnerRow, techniqueRows: PartnerTechniqueRow[]): PartnerComputedAttrsDto => {
-    const definition = getPartnerDefinitionById(row.partner_def_id);
+const buildPartnerComputedAttrs = async (
+    row: TargetPartnerRow,
+    techniqueRows: PartnerTechniqueRow[],
+): Promise<PartnerComputedAttrsDto> => {
+    const definition = await getPartnerDefinitionById(row.partner_def_id);
     if (!definition) {
         throw new Error(`伙伴模板不存在: ${row.partner_def_id}`);
     }
@@ -826,19 +829,20 @@ const buildPartnerComputedAttrs = (row: TargetPartnerRow, techniqueRows: Partner
     }).computedAttrs;
 };
 
-const buildPartnerSummaries = (
+const buildPartnerSummaries = async (
     partnerRows: TargetPartnerRow[],
     techniqueMap: Map<number, PartnerTechniqueRow[]>,
-): PartnerTargetSummary[] => {
-    return partnerRows.map((row) => {
+): Promise<PartnerTargetSummary[]> => {
+    return Promise.all(partnerRows.map(async (row) => {
         const blockedReasons = buildBlockedReasons(row);
         const techniqueRows = techniqueMap.get(row.partner_id) ?? [];
-        const computedAttrs = buildPartnerComputedAttrs(row, techniqueRows);
+        const computedAttrs = await buildPartnerComputedAttrs(row, techniqueRows);
+        const partnerName = await buildPartnerName(row);
         return {
             partnerId: row.partner_id,
             partnerDefId: row.partner_def_id,
-            partnerName: buildPartnerName(row),
-            partnerNickname: normalizeText(row.partner_nickname) || buildPartnerName(row),
+            partnerName,
+            partnerNickname: normalizeText(row.partner_nickname) || partnerName,
             level: normalizeInteger(row.partner_level, 1),
             progressExp: normalizeInteger(row.partner_progress_exp, 0),
             isActive: row.partner_is_active,
@@ -854,7 +858,7 @@ const buildPartnerSummaries = (
             computedAttrs,
             trainingRefund: buildTrainingRefundSummary(row, techniqueRows),
         };
-    });
+    }));
 };
 
 const writeReportFile = async (reportFilePath: string, report: ReclaimReport): Promise<void> => {
@@ -928,7 +932,7 @@ const buildReport = async (params: {
 
     const partnerRows = await loadTargetPartnersBySelector(params.targetSelector);
     const techniqueMap = await loadPartnerTechniques(partnerRows.map((row) => row.partner_id));
-    const partners = buildPartnerSummaries(partnerRows, techniqueMap);
+    const partners = await buildPartnerSummaries(partnerRows, techniqueMap);
     const matchedBaseModelSet = new Set(partners.map((partner) => partner.baseModel));
     const matchedPartnerIdSet = new Set(partners.map((partner) => partner.partnerId));
     const baseModels = params.targetSelector.mode === 'base-models' ? params.targetSelector.baseModels : [];

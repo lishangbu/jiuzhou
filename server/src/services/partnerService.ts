@@ -25,8 +25,8 @@ import {
 } from './featureUnlockService.js';
 import {
   getPartnerDefinitionById,
-  getPartnerDefinitions,
   getPartnerGrowthConfig,
+  getStaticPartnerDefinitions,
   getItemDefinitionById,
   type PartnerDefConfig,
 } from './staticConfigLoader.js';
@@ -239,6 +239,16 @@ const loadCharacterPartnerContext = async (
     realm: normalizeText(row.realm) || '凡人',
     subRealm: normalizeText(row.sub_realm) || null,
   };
+};
+
+const loadPartnerDefinitionOrThrow = async (
+  partnerDefId: string,
+): Promise<PartnerDefConfig> => {
+  const definition = await getPartnerDefinitionById(partnerDefId);
+  if (!definition) {
+    throw new Error(`伙伴模板不存在: ${partnerDefId}`);
+  }
+  return definition;
 };
 
 const buildPartnerDetailWithTradeState = async (params: {
@@ -504,7 +514,7 @@ class PartnerService {
       const fusionStateMap = await loadPartnerFusionLockStateMap(
         rows.map((row) => row.id),
       );
-      const partners = buildPartnerDetails({
+      const partners = await buildPartnerDetails({
         rows,
         techniqueMap,
         tradeStateMap,
@@ -546,10 +556,7 @@ class PartnerService {
 
       const partnerRow = await loadSinglePartnerRow(characterId, partnerId, false);
       if (!partnerRow) return { success: false, message: '伙伴不存在' };
-      const partnerDef = getPartnerDefinitionById(partnerRow.partner_def_id);
-      if (!partnerDef) {
-        throw new Error(`伙伴模板不存在: ${partnerRow.partner_def_id}`);
-      }
+      const partnerDef = await loadPartnerDefinitionOrThrow(partnerRow.partner_def_id);
 
       const techniqueMap = await loadPartnerTechniqueRows([partnerId], false);
       const techniqueRows = techniqueMap.get(partnerId) ?? [];
@@ -597,10 +604,7 @@ class PartnerService {
       if (fusionBlockedMessage) {
         return { success: false, message: fusionBlockedMessage };
       }
-      const partnerDef = getPartnerDefinitionById(partnerRow.partner_def_id);
-      if (!partnerDef) {
-        throw new Error(`伙伴模板不存在: ${partnerRow.partner_def_id}`);
-      }
+      const partnerDef = await loadPartnerDefinitionOrThrow(partnerRow.partner_def_id);
 
       const techniqueMap = await loadPartnerTechniqueRows([partnerId], true);
       const techniqueRows = techniqueMap.get(partnerId) ?? [];
@@ -706,10 +710,7 @@ class PartnerService {
       if (!refreshedPartner) {
         return { success: false, message: '伙伴状态刷新失败' };
       }
-      const partnerDef = getPartnerDefinitionById(refreshedPartner.partner_def_id);
-      if (!partnerDef) {
-        throw new Error(`伙伴模板不存在: ${refreshedPartner.partner_def_id}`);
-      }
+      const partnerDef = await loadPartnerDefinitionOrThrow(refreshedPartner.partner_def_id);
       const partner = await buildPartnerDetailWithTradeState({
         row: refreshedPartner,
         definition: partnerDef,
@@ -829,10 +830,7 @@ class PartnerService {
       if (!refreshedPartner) {
         return { success: false, message: '伙伴刷新失败' };
       }
-      const partnerDef = getPartnerDefinitionById(refreshedPartner.partner_def_id);
-      if (!partnerDef) {
-        throw new Error(`伙伴模板不存在: ${refreshedPartner.partner_def_id}`);
-      }
+      const partnerDef = await loadPartnerDefinitionOrThrow(refreshedPartner.partner_def_id);
       const techniqueMap = await loadPartnerTechniqueRows([partnerId], false);
       const partner = await buildPartnerDetailWithTradeState({
         row: refreshedPartner,
@@ -918,10 +916,7 @@ class PartnerService {
       if (!refreshedPartner) {
         return { success: false, message: '伙伴刷新失败' };
       }
-      const partnerDef = getPartnerDefinitionById(refreshedPartner.partner_def_id);
-      if (!partnerDef) {
-        throw new Error(`伙伴模板不存在: ${refreshedPartner.partner_def_id}`);
-      }
+      const partnerDef = await loadPartnerDefinitionOrThrow(refreshedPartner.partner_def_id);
       const techniqueMap = await loadPartnerTechniqueRows([partnerId], false);
       const partner = await buildPartnerDetailWithTradeState({
         row: refreshedPartner,
@@ -960,10 +955,7 @@ class PartnerService {
 
       const partnerRow = await loadSinglePartnerRow(characterId, partnerId, false);
       if (!partnerRow) return { success: false, message: '伙伴不存在' };
-      const partnerDef = getPartnerDefinitionById(partnerRow.partner_def_id);
-      if (!partnerDef) {
-        throw new Error(`伙伴模板不存在: ${partnerRow.partner_def_id}`);
-      }
+      const partnerDef = await loadPartnerDefinitionOrThrow(partnerRow.partner_def_id);
 
       const techniqueMap = await loadPartnerTechniqueRows([partnerId], false);
       const techniqueRows = techniqueMap.get(partnerId) ?? [];
@@ -1025,10 +1017,7 @@ class PartnerService {
       if (fusionBlockedMessage) {
         return { success: false, message: fusionBlockedMessage };
       }
-      const partnerDef = getPartnerDefinitionById(partnerRow.partner_def_id);
-      if (!partnerDef) {
-        throw new Error(`伙伴模板不存在: ${partnerRow.partner_def_id}`);
-      }
+      const partnerDef = await loadPartnerDefinitionOrThrow(partnerRow.partner_def_id);
 
       const persistedTechniqueMap = await loadPartnerTechniqueRows([partnerId], true);
       const techniqueRows = persistedTechniqueMap.get(partnerId) ?? [];
@@ -1213,10 +1202,7 @@ class PartnerService {
         return { success: false, message: fusionBlockedMessage };
       }
 
-      const partnerDef = getPartnerDefinitionById(partnerRow.partner_def_id);
-      if (!partnerDef) {
-        throw new Error(`伙伴模板不存在: ${partnerRow.partner_def_id}`);
-      }
+      const partnerDef = await loadPartnerDefinitionOrThrow(partnerRow.partner_def_id);
 
       const techniqueMeta = getPartnerTechniqueStaticMeta(params.techniqueId, 1);
       if (!techniqueMeta) {
@@ -1393,9 +1379,10 @@ class PartnerService {
     obtainedFrom: string;
     obtainedRefId?: string;
   }): Promise<PartnerRewardDto> {
+    const starterDefinition = await getPartnerDefinitionById(STARTER_PARTNER_DEF_ID);
     const definition =
-      getPartnerDefinitionById(STARTER_PARTNER_DEF_ID) ??
-      getPartnerDefinitions().find((entry) => entry.enabled !== false) ??
+      starterDefinition ??
+      getStaticPartnerDefinitions().find((entry) => entry.enabled !== false) ??
       null;
     if (!definition) {
       throw new Error('未找到可发放的初始伙伴模板');

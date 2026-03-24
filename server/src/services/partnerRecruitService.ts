@@ -454,7 +454,7 @@ class PartnerRecruitService {
     const guaranteeState = resolvePartnerRecruitHeavenGuaranteeState(generatedNonHeavenCount);
     const qualityRates = resolvePartnerRecruitQualityRateEntries(generatedNonHeavenCount);
     const preview = latestJob?.previewPartnerDefId
-      ? buildGeneratedPartnerPreviewByPartnerDefId(latestJob.previewPartnerDefId)
+      ? await buildGeneratedPartnerPreviewByPartnerDefId(latestJob.previewPartnerDefId)
       : null;
     const jobState = buildPartnerRecruitJobState(latestJob
       ? {
@@ -953,7 +953,7 @@ class PartnerRecruitService {
       return { success: false, message: '预览已过期，无法确认收下', code: 'RECRUIT_PREVIEW_EXPIRED' };
     }
 
-    const definition = getPartnerDefinitionById(previewPartnerDefId);
+    const definition = await getPartnerDefinitionById(previewPartnerDefId);
     if (!definition) {
       return { success: false, message: '预览伙伴定义不存在', code: 'RECRUIT_PREVIEW_NOT_FOUND' };
     }

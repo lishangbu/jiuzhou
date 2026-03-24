@@ -165,10 +165,10 @@ const buildMaterialSnapshot = (
   };
 };
 
-const getPartnerFusionMaterialStaticMeta = (
+const getPartnerFusionMaterialStaticMeta = async (
   row: PartnerRow,
-): PartnerFusionMaterialStaticMeta | null => {
-  const definition = getPartnerDefinitionById(row.partner_def_id);
+): Promise<PartnerFusionMaterialStaticMeta | null> => {
+  const definition = await getPartnerDefinitionById(row.partner_def_id);
   if (!definition) {
     throw new Error(`伙伴模板不存在: ${row.partner_def_id}`);
   }
@@ -331,7 +331,7 @@ class PartnerFusionService {
     const latestJob = await this.loadLatestFusionJobRow(characterId, false);
     const materialRows = latestJob ? await loadFusionMaterialRows(latestJob.fusionId, false) : [];
     const preview = latestJob?.previewPartnerDefId
-      ? buildGeneratedPartnerPreviewByPartnerDefId(latestJob.previewPartnerDefId)
+      ? await buildGeneratedPartnerPreviewByPartnerDefId(latestJob.previewPartnerDefId)
       : null;
     const state = buildPartnerFusionJobState(latestJob
       ? {
@@ -410,7 +410,7 @@ class PartnerFusionService {
         return { success: false, message: '归契中的伙伴不可重复参与三魂归契', code: 'FUSION_PARTNER_LOCKED' };
       }
 
-      const materialStaticMeta = getPartnerFusionMaterialStaticMeta(row);
+      const materialStaticMeta = await getPartnerFusionMaterialStaticMeta(row);
       if (!materialStaticMeta) {
         return { success: false, message: '伙伴品级配置非法', code: 'FUSION_PARTNER_QUALITY_INVALID' };
       }
@@ -702,7 +702,7 @@ class PartnerFusionService {
           },
         };
       }
-      const materialStaticMeta = getPartnerFusionMaterialStaticMeta(partnerRow);
+      const materialStaticMeta = await getPartnerFusionMaterialStaticMeta(partnerRow);
       if (!materialStaticMeta) {
         const reason = '归契素材伙伴配置非法';
         await this.markFusionJobFailedTx(args.characterId, args.fusionId, reason);
@@ -833,7 +833,7 @@ class PartnerFusionService {
       return { success: false, message: '当前归契结果不可确认', code: 'FUSION_JOB_STATE_INVALID' };
     }
 
-    const definition = getPartnerDefinitionById(jobRow.preview_partner_def_id);
+    const definition = await getPartnerDefinitionById(jobRow.preview_partner_def_id);
     if (!definition) {
       return { success: false, message: '归契预览伙伴定义不存在', code: 'FUSION_PREVIEW_NOT_FOUND' };
     }

@@ -27,7 +27,7 @@ export const broadcastHeavenPartnerAcquired = async (params: {
   partnerName: string;
   sourceLabel: string;
 }): Promise<void> => {
-  const definition = getPartnerDefinitionById(params.partnerDefId);
+  const definition = await getPartnerDefinitionById(params.partnerDefId);
   if (!definition || definition.quality !== '天') {
     return;
   }

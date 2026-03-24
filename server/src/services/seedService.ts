@@ -25,7 +25,7 @@ import {
   getMonsterDefinitions,
   getMonthCardDefinitions,
   getNpcDefinitions,
-  getPartnerDefinitions,
+  getStaticPartnerDefinitions,
   getSkillDefinitions,
   getTaskDefinitions,
   getTalkTreeDefinitions,
@@ -94,7 +94,7 @@ export const loadAllSeeds = async (): Promise<void> => {
   console.log(`  功法定义: ${countEnabled(getTechniqueDefinitions())} 条（静态JSON，跳过入库）`);
   console.log(`  技能定义: ${countEnabled(getSkillDefinitions())} 条（静态JSON，跳过入库）`);
   console.log(`  功法层级: ${countEnabled(getTechniqueLayerDefinitions())} 条（静态JSON，跳过入库）`);
-  console.log(`  伙伴模板: ${countEnabled(getPartnerDefinitions())} 条（静态JSON，跳过入库）`);
+  console.log(`  伙伴模板: ${countEnabled(getStaticPartnerDefinitions())} 条（静态JSON，跳过入库）`);
 
   const mainQuest = getMainQuestCounts();
   console.log(`  主线任务: ${mainQuest.chapters} 章, ${mainQuest.sections} 节（对话${mainQuest.dialogues}条使用静态JSON）`);

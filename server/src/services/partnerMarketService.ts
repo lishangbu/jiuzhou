@@ -123,12 +123,12 @@ const invalidatePartnerMarketListingsCache = async (): Promise<void> => {
   partnerMarketListingsCache.invalidateAll();
 };
 
-const readPartnerSnapshot = (snapshot: PartnerDisplayDto | null): PartnerDisplayDto | null => {
+const readPartnerSnapshot = async (snapshot: PartnerDisplayDto | null): Promise<PartnerDisplayDto | null> => {
   if (!snapshot) return null;
   if (!Number.isInteger(snapshot.id) || snapshot.id <= 0) return null;
   const partnerDefId = normalizeText(snapshot.partnerDefId);
   if (!partnerDefId) return null;
-  const definition = getPartnerDefinitionById(partnerDefId);
+  const definition = await getPartnerDefinitionById(partnerDefId);
   if (!definition) return null;
   return {
     ...snapshot,
@@ -136,8 +136,8 @@ const readPartnerSnapshot = (snapshot: PartnerDisplayDto | null): PartnerDisplay
   };
 };
 
-const buildListingDto = (row: PartnerListingRow): MarketPartnerListingDto | null => {
-  const partner = readPartnerSnapshot(row.partner_snapshot);
+const buildListingDto = async (row: PartnerListingRow): Promise<MarketPartnerListingDto | null> => {
+  const partner = await readPartnerSnapshot(row.partner_snapshot);
   if (!partner) return null;
   return {
     id: Number(row.id),
@@ -231,8 +231,8 @@ const loadPartnerListingsCacheData = async (
     query(countSql, values.slice(0, values.length - 2)),
   ]);
 
-  const listings = (listResult.rows as PartnerListingRow[])
-    .map((row) => buildListingDto(row))
+  const listings = (await Promise.all((listResult.rows as PartnerListingRow[])
+    .map((row) => buildListingDto(row))))
     .filter((row): row is MarketPartnerListingDto => row !== null);
 
   return {
@@ -252,11 +252,11 @@ const partnerMarketListingsCache = createCacheLayer<string, PartnerListingsCache
   },
 });
 
-const buildTradeRecordDto = (
+const buildTradeRecordDto = async (
   row: PartnerTradeRecordRow,
   viewerCharacterId: number,
-): MarketPartnerTradeRecordDto | null => {
-  const partner = readPartnerSnapshot(row.partner_snapshot);
+): Promise<MarketPartnerTradeRecordDto | null> => {
+  const partner = await readPartnerSnapshot(row.partner_snapshot);
   if (!partner) return null;
   const buyerCharacterId = Number(row.buyer_character_id);
   const type: '买入' | '卖出' =
@@ -280,7 +280,7 @@ const buildPartnerSnapshot = async (partnerId: number): Promise<PartnerDisplayDt
   if (!partnerRow) {
     throw new Error('伙伴不存在');
   }
-  const definition = getPartnerDefinitionById(partnerRow.partner_def_id);
+  const definition = await getPartnerDefinitionById(partnerRow.partner_def_id);
   if (!definition) {
     throw new Error(`伙伴模板不存在: ${partnerRow.partner_def_id}`);
   }
@@ -382,8 +382,8 @@ class PartnerMarketService {
       [params.characterId, status],
     );
 
-    const listings = (listResult.rows as PartnerListingRow[])
-      .map((row) => buildListingDto(row))
+    const listings = (await Promise.all((listResult.rows as PartnerListingRow[])
+      .map((row) => buildListingDto(row))))
       .filter((row): row is MarketPartnerListingDto => row !== null);
 
     return {
@@ -438,8 +438,8 @@ class PartnerMarketService {
       [params.characterId],
     );
 
-    const records = (listResult.rows as PartnerTradeRecordRow[])
-      .map((row) => buildTradeRecordDto(row, params.characterId))
+    const records = (await Promise.all((listResult.rows as PartnerTradeRecordRow[])
+      .map((row) => buildTradeRecordDto(row, params.characterId))))
       .filter((row): row is MarketPartnerTradeRecordDto => row !== null);
 
     return {

@@ -2,15 +2,17 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import {
-  getGeneratedPartnerDefinitions,
-  reloadGeneratedPartnerConfigStore,
-} from './generatedPartnerConfigStore.js';
-import {
   getGeneratedSkillDefinitions,
   getGeneratedTechniqueDefinitions,
   getGeneratedTechniqueLayerDefinitions,
   reloadGeneratedTechniqueConfigStore,
 } from './generatedTechniqueConfigStore.js';
+import {
+  getPartnerDefinitionById as getPartnerDefinitionByIdFromRedis,
+  getPartnerDefinitions as getPartnerDefinitionsFromRedis,
+  getPartnerDefinitionsByIds as getPartnerDefinitionsByIdsFromRedis,
+  refreshPartnerDefinitionCache,
+} from './partnerDefinitionCache.js';
 import {
   normalizeAffixPoolFile,
   type AffixModifierConfig,
@@ -773,10 +775,6 @@ export type PartnerDefConfig = {
   updated_at?: string;
 };
 
-type PartnerDefFile = {
-  partners?: PartnerDefConfig[];
-};
-
 export type PartnerGrowthConfig = {
   exp_base_exp: number;
   exp_growth_rate: number;
@@ -812,7 +810,6 @@ let dungeonWavesByStageIdCache: Map<string, DungeonWaveConfig[]> | null | undefi
 let dialogueDefCache: DialogueDefConfig[] | null | undefined;
 let techniqueDefCache: TechniqueDefConfig[] | null | undefined;
 let skillDefCache: SkillDefConfig[] | null | undefined;
-let partnerDefCache: PartnerDefConfig[] | null | undefined;
 let partnerTechniqueDefCache: PartnerTechniqueDefConfig[] | null | undefined;
 let taskDefCache: TaskDefConfig[] | null | undefined;
 let dropPoolDefCache: DropPoolDefConfig[] | null | undefined;
@@ -1494,20 +1491,34 @@ export const getTechniqueLayerDefinitions = (): TechniqueLayerConfig[] => {
   return techniqueLayerCache;
 };
 
-export const getPartnerDefinitions = (): PartnerDefConfig[] => {
-  if (partnerDefCache !== undefined) return partnerDefCache ?? [];
-  const file = readStrictJsonFile<PartnerDefFile>('partner_def.json');
+export const getStaticPartnerDefinitions = (): PartnerDefConfig[] => {
+  const file = readStrictJsonFile<{ partners?: PartnerDefConfig[] }>('partner_def.json');
   if (!Array.isArray(file.partners)) {
     throw new Error('partner_def.json 缺少 partners 数组');
   }
-  partnerDefCache = [...file.partners, ...getGeneratedPartnerDefinitions()];
-  return partnerDefCache;
+  return file.partners;
 };
 
-export const getPartnerDefinitionById = (partnerDefId: string): PartnerDefConfig | null => {
+export const getStaticPartnerDefinitionById = (partnerDefId: string): PartnerDefConfig | null => {
   const id = String(partnerDefId || '').trim();
   if (!id) return null;
-  return getPartnerDefinitions().find((entry) => entry.id === id && entry.enabled !== false) ?? null;
+  return getStaticPartnerDefinitions().find((entry) => entry.id === id && entry.enabled !== false) ?? null;
+};
+
+export const getPartnerDefinitions = async (): Promise<PartnerDefConfig[]> => {
+  return getPartnerDefinitionsFromRedis();
+};
+
+export const getPartnerDefinitionById = async (
+  partnerDefId: string,
+): Promise<PartnerDefConfig | null> => {
+  return getPartnerDefinitionByIdFromRedis(partnerDefId);
+};
+
+export const getPartnerDefinitionsByIds = async (
+  partnerDefIds: string[],
+): Promise<Map<string, PartnerDefConfig>> => {
+  return getPartnerDefinitionsByIdsFromRedis(partnerDefIds);
 };
 
 export const getPartnerTechniqueDefinitions = (): PartnerTechniqueDefConfig[] => {
@@ -1541,15 +1552,14 @@ export const refreshGeneratedTechniqueSnapshots = async (): Promise<void> => {
 };
 
 /**
- * 刷新 AI 伙伴缓存并清空伙伴相关静态快照。
+ * 失效 AI 伙伴 Redis 缓存。
  *
  * 注意：
- * - 动态伙伴定义通过数据库落库，生成后不会自动进入同步内存缓存；
- * - 招募成功后必须主动刷新，否则现有伙伴服务无法通过 `partner_def_id` 读到新定义。
+ * - 动态伙伴定义改为 Redis 按需缓存，不再保留进程内伙伴定义快照；
+ * - 这里仅删除已有 Redis key，后续读取会按 partnerDefId 懒加载最新定义。
  */
 export const refreshGeneratedPartnerSnapshots = async (): Promise<void> => {
-  await reloadGeneratedPartnerConfigStore();
-  partnerDefCache = undefined;
+  await refreshPartnerDefinitionCache();
 };
 
 /**
