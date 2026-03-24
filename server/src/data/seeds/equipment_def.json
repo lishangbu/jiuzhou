@@ -2526,7 +2526,7 @@
       "stack_max": 1,
       "bind_type": "equip",
       "tradeable": true,
-      "icon": "/assets/set-suijing/01-weapon-set-suijing-weapon.webp",
+      "icon": "/assets/images/set-pojun/01-weapon-set-pojun-weapon.webp",
       "equip_slot": "weapon",
       "equip_req_realm": "炼炁化神·采药期",
       "base_attrs": {
@@ -2553,7 +2553,7 @@
       "stack_max": 1,
       "bind_type": "equip",
       "tradeable": true,
-      "icon": "/assets/set-suijing/02-head-set-suijing-head.webp",
+      "icon": "/assets/images/set-pojun/02-head-set-pojun-head.webp",
       "equip_slot": "head",
       "equip_req_realm": "炼炁化神·采药期",
       "base_attrs": {
@@ -2580,7 +2580,7 @@
       "stack_max": 1,
       "bind_type": "equip",
       "tradeable": true,
-      "icon": "/assets/set-suijing/03-clothes-set-suijing-clothes.webp",
+      "icon": "/assets/images/set-pojun/03-clothes-set-pojun-clothes.webp",
       "equip_slot": "clothes",
       "equip_req_realm": "炼炁化神·采药期",
       "base_attrs": {
@@ -2607,7 +2607,7 @@
       "stack_max": 1,
       "bind_type": "equip",
       "tradeable": true,
-      "icon": "/assets/set-suijing/04-gloves-set-suijing-gloves.webp",
+      "icon": "/assets/images/set-pojun/04-gloves-set-pojun-gloves.webp",
       "equip_slot": "gloves",
       "equip_req_realm": "炼炁化神·采药期",
       "base_attrs": {
@@ -2633,7 +2633,7 @@
       "stack_max": 1,
       "bind_type": "equip",
       "tradeable": true,
-      "icon": "/assets/set-suijing/05-pants-set-suijing-pants.webp",
+      "icon": "/assets/images/set-pojun/05-pants-set-pojun-pants.webp",
       "equip_slot": "pants",
       "equip_req_realm": "炼炁化神·采药期",
       "base_attrs": {
@@ -2660,7 +2660,7 @@
       "stack_max": 1,
       "bind_type": "equip",
       "tradeable": true,
-      "icon": "/assets/set-suijing/06-necklace-set-suijing-necklace.webp",
+      "icon": "/assets/images/set-pojun/06-necklace-set-pojun-necklace.webp",
       "equip_slot": "necklace",
       "equip_req_realm": "炼炁化神·采药期",
       "base_attrs": {
@@ -2686,7 +2686,7 @@
       "stack_max": 1,
       "bind_type": "equip",
       "tradeable": true,
-      "icon": "/assets/set-suijing/07-accessory-set-suijing-accessory.webp",
+      "icon": "/assets/images/set-pojun/07-accessory-set-pojun-accessory.webp",
       "equip_slot": "accessory",
       "equip_req_realm": "炼炁化神·采药期",
       "base_attrs": {
@@ -2712,7 +2712,7 @@
       "stack_max": 1,
       "bind_type": "equip",
       "tradeable": true,
-      "icon": "/assets/set-suijing/08-artifact-set-suijing-artifact.webp",
+      "icon": "/assets/images/set-pojun/08-artifact-set-pojun-artifact.webp",
       "equip_slot": "artifact",
       "equip_req_realm": "炼炁化神·采药期",
       "base_attrs": {
