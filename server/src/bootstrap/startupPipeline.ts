@@ -156,7 +156,7 @@ export const startServerWithPipeline = async (
     warmupOnlineBattleProjectionService,
   );
   console.log(
-    `✓ 在线战斗投影已预热（角色 ${onlineBattleWarmupSummary.characterCount} / 竞技场 ${onlineBattleWarmupSummary.arenaCount} / 秘境 ${onlineBattleWarmupSummary.dungeonCount} / 千层塔 ${onlineBattleWarmupSummary.towerCount}）\n`,
+    `✓ 在线战斗投影已预热（活跃角色 ${onlineBattleWarmupSummary.characterCount} / 竞技场 ${onlineBattleWarmupSummary.arenaCount} / 秘境 ${onlineBattleWarmupSummary.dungeonCount} / 千层塔 ${onlineBattleWarmupSummary.towerCount}）\n`,
   );
   await runStartupStep("在线战斗延迟结算协调器初始化", initializeOnlineBattleSettlementRunner);
   console.log("✓ 在线战斗延迟结算协调器已就绪\n");

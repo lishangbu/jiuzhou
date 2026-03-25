@@ -11,12 +11,13 @@
  * - 输出：Redis 权威投影读取结果，以及启动阶段预热统计。
  *
  * 数据流/状态流：
- * - startupPipeline -> warmupOnlineBattleProjectionService -> 预热 DB 快照到 Redis
+ * - startupPipeline -> warmupOnlineBattleProjectionService -> 预热活跃角色 + 运行中玩法快照到 Redis
  * - 在线战斗开始/推进/结算 -> 业务服务调用本模块读写权威投影
+ * - 角色首次参与在线战斗但未命中投影 -> 本模块统一按需补齐角色快照 -> 后续链路继续只读投影
  * - 重启恢复 -> battle lifecycle / settlement runner 从本模块恢复 battle session / 玩法状态 / 待执行任务
  *
  * 关键边界条件与坑点：
- * 1. 在线战斗链路只允许读取这里的投影；若投影未预热完成或 key 缺失，调用方必须直接失败，不能回退 DB。
+ * 1. 在线战斗链路不允许在业务侧各自回退 DB；角色快照缺失时只能由本模块统一懒加载补齐，其他投影缺失仍直接失败。
  * 2. 投影写入必须保持“内存先更新、Redis 随后覆盖”的单一方向，避免同一请求里读到旧内存和新 Redis 的分裂状态。
  */
 
@@ -26,6 +27,7 @@ import type { CharacterComputedRow } from './characterComputedService.js';
 import {
   getCharacterComputedBatchByCharacterIds,
 } from './characterComputedService.js';
+import { toSafeNonNegativeIntegerStrict } from './shared/safeInteger.js';
 import { getDungeonDifficultyById } from './staticConfigLoader.js';
 import {
   loadCharacterBattleLoadoutsByCharacterIds,
@@ -77,6 +79,7 @@ export const ONLINE_BATTLE_DEFERRED_SETTLEMENT_INDEX_KEY = DEFERRED_SETTLEMENT_I
 
 const PROJECTION_PERSIST_BATCH_SIZE = 200;
 const PROJECTION_PERSIST_CONCURRENCY = 4;
+const CHARACTER_WARMUP_ACTIVE_WINDOW_DAYS = 7;
 const RECENT_ARENA_RECORD_LIMIT = 50;
 const MAX_DEFERRED_SETTLEMENT_ATTEMPTS = 5;
 const MAX_DUNGEON_RECORDS_PRELOAD = 5000;
@@ -344,6 +347,15 @@ type DungeonEntryWarmupRow = {
   last_weekly_reset: string | null;
 };
 
+type CharacterIdByUserRow = {
+  id: number;
+  user_id: number;
+};
+
+type CharacterWarmupIdRow = {
+  character_id: number;
+};
+
 const characterSnapshotsByCharacterId = new Map<number, OnlineBattleCharacterSnapshot>();
 const userIdToCharacterId = new Map<number, number>();
 const teamProjectionByUserId = new Map<number, TeamMemberProjectionRecord>();
@@ -356,6 +368,7 @@ const dungeonEntryProjectionByKey = new Map<string, DungeonEntryCountProjectionR
 const towerProjectionByCharacterId = new Map<number, TowerProjectionRecord>();
 const towerRuntimeProjectionByBattleId = new Map<string, TowerBattleRuntimeRecord>();
 const deferredSettlementTaskById = new Map<string, DeferredSettlementTask>();
+const characterSnapshotHydrationByCharacterId = new Map<number, Promise<OnlineBattleCharacterSnapshot | null>>();
 
 let projectionReady = false;
 
@@ -507,6 +520,46 @@ const readJson = async <T>(key: string): Promise<T | null> => {
   const raw = await redis.get(key);
   if (!raw) return null;
   return parseJson<T>(raw);
+};
+
+const filterIndexedEntityIds = async (
+  indexKey: string,
+  entityIds: number[],
+): Promise<number[]> => {
+  if (entityIds.length <= 0) {
+    return [];
+  }
+
+  const pipeline = redis.pipeline();
+  for (const entityId of entityIds) {
+    pipeline.sismember(indexKey, String(entityId));
+  }
+
+  const responses = await pipeline.exec();
+  if (!responses) {
+    return [];
+  }
+
+  const indexedEntityIds: number[] = [];
+  for (let index = 0; index < entityIds.length; index += 1) {
+    const response = responses[index];
+    if (!response) {
+      continue;
+    }
+    const error = response[0];
+    if (error) {
+      throw error;
+    }
+    const membershipValue = response[1];
+    if (
+      (typeof membershipValue === 'number' || typeof membershipValue === 'string')
+      && toInt(membershipValue) === 1
+    ) {
+      indexedEntityIds.push(entityIds[index]!);
+    }
+  }
+
+  return indexedEntityIds;
 };
 
 const parseDungeonParticipants = (participantsJson: string): DungeonInstanceParticipant[] => {
@@ -838,11 +891,14 @@ const persistDeferredSettlementTask = async (task: DeferredSettlementTask): Prom
 const loadCharacterSnapshotFromRedis = async (
   characterId: number,
 ): Promise<OnlineBattleCharacterSnapshot | null> => {
+  const indexedCharacterIds = await filterIndexedEntityIds(CHARACTER_INDEX_KEY, [characterId]);
+  if (indexedCharacterIds.length <= 0) return null;
   const cached = await readJson<OnlineBattleCharacterSnapshot>(buildCharacterKey(characterId));
   if (!cached) return null;
-  characterSnapshotsByCharacterId.set(characterId, cached);
-  userIdToCharacterId.set(cached.userId, cached.characterId);
-  return cached;
+  const normalizedSnapshot = normalizeOnlineBattleCharacterSnapshot(cached);
+  characterSnapshotsByCharacterId.set(characterId, normalizedSnapshot);
+  userIdToCharacterId.set(normalizedSnapshot.userId, normalizedSnapshot.characterId);
+  return normalizedSnapshot;
 };
 
 /**
@@ -872,23 +928,58 @@ const loadCharacterSnapshotsByCharacterIdsFromRedis = async (
     return result;
   }
 
+  const indexedCharacterIds = await filterIndexedEntityIds(CHARACTER_INDEX_KEY, characterIds);
+  if (indexedCharacterIds.length <= 0) {
+    return result;
+  }
+
   const rawSnapshots = await redis.mget(
-    ...characterIds.map((characterId) => buildCharacterKey(characterId)),
+    ...indexedCharacterIds.map((characterId) => buildCharacterKey(characterId)),
   );
-  for (let index = 0; index < characterIds.length; index += 1) {
-    const requestedCharacterId = characterIds[index]!;
+  for (let index = 0; index < indexedCharacterIds.length; index += 1) {
+    const requestedCharacterId = indexedCharacterIds[index]!;
     const rawSnapshot = rawSnapshots[index];
     if (typeof rawSnapshot !== 'string' || rawSnapshot.length <= 0) {
       continue;
     }
 
-    const snapshot = parseJson<OnlineBattleCharacterSnapshot>(rawSnapshot);
+    const snapshot = normalizeOnlineBattleCharacterSnapshot(
+      parseJson<OnlineBattleCharacterSnapshot>(rawSnapshot),
+    );
     characterSnapshotsByCharacterId.set(snapshot.characterId, snapshot);
     userIdToCharacterId.set(snapshot.userId, snapshot.characterId);
     result.set(requestedCharacterId, snapshot);
   }
 
   return result;
+};
+
+const normalizeOnlineBattleCharacterSnapshot = (
+  snapshot: OnlineBattleCharacterSnapshot,
+): OnlineBattleCharacterSnapshot => {
+  return {
+    ...snapshot,
+    characterId: toSafeNonNegativeIntegerStrict(snapshot.characterId, 'onlineBattleSnapshot.characterId'),
+    userId: toSafeNonNegativeIntegerStrict(snapshot.userId, 'onlineBattleSnapshot.userId'),
+    computed: {
+      ...snapshot.computed,
+      id: toSafeNonNegativeIntegerStrict(snapshot.computed.id, 'onlineBattleSnapshot.computed.id'),
+      user_id: toSafeNonNegativeIntegerStrict(snapshot.computed.user_id, 'onlineBattleSnapshot.computed.user_id'),
+      spirit_stones: toSafeNonNegativeIntegerStrict(snapshot.computed.spirit_stones, 'onlineBattleSnapshot.computed.spirit_stones'),
+      silver: toSafeNonNegativeIntegerStrict(snapshot.computed.silver, 'onlineBattleSnapshot.computed.silver'),
+      stamina: toSafeNonNegativeIntegerStrict(snapshot.computed.stamina, 'onlineBattleSnapshot.computed.stamina'),
+      exp: toSafeNonNegativeIntegerStrict(snapshot.computed.exp, 'onlineBattleSnapshot.computed.exp'),
+      attribute_points: toSafeNonNegativeIntegerStrict(snapshot.computed.attribute_points, 'onlineBattleSnapshot.computed.attribute_points'),
+      jing: toSafeNonNegativeIntegerStrict(snapshot.computed.jing, 'onlineBattleSnapshot.computed.jing'),
+      qi: toSafeNonNegativeIntegerStrict(snapshot.computed.qi, 'onlineBattleSnapshot.computed.qi'),
+      shen: toSafeNonNegativeIntegerStrict(snapshot.computed.shen, 'onlineBattleSnapshot.computed.shen'),
+      stamina_max: toSafeNonNegativeIntegerStrict(snapshot.computed.stamina_max, 'onlineBattleSnapshot.computed.stamina_max'),
+      qixue: toSafeNonNegativeIntegerStrict(snapshot.computed.qixue, 'onlineBattleSnapshot.computed.qixue'),
+      lingqi: toSafeNonNegativeIntegerStrict(snapshot.computed.lingqi, 'onlineBattleSnapshot.computed.lingqi'),
+      max_qixue: toSafeNonNegativeIntegerStrict(snapshot.computed.max_qixue, 'onlineBattleSnapshot.computed.max_qixue'),
+      max_lingqi: toSafeNonNegativeIntegerStrict(snapshot.computed.max_lingqi, 'onlineBattleSnapshot.computed.max_lingqi'),
+    },
+  };
 };
 
 const loadTeamProjectionFromRedis = async (
@@ -908,17 +999,245 @@ const loadCharacterIdsByUserIdsFromRedis = async (
     return result;
   }
 
+  const indexedUserIds = await filterIndexedEntityIds(USER_INDEX_KEY, userIds);
+  if (indexedUserIds.length <= 0) {
+    return result;
+  }
+
   const rawCharacterIds = await redis.mget(
-    ...userIds.map((userId) => buildUserCharacterKey(userId)),
+    ...indexedUserIds.map((userId) => buildUserCharacterKey(userId)),
   );
-  for (let index = 0; index < userIds.length; index += 1) {
-    const userId = userIds[index]!;
+  for (let index = 0; index < indexedUserIds.length; index += 1) {
+    const userId = indexedUserIds[index]!;
     const characterId = toInt(rawCharacterIds[index]);
     if (characterId <= 0) {
       continue;
     }
     userIdToCharacterId.set(userId, characterId);
     result.set(userId, characterId);
+  }
+
+  return result;
+};
+
+const buildCharacterSnapshotsByCharacterIds = async (
+  characterIds: number[],
+  options?: {
+    phaseLabel?: string;
+  },
+): Promise<OnlineBattleCharacterSnapshot[]> => {
+  const normalizedCharacterIds = normalizeProjectionEntityIds(characterIds);
+  if (normalizedCharacterIds.length <= 0) {
+    return [];
+  }
+
+  const phaseLabel = options?.phaseLabel ?? null;
+  const computedStartAt = Date.now();
+  const computedMap = await getCharacterComputedBatchByCharacterIds(normalizedCharacterIds);
+  if (phaseLabel) {
+    logWarmupPhaseDetail(phaseLabel, '角色属性计算', Date.now() - computedStartAt);
+  }
+
+  const computedCharacterIds = [...computedMap.keys()];
+  if (computedCharacterIds.length <= 0) {
+    return [];
+  }
+
+  const loadoutStartAt = Date.now();
+  const loadoutPromise = loadCharacterBattleLoadoutsByCharacterIds(
+    computedCharacterIds,
+    computedMap,
+    phaseLabel
+      ? {
+          onPhase: (detail, durationMs) => {
+            logWarmupPhaseDetail(phaseLabel, `战斗装配/${detail}`, durationMs);
+          },
+        }
+      : undefined,
+  ).then((loadoutMap) => {
+    if (phaseLabel) {
+      logWarmupPhaseDetail(phaseLabel, '战斗装配计算', Date.now() - loadoutStartAt);
+    }
+    return loadoutMap;
+  });
+
+  const activePartnerStartAt = Date.now();
+  const activePartnerPromise = loadActivePartnerBattleMemberMap(computedCharacterIds)
+    .then((activePartnerMap) => {
+      if (phaseLabel) {
+        logWarmupPhaseDetail(phaseLabel, '出战伙伴装配', Date.now() - activePartnerStartAt);
+      }
+      return activePartnerMap;
+    });
+
+  const [loadoutMap, activePartnerMap] = await Promise.all([
+    loadoutPromise,
+    activePartnerPromise,
+  ]);
+
+  const snapshotAssembleStartAt = Date.now();
+  const snapshots = computedCharacterIds
+    .map((characterId) => {
+      const computed = computedMap.get(characterId);
+      const loadout = loadoutMap.get(characterId);
+      if (!computed || !loadout) return null;
+
+      const teamProjection = teamProjectionByUserId.get(computed.user_id) ?? {
+        teamId: null,
+        role: null,
+        memberCharacterIds: [],
+      };
+
+      return {
+        characterId: computed.id,
+        userId: computed.user_id,
+        computed,
+        loadout,
+        activePartner: activePartnerMap.get(characterId) ?? null,
+        teamId: teamProjection.teamId,
+        isTeamLeader: teamProjection.role === 'leader',
+      } satisfies OnlineBattleCharacterSnapshot;
+    })
+    .filter((snapshot): snapshot is OnlineBattleCharacterSnapshot => snapshot !== null);
+
+  if (phaseLabel) {
+    logWarmupPhaseDetail(phaseLabel, '快照组装', Date.now() - snapshotAssembleStartAt);
+  }
+
+  return snapshots;
+};
+
+const hydrateCharacterSnapshotsByCharacterIds = async (
+  characterIds: number[],
+): Promise<Map<number, OnlineBattleCharacterSnapshot>> => {
+  const result = new Map<number, OnlineBattleCharacterSnapshot>();
+  const normalizedCharacterIds = normalizeProjectionEntityIds(characterIds);
+  if (normalizedCharacterIds.length <= 0) {
+    return result;
+  }
+
+  const snapshotPromiseByCharacterId = new Map<number, Promise<OnlineBattleCharacterSnapshot | null>>();
+  const pendingCharacterIds: number[] = [];
+
+  for (const characterId of normalizedCharacterIds) {
+    const inFlight = characterSnapshotHydrationByCharacterId.get(characterId);
+    if (inFlight) {
+      snapshotPromiseByCharacterId.set(characterId, inFlight);
+      continue;
+    }
+    pendingCharacterIds.push(characterId);
+  }
+
+  if (pendingCharacterIds.length > 0) {
+    const batchPromise = (async (): Promise<Map<number, OnlineBattleCharacterSnapshot>> => {
+      const snapshots = await buildCharacterSnapshotsByCharacterIds(pendingCharacterIds);
+      await processBatchesConcurrently(snapshots, persistCharacterSnapshotsBatch);
+
+      const snapshotByCharacterId = new Map<number, OnlineBattleCharacterSnapshot>();
+      for (const snapshot of snapshots) {
+        snapshotByCharacterId.set(snapshot.characterId, snapshot);
+      }
+      return snapshotByCharacterId;
+    })().finally(() => {
+      for (const characterId of pendingCharacterIds) {
+        characterSnapshotHydrationByCharacterId.delete(characterId);
+      }
+    });
+
+    for (const characterId of pendingCharacterIds) {
+      const snapshotPromise = batchPromise.then(
+        (snapshotByCharacterId) => snapshotByCharacterId.get(characterId) ?? null,
+      );
+      characterSnapshotHydrationByCharacterId.set(characterId, snapshotPromise);
+      snapshotPromiseByCharacterId.set(characterId, snapshotPromise);
+    }
+  }
+
+  const hydratedEntries = await Promise.all(
+    normalizedCharacterIds.map(async (characterId) => ({
+      characterId,
+      snapshot: await snapshotPromiseByCharacterId.get(characterId)!,
+    })),
+  );
+
+  for (const entry of hydratedEntries) {
+    if (!entry.snapshot) continue;
+    result.set(entry.characterId, entry.snapshot);
+  }
+
+  return result;
+};
+
+const loadCharacterIdsByUserIdsFromDatabase = async (
+  userIds: number[],
+): Promise<Map<number, number>> => {
+  const normalizedUserIds = normalizeProjectionEntityIds(userIds);
+  const result = new Map<number, number>();
+  if (normalizedUserIds.length <= 0) {
+    return result;
+  }
+
+  const queryResult = await query<CharacterIdByUserRow>(
+    `
+      SELECT id, user_id
+      FROM characters
+      WHERE user_id = ANY($1::int[])
+    `,
+    [normalizedUserIds],
+  );
+
+  for (const row of queryResult.rows) {
+    const userId = toInt(row.user_id);
+    const characterId = toInt(row.id);
+    if (userId <= 0 || characterId <= 0) {
+      continue;
+    }
+    userIdToCharacterId.set(userId, characterId);
+    result.set(userId, characterId);
+  }
+
+  return result;
+};
+
+const resolveCharacterIdsByUserIds = async (
+  userIds: number[],
+): Promise<Map<number, number>> => {
+  const normalizedUserIds = normalizeProjectionEntityIds(userIds);
+  const result = new Map<number, number>();
+  const missingUserIds: number[] = [];
+
+  for (const userId of normalizedUserIds) {
+    const cachedCharacterId = userIdToCharacterId.get(userId);
+    if (cachedCharacterId && cachedCharacterId > 0) {
+      result.set(userId, cachedCharacterId);
+      continue;
+    }
+    missingUserIds.push(userId);
+  }
+
+  if (missingUserIds.length > 0) {
+    const redisCharacterIds = await loadCharacterIdsByUserIdsFromRedis(missingUserIds);
+    const missingAfterRedis: number[] = [];
+
+    for (const userId of missingUserIds) {
+      const characterId = redisCharacterIds.get(userId);
+      if (characterId && characterId > 0) {
+        result.set(userId, characterId);
+        continue;
+      }
+      missingAfterRedis.push(userId);
+    }
+
+    if (missingAfterRedis.length > 0) {
+      const databaseCharacterIds = await loadCharacterIdsByUserIdsFromDatabase(missingAfterRedis);
+      for (const userId of missingAfterRedis) {
+        const characterId = databaseCharacterIds.get(userId);
+        if (!characterId || characterId <= 0) {
+          continue;
+        }
+        result.set(userId, characterId);
+      }
+    }
   }
 
   return result;
@@ -1014,59 +1333,9 @@ const clearAllProjectionIndexes = async (): Promise<void> => {
 const warmupCharacterSnapshotChunk = async (
   characterIds: number[],
 ): Promise<number> => {
-  const computedStartAt = Date.now();
-  const computedMap = await getCharacterComputedBatchByCharacterIds(characterIds);
-  logWarmupPhaseDetail('角色快照预热', '角色属性计算', Date.now() - computedStartAt);
-  const computedCharacterIds = [...computedMap.keys()];
-  const loadoutStartAt = Date.now();
-  const loadoutPromise = loadCharacterBattleLoadoutsByCharacterIds(
-    computedCharacterIds,
-    computedMap,
-    {
-      onPhase: (detail, durationMs) => {
-        logWarmupPhaseDetail('角色快照预热', `战斗装配/${detail}`, durationMs);
-      },
-    },
-  ).then((loadoutMap) => {
-    logWarmupPhaseDetail('角色快照预热', '战斗装配计算', Date.now() - loadoutStartAt);
-    return loadoutMap;
+  const snapshots = await buildCharacterSnapshotsByCharacterIds(characterIds, {
+    phaseLabel: '角色快照预热',
   });
-  const activePartnerStartAt = Date.now();
-  const activePartnerPromise = loadActivePartnerBattleMemberMap(computedCharacterIds)
-    .then((activePartnerMap) => {
-      logWarmupPhaseDetail('角色快照预热', '出战伙伴装配', Date.now() - activePartnerStartAt);
-      return activePartnerMap;
-    });
-  const [loadoutMap, activePartnerMap] = await Promise.all([
-    loadoutPromise,
-    activePartnerPromise,
-  ]);
-
-  const snapshotAssembleStartAt = Date.now();
-  const snapshots = computedCharacterIds
-    .map((characterId) => {
-      const computed = computedMap.get(characterId);
-      const loadout = loadoutMap.get(characterId);
-      if (!computed || !loadout) return null;
-
-      const teamProjection = teamProjectionByUserId.get(computed.user_id) ?? {
-        teamId: null,
-        role: null,
-        memberCharacterIds: [],
-      };
-
-      return {
-        characterId: computed.id,
-        userId: computed.user_id,
-        computed,
-        loadout,
-        activePartner: activePartnerMap.get(characterId) ?? null,
-        teamId: teamProjection.teamId,
-        isTeamLeader: teamProjection.role === 'leader',
-      } satisfies OnlineBattleCharacterSnapshot;
-    })
-    .filter((snapshot): snapshot is OnlineBattleCharacterSnapshot => snapshot !== null);
-  logWarmupPhaseDetail('角色快照预热', '快照组装', Date.now() - snapshotAssembleStartAt);
 
   const persistStartAt = Date.now();
   await processBatchesConcurrently(snapshots, persistCharacterSnapshotsBatch);
@@ -1081,10 +1350,50 @@ const warmupCharacterSnapshotChunk = async (
 
 const warmupCharacterSnapshots = async (): Promise<number> => {
   const queryCharacterIdsStartAt = Date.now();
-  const characterIdResult = await query<{ id: number }>('SELECT id FROM characters ORDER BY id ASC');
+  const characterIdResult = await query<CharacterWarmupIdRow>(
+    `
+      WITH recent_characters AS (
+        SELECT c.id AS character_id
+        FROM characters c
+        JOIN users u ON u.id = c.user_id
+        WHERE GREATEST(
+          COALESCE(c.updated_at::timestamptz, c.created_at::timestamptz, to_timestamp(0)),
+          COALESCE(c.last_offline_at, to_timestamp(0)),
+          COALESCE(u.last_login::timestamptz, to_timestamp(0))
+        ) >= NOW() - ($1::int * INTERVAL '1 day')
+      ),
+      running_dungeon_participants AS (
+        SELECT DISTINCT (participant ->> 'characterId')::int AS character_id
+        FROM dungeon_instance di
+        CROSS JOIN LATERAL jsonb_array_elements(COALESCE(di.participants::jsonb, '[]'::jsonb)) participant
+        WHERE di.status IN ('preparing', 'running')
+      ),
+      running_tower_characters AS (
+        SELECT character_id
+        FROM character_tower_progress
+        WHERE current_run_id IS NOT NULL
+           OR current_battle_id IS NOT NULL
+      )
+      SELECT DISTINCT character_id
+      FROM (
+        SELECT character_id FROM recent_characters
+        UNION ALL
+        SELECT creator_id AS character_id
+        FROM dungeon_instance
+        WHERE status IN ('preparing', 'running')
+        UNION ALL
+        SELECT character_id FROM running_dungeon_participants
+        UNION ALL
+        SELECT character_id FROM running_tower_characters
+      ) candidate
+      WHERE character_id > 0
+      ORDER BY character_id ASC
+    `,
+    [CHARACTER_WARMUP_ACTIVE_WINDOW_DAYS],
+  );
   logWarmupPhaseDetail('角色快照预热', '角色ID查询', Date.now() - queryCharacterIdsStartAt);
   const characterIds = characterIdResult.rows
-    .map((row) => toInt(row.id))
+    .map((row) => toInt(row.character_id))
     .filter((characterId) => characterId > 0);
   return warmupCharacterSnapshotChunk(characterIds);
 };
@@ -1341,6 +1650,7 @@ export const warmupOnlineBattleProjectionService = async (): Promise<WarmupSumma
   projectionReady = false;
   await clearAllProjectionIndexes();
   characterSnapshotsByCharacterId.clear();
+  characterSnapshotHydrationByCharacterId.clear();
   userIdToCharacterId.clear();
   teamProjectionByUserId.clear();
   sessionProjectionBySessionId.clear();
@@ -1388,7 +1698,12 @@ export const getOnlineBattleCharacterSnapshotByCharacterId = async (
   if (normalizedCharacterId <= 0) return null;
   const cached = characterSnapshotsByCharacterId.get(normalizedCharacterId);
   if (cached) return cached;
-  return loadCharacterSnapshotFromRedis(normalizedCharacterId);
+  const redisSnapshot = await loadCharacterSnapshotFromRedis(normalizedCharacterId);
+  if (redisSnapshot) {
+    return redisSnapshot;
+  }
+  const hydratedSnapshots = await hydrateCharacterSnapshotsByCharacterIds([normalizedCharacterId]);
+  return hydratedSnapshots.get(normalizedCharacterId) ?? null;
 };
 
 export const getOnlineBattleCharacterSnapshotByUserId = async (
@@ -1397,15 +1712,8 @@ export const getOnlineBattleCharacterSnapshotByUserId = async (
   requireOnlineBattleProjectionReady();
   const normalizedUserId = toInt(userId);
   if (normalizedUserId <= 0) return null;
-  const cachedCharacterId = userIdToCharacterId.get(normalizedUserId);
-  if (cachedCharacterId) {
-    return getOnlineBattleCharacterSnapshotByCharacterId(cachedCharacterId);
-  }
-  const rawCharacterId = await redis.get(buildUserCharacterKey(normalizedUserId));
-  if (!rawCharacterId) return null;
-  const characterId = toInt(rawCharacterId);
-  if (characterId <= 0) return null;
-  userIdToCharacterId.set(normalizedUserId, characterId);
+  const characterId = (await resolveCharacterIdsByUserIds([normalizedUserId])).get(normalizedUserId);
+  if (!characterId || characterId <= 0) return null;
   return getOnlineBattleCharacterSnapshotByCharacterId(characterId);
 };
 
@@ -1433,10 +1741,23 @@ export const getOnlineBattleCharacterSnapshotsByCharacterIds = async (
   const loadedSnapshots = await loadCharacterSnapshotsByCharacterIdsFromRedis(
     missingCharacterIds,
   );
+  const missingAfterRedis: number[] = [];
   for (const characterId of missingCharacterIds) {
     const snapshot = loadedSnapshots.get(characterId);
-    if (!snapshot) continue;
+    if (!snapshot) {
+      missingAfterRedis.push(characterId);
+      continue;
+    }
     result.set(characterId, snapshot);
+  }
+
+  if (missingAfterRedis.length > 0) {
+    const hydratedSnapshots = await hydrateCharacterSnapshotsByCharacterIds(missingAfterRedis);
+    for (const characterId of missingAfterRedis) {
+      const snapshot = hydratedSnapshots.get(characterId);
+      if (!snapshot) continue;
+      result.set(characterId, snapshot);
+    }
   }
 
   return result;
@@ -1448,27 +1769,7 @@ export const getOnlineBattleCharacterSnapshotsByUserIds = async (
   requireOnlineBattleProjectionReady();
   const normalizedUserIds = normalizeProjectionEntityIds(userIds);
   const result = new Map<number, OnlineBattleCharacterSnapshot>();
-  const missingUserIds: number[] = [];
-  const characterIdByUserId = new Map<number, number>();
-
-  for (const userId of normalizedUserIds) {
-    const cachedCharacterId = userIdToCharacterId.get(userId);
-    if (cachedCharacterId && cachedCharacterId > 0) {
-      characterIdByUserId.set(userId, cachedCharacterId);
-      continue;
-    }
-    missingUserIds.push(userId);
-  }
-
-  if (missingUserIds.length > 0) {
-    const loadedCharacterIds = await loadCharacterIdsByUserIdsFromRedis(missingUserIds);
-    for (const userId of missingUserIds) {
-      const characterId = loadedCharacterIds.get(userId);
-      if (!characterId) continue;
-      characterIdByUserId.set(userId, characterId);
-    }
-  }
-
+  const characterIdByUserId = await resolveCharacterIdsByUserIds(normalizedUserIds);
   const snapshotsByCharacterId = await getOnlineBattleCharacterSnapshotsByCharacterIds(
     [...characterIdByUserId.values()],
   );

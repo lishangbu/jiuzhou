@@ -52,6 +52,7 @@ import {
   TITLE_EFFECT_KEY_SET,
 } from './shared/characterAttrRegistry.js';
 import { listTitleDefinitionsByIds } from './titleDefinitionService.js';
+import { toSafeNonNegativeIntegerStrict } from './shared/safeInteger.js';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -266,6 +267,38 @@ const safeNumber = (value: unknown, fallback: number = 0): number => {
 
 const toNonNegativeInt = (value: unknown, fallback: number = 0): number => {
   return Math.max(0, Math.floor(safeNumber(value, fallback)));
+};
+
+/**
+ * 归一化角色基础行的数值字段。
+ *
+ * 作用：
+ * 1. 把 PostgreSQL `bigint/int` 读出来可能是字符串的字段，统一在进入运行时快照前压成 JS `number`。
+ * 2. 让 `characterComputedService`、在线战斗投影、Redis 持久化都复用同一份已归一化的角色基础数据，避免货币/经验字段带着字符串扩散。
+ *
+ * 输入/输出：
+ * - 输入：查询返回的一行角色基础数据。
+ * - 输出：数值字段全部已归一化的 `CharacterBaseRow`。
+ *
+ * 边界条件：
+ * 1. 这里只做基础数值归一化，不改业务语义；例如 title/realm 等文本字段保持原值。
+ * 2. 货币、经验、属性点、基础三维本项目语义上都应为非负整数，这里直接按非负整数收口，避免后续出现字符串拼接。
+ */
+const normalizeCharacterBaseRow = (row: CharacterBaseRow): CharacterBaseRow => {
+  return {
+    ...row,
+    id: toSafeNonNegativeIntegerStrict(row.id, 'characters.id'),
+    user_id: toSafeNonNegativeIntegerStrict(row.user_id, 'characters.user_id'),
+    spirit_stones: toSafeNonNegativeIntegerStrict(row.spirit_stones, 'characters.spirit_stones'),
+    silver: toSafeNonNegativeIntegerStrict(row.silver, 'characters.silver'),
+    stamina: toSafeNonNegativeIntegerStrict(row.stamina, 'characters.stamina'),
+    exp: toSafeNonNegativeIntegerStrict(row.exp, 'characters.exp'),
+    insight_level: toSafeNonNegativeIntegerStrict(row.insight_level, 'character_insight_progress.level'),
+    attribute_points: toSafeNonNegativeIntegerStrict(row.attribute_points, 'characters.attribute_points'),
+    jing: toSafeNonNegativeIntegerStrict(row.jing, 'characters.jing'),
+    qi: toSafeNonNegativeIntegerStrict(row.qi, 'characters.qi'),
+    shen: toSafeNonNegativeIntegerStrict(row.shen, 'characters.shen'),
+  };
 };
 
 const toRecord = (value: unknown): JsonRecord => {
@@ -1359,7 +1392,7 @@ const selectBaseCharacterByUserId = async (userId: number): Promise<CharacterBas
     [userId],
   );
   if (result.rows.length <= 0) return null;
-  return result.rows[0] as CharacterBaseRow;
+  return normalizeCharacterBaseRow(result.rows[0] as CharacterBaseRow);
 };
 
 const selectBaseCharactersByUserIds = async (
@@ -1385,7 +1418,7 @@ const selectBaseCharactersByUserIds = async (
     `,
     [normalizedUserIds],
   );
-  return result.rows as CharacterBaseRow[];
+  return (result.rows as CharacterBaseRow[]).map((row) => normalizeCharacterBaseRow(row));
 };
 
 const selectBaseCharacterByCharacterId = async (characterId: number): Promise<CharacterBaseRow | null> => {
@@ -1402,7 +1435,7 @@ const selectBaseCharacterByCharacterId = async (characterId: number): Promise<Ch
     [characterId],
   );
   if (result.rows.length <= 0) return null;
-  return result.rows[0] as CharacterBaseRow;
+  return normalizeCharacterBaseRow(result.rows[0] as CharacterBaseRow);
 };
 
 const ensureResourceState = async (
@@ -1702,7 +1735,7 @@ export const getCharacterComputedBatchByCharacterIds = async (
     [ids],
   );
 
-  const rows = result.rows as CharacterBaseRow[];
+  const rows = (result.rows as CharacterBaseRow[]).map((row) => normalizeCharacterBaseRow(row));
   return buildCharacterComputedRowMap(rows, options);
 };
 
