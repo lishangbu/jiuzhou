@@ -59,6 +59,10 @@ import {
   registerIdleExecutionLoop,
   unregisterIdleExecutionLoop,
 } from './idleExecutionRegistry.js';
+import {
+  logIdleFlushFailure,
+  resolveIdleTerminationFlushDecision,
+} from './idleFlushControl.js';
 
 // ============================================
 // 常量
@@ -219,8 +223,8 @@ async function flushBuffer(
   _characterId: number,
   sessionId: string,
   buffer: BatchBuffer,
-): Promise<void> {
-  if (buffer.batches.length === 0) return;
+): Promise<boolean> {
+  if (buffer.batches.length === 0) return true;
 
   const batchesToFlush = buffer.batches.splice(0);
   const summaryPayload = getIdleSessionSummaryFlushPayload(buffer.summaryState);
@@ -264,9 +268,17 @@ async function flushBuffer(
     });
     resetIdleSessionSummaryDelta(buffer.summaryState);
   } catch (error) {
-    console.error(`[IdleBattleExecutor] flush 失败:`, error);
+    if (error instanceof Error) {
+      logIdleFlushFailure('IdleBattleExecutor', error);
+      buffer.batches.unshift(...batchesToFlush);
+      return false;
+    }
+
     buffer.batches.unshift(...batchesToFlush);
+    throw error;
   }
+
+  return true;
 }
 
 /**
@@ -356,8 +368,18 @@ export function startExecutionLoop(session: IdleSessionRow, userId: number): voi
   async function finalizeTermination(
     stop: Extract<TerminationCheckResult, { terminate: true }>
   ): Promise<void> {
-    if (shouldFlush(buffer) || stop.terminate) {
-      await flushBuffer(session.characterId, session.id, buffer);
+    const flushSucceeded =
+      !(shouldFlush(buffer) || stop.terminate) ||
+      (await flushBuffer(session.characterId, session.id, buffer));
+    const flushDecision = resolveIdleTerminationFlushDecision({
+      executorLabel: 'IdleBattleExecutor',
+      sessionId: session.id,
+      flushSucceeded,
+    });
+    if (!flushDecision.shouldFinalize) {
+      runtime.wakeRequested = false;
+      scheduleNext(flushDecision.retryDelayMs);
+      return;
     }
 
     clearLoopRuntimeState();
@@ -541,17 +563,17 @@ export async function flushAllBuffers(): Promise<void> {
 
   console.log(`[IdleBattleExecutor] 正在刷写 ${entries.length} 个会话的缓冲区...`);
 
-  const results = await Promise.allSettled(
+  const results = await Promise.all(
     entries.map(([sessionId, { characterId, buffer }]) =>
       flushBuffer(characterId, sessionId, buffer),
     ),
   );
 
-  const failed = results.filter((r) => r.status === 'rejected');
-  if (failed.length > 0) {
-    console.error(`[IdleBattleExecutor] ${failed.length} 个会话 flush 失败`);
+  const failedCount = results.filter((result) => !result).length;
+  if (failedCount > 0) {
+    console.error(`[IdleBattleExecutor] ${failedCount} 个会话 flush 失败`);
   }
-  console.log(`[IdleBattleExecutor] 缓冲区刷写完成（成功 ${results.length - failed.length}/${results.length}）`);
+  console.log(`[IdleBattleExecutor] 缓冲区刷写完成（成功 ${results.length - failedCount}/${results.length}）`);
 }
 
 /**

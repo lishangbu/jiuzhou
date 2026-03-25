@@ -50,11 +50,8 @@ const STRICT_WRITE_TRANSACTION = true;
 // 数据库连接池
 export const pool = new Pool({
   connectionString: DATABASE_CONNECTION_STRING,
-  max: 400,
-  min: 100,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000,
-  statement_timeout: 30000, // 单条语句超时 30 秒，防止锁等待过久
+  max: 600,
+  min: 200
 });
 
 pool.on('error', (error) => {
