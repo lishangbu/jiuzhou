@@ -445,24 +445,48 @@ export function stripStaticFieldsFromState(
 // ------ 注册战斗 ------
 
 /**
- * 注册已创建的战斗到全局状态并启动 ticker
+ * 注册已创建的战斗到全局状态，并按需激活 runtime
  *
- * 注意：此函数依赖 ticker.ts 的 startBattleTicker + emitBattleUpdate，
- * 通过延迟 import 避免 state <-> ticker 循环。
+ * 注意：
+ * 1) 默认会立刻激活 `battle_started` + ticker；
+ * 2) 也支持先只注册，等秘境/千层塔这类流程写完投影后再显式激活；
+ * 3) 激活逻辑依赖 ticker.ts，通过延迟 import 避免 state <-> ticker 循环。
  */
-export function registerStartedBattle(
-  battleId: string,
-  engine: BattleEngine,
-  participantUserIds: number[],
-): void {
-  engine.startBattle();
-  activeBattles.set(battleId, engine);
-  setBattleParticipantsForBattle(battleId, participantUserIds);
-  syncBattleCharacterIndex(battleId, engine.getState());
+type RegisterStartedBattleOptions = {
+  autoActivateRuntime?: boolean;
+};
+
+/**
+ * 激活已注册战斗的实时推送与 ticker。
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1. 做什么：把“发送 battle_started + 启动 ticker”收口成单一入口，供普通开战立即激活，以及秘境/千层塔这类“先写投影再开跑”的流程延迟调用。
+ * 2. 做什么：复用 startDispatchPolicy 的同一套判定，保证“已结束待结算/已被清理”的边界仍与原先完全一致。
+ * 3. 不做什么：不重建 battle engine、不改参与者索引；这里只消费 registerStartedBattle 已经写好的运行时状态。
+ *
+ * 输入/输出：
+ * - 输入：battleId。
+ * - 输出：无；副作用是按当前 battle 状态决定是否发送 `battle_started` 并启动 ticker。
+ *
+ * 数据流/状态流：
+ * registerStartedBattle 写入 activeBattles/participants/index
+ * -> 普通入口立即调用本函数，或由秘境/千层塔在投影提交成功后调用本函数
+ * -> emitBattleUpdate(started) / startBattleTicker。
+ *
+ * 关键边界条件与坑点：
+ * 1. battle 若已被清理，必须直接跳过，不能补发迟到的 `battle_started`。
+ * 2. battle 若在 start 阶段就 finished，仍要启动 ticker 走统一结算，但不能再补发 `battle_started`。
+ */
+export function activateRegisteredBattleRuntime(battleId: string): void {
+  const registeredEngine = activeBattles.get(battleId);
+  if (!registeredEngine) {
+    return;
+  }
+
   // 延迟导入避免循环依赖：state.ts <-> ticker.ts
   import("./ticker.js").then(({ emitBattleUpdate, startBattleTicker }) => {
     const dispatchPolicy = resolveBattleStartedDispatchPolicy({
-      registeredEngine: engine,
+      registeredEngine,
       activeEngine: activeBattles.get(battleId),
     });
     if (dispatchPolicy === "skip") {
@@ -472,9 +496,25 @@ export function registerStartedBattle(
       emitBattleUpdate(battleId, {
         kind: "battle_started",
         battleId,
-        state: engine.getState(),
+        state: registeredEngine.getState(),
       });
     }
     startBattleTicker(battleId);
   });
+}
+
+export function registerStartedBattle(
+  battleId: string,
+  engine: BattleEngine,
+  participantUserIds: number[],
+  options: RegisterStartedBattleOptions = {},
+): void {
+  engine.startBattle();
+  activeBattles.set(battleId, engine);
+  setBattleParticipantsForBattle(battleId, participantUserIds);
+  syncBattleCharacterIndex(battleId, engine.getState());
+  if (options.autoActivateRuntime === false) {
+    return;
+  }
+  activateRegisteredBattleRuntime(battleId);
 }

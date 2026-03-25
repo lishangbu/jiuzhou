@@ -12,12 +12,15 @@
  * 数据流/状态流：
  * - 先调用 startBattle。
  * - 当且仅当 startBattle.success=true 且 battleId 存在时，调用 commitOnBattleStarted。
+ * - commit 成功后再激活 battle runtime，避免首个即时 tick 抢在投影提交前执行。
  * - 任一前置不满足时立即失败返回，后续提交不执行。
  *
  * 关键边界条件与坑点：
  * 1. startBattle 成功但缺少 battleId 视为失败，防止进入“战斗未建立却已扣费”的不一致状态。
- * 2. commitOnBattleStarted 的失败结果必须原样上抛，调用方据此中止流程。
+ * 2. commitOnBattleStarted 的失败结果必须原样上抛，调用方据此中止流程，且不能提前激活 ticker。
  */
+
+import { activateRegisteredBattleRuntime } from '../../battle/runtime/state.js';
 
 type BattleStartPayload = {
   battleId?: string;
@@ -58,8 +61,12 @@ export const runDungeonStartFlow = async <T>(params: {
     };
   }
 
-  return params.commitOnBattleStarted({
+  const commitResult = await params.commitOnBattleStarted({
     battleId,
     state: battleRes.data?.state,
   });
+  if (commitResult.success) {
+    activateRegisteredBattleRuntime(battleId);
+  }
+  return commitResult;
 };

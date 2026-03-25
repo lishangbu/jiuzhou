@@ -46,7 +46,10 @@ import type {
   BattleSessionSnapshot,
   TowerBattleSessionContext,
 } from '../battleSession/types.js';
-import { isCharacterInBattle } from '../battle/runtime/state.js';
+import {
+  activateRegisteredBattleRuntime,
+  isCharacterInBattle,
+} from '../battle/runtime/state.js';
 import { TOWER_PVE_BATTLE_START_POLICY } from '../battle/shared/startPolicy.js';
 import { startResolvedPVEBattleByPolicy } from '../battle/pve.js';
 import { resolveOrderedMonsters } from '../battle/shared/monsters.js';
@@ -346,6 +349,7 @@ const createTowerBattleForFloor = async (params: {
     syncResourceContext: '同步战前资源（千层塔战斗）',
     startSuccessMessage: `第${params.floor}层挑战开始`,
     errorMessage: '发起千层塔战斗失败',
+    deferBattleActivation: true,
   });
   if (!battleResult.success || !battleResult.data?.state || !battleResult.data?.battleId) {
     throw new Error(battleResult.message || '发起千层塔战斗失败');
@@ -359,6 +363,7 @@ const createTowerBattleForFloor = async (params: {
     monsters: resolvedFloor.monsters,
     preview: resolvedFloor.preview,
   });
+  activateRegisteredBattleRuntime(battleId);
   return {
     battleId,
     state: battleResult.data.state as BattleState,

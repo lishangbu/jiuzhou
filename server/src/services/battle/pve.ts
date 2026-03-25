@@ -60,6 +60,7 @@ export type PveBattleRegisteredPayload = {
 
 export type StartPVEBattleOptions = {
   onBattleRegistered?: (payload: PveBattleRegisteredPayload) => void;
+  deferBattleActivation?: boolean;
 };
 
 export async function startPVEBattle(
@@ -361,6 +362,7 @@ export const startResolvedPVEBattleByPolicy = async (params: {
   startSuccessMessage: string;
   errorMessage: string;
   onBattleRegistered?: (payload: PveBattleRegisteredPayload) => void;
+  deferBattleActivation?: boolean;
 }): Promise<BattleResult> => {
   try {
     const baseCharacterSnapshot = await getOnlineBattleCharacterSnapshotByUserId(params.userId);
@@ -447,7 +449,9 @@ export const startResolvedPVEBattleByPolicy = async (params: {
     );
 
     const engine = new BattleEngine(battleState);
-    registerStartedBattle(params.battleId, engine, participantUserIds);
+    registerStartedBattle(params.battleId, engine, participantUserIds, {
+      autoActivateRuntime: params.deferBattleActivation !== true,
+    });
     params.onBattleRegistered?.({
       battleId: params.battleId,
       participantUserIds: participantUserIds.slice(),
@@ -506,6 +510,7 @@ const startDungeonPVEBattleByPolicy = async (
       startSuccessMessage: '战斗开始',
       errorMessage: '发起秘境战斗失败',
       onBattleRegistered: options?.onBattleRegistered,
+      deferBattleActivation: options?.deferBattleActivation,
     });
   } catch (error) {
     battlePveLogger.error({
@@ -539,6 +544,9 @@ export async function startDungeonPVEBattleForDungeonFlow(
     userId,
     monsterDefIds,
     DUNGEON_FLOW_PVE_BATTLE_START_POLICY,
-    options,
+    {
+      ...options,
+      deferBattleActivation: true,
+    },
   );
 }
