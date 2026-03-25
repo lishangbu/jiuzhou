@@ -21,7 +21,7 @@
  * 2. 投影写入必须保持“内存先更新、Redis 随后覆盖”的单一方向，避免同一请求里读到旧内存和新 Redis 的分裂状态。
  */
 
-import { query } from '../config/database.js';
+import { afterTransactionCommit, query } from '../config/database.js';
 import { redis } from '../config/redis.js';
 import type { CharacterComputedRow } from './characterComputedService.js';
 import {
@@ -1946,6 +1946,74 @@ export const setOnlineBattleCharacterPosition = async (
   };
   await persistCharacterSnapshot(nextSnapshot);
   return nextSnapshot;
+};
+
+/**
+ * 提交后刷新在线战斗角色整份快照。
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1. 做什么：基于最新 DB + 计算属性 + 装备/伙伴/队伍投影，重建单个角色的整份在线战斗快照。
+ * 2. 做什么：给突破、战斗配置变更等“会影响整份 computed 快照”的写链路提供单一刷新入口，避免业务侧只改局部字段导致运行时状态分裂。
+ * 3. 不做什么：不写角色数据库，也不推送客户端；调用方仍负责自己的写库与消息通知。
+ *
+ * 输入/输出：
+ * - 输入：characterId。
+ * - 输出：刷新后的在线战斗角色快照；若角色不存在或无法组装快照则返回 `null`。
+ *
+ * 数据流/状态流：
+ * - 写链路在事务提交后调用本函数；
+ * - 本函数重新组装目标角色的 `OnlineBattleCharacterSnapshot`；
+ * - 最终覆盖内存 + Redis 权威快照，后续秘境/战斗读取同一份新状态。
+ *
+ * 关键边界条件与坑点：
+ * 1. 必须重建整份快照，不能只补 `realm/sub_realm`；突破等链路会同时影响派生属性，局部覆盖会让战斗数值继续使用旧值。
+ * 2. 该刷新必须发生在事务提交后；若在事务中提前写 Redis，回滚时会把运行时快照写成“假成功”状态。
+ */
+export const refreshOnlineBattleCharacterSnapshotByCharacterId = async (
+  characterId: number,
+): Promise<OnlineBattleCharacterSnapshot | null> => {
+  requireOnlineBattleProjectionReady();
+  const normalizedCharacterId = toInt(characterId);
+  if (normalizedCharacterId <= 0) return null;
+
+  const nextSnapshots = await buildCharacterSnapshotsByCharacterIds([normalizedCharacterId]);
+  const nextSnapshot = nextSnapshots[0] ?? null;
+  if (!nextSnapshot) return null;
+
+  await persistCharacterSnapshot(nextSnapshot);
+  return nextSnapshot;
+};
+
+/**
+ * 在事务提交后调度在线战斗角色整份快照刷新。
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1. 做什么：把“事务提交后再重建快照”的时序收敛成单一入口，避免业务服务各自手写 `afterTransactionCommit`。
+ * 2. 做什么：确保 Redis/内存中的运行时权威快照只在数据库提交成功后才更新。
+ * 3. 不做什么：不吞异常；提交后刷新失败时，由调用方感知异常并决定如何处理。
+ *
+ * 输入/输出：
+ * - 输入：characterId。
+ * - 输出：无；副作用是在事务提交后刷新角色快照。
+ *
+ * 数据流/状态流：
+ * - 业务服务写库成功 -> 调用本函数登记 after-commit 回调；
+ * - 数据库提交成功后 -> 回调执行 `refreshOnlineBattleCharacterSnapshotByCharacterId`；
+ * - 在线战斗相关链路随后读取到最新整份快照。
+ *
+ * 关键边界条件与坑点：
+ * 1. 这里不会在事务中直接刷新快照；未提交前的写库结果不能提前扩散到 Redis。
+ * 2. 非正整数角色 ID 会被直接忽略，避免把脏值带入 after-commit 队列。
+ */
+export const scheduleOnlineBattleCharacterSnapshotRefreshByCharacterId = async (
+  characterId: number,
+): Promise<void> => {
+  const normalizedCharacterId = toInt(characterId);
+  if (normalizedCharacterId <= 0) return;
+
+  await afterTransactionCommit(async () => {
+    await refreshOnlineBattleCharacterSnapshotByCharacterId(normalizedCharacterId);
+  });
 };
 
 export const getTeamProjectionByUserId = async (
