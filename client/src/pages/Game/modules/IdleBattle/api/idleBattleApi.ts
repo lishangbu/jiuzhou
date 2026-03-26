@@ -18,6 +18,7 @@
  *   2. startIdleSession 返回 409 时 axios 拦截器会 reject，调用方需区分 409 与其他错误
  */
 
+import type { AxiosRequestConfig } from "axios";
 import api from "../../../../../services/api/core";
 import type {
   IdleStartParams,
@@ -58,8 +59,10 @@ export const stopIdleSession = (): Promise<ApiOkEnvelope> =>
   api.post("/idle/stop");
 
 /** 查询当前活跃会话 */
-export const getIdleStatus = (): Promise<IdleStatusResponse> =>
-  unwrapData<IdleStatusResponse>(api.get("/idle/status"));
+export const getIdleStatus = (
+  requestConfig?: AxiosRequestConfig,
+): Promise<IdleStatusResponse> =>
+  unwrapData<IdleStatusResponse>(api.get("/idle/status", requestConfig));
 
 /** 查询历史记录（最近 30 条） */
 export const getIdleHistory = (): Promise<IdleHistoryResponse> =>

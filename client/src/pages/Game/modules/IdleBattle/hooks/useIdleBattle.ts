@@ -14,6 +14,7 @@
  *   打开挂机面板/显式刷新配置 → loadConfig → 初始化或同步挂机配置
  *   gameSocket.onIdleUpdate → 更新 activeSession 实时收益
  *   gameSocket.onIdleFinished → 清空 activeSession，触发历史刷新
+ *   activeSession.status === 'stopping' → 静默轮询 getIdleStatus → 主动收敛停止态
  *   断线 30s 后 → getIdleProgress → 补全进度
  *   selectSession → getIdleBatches(摘要) → sessionBatches → selectBatch → getIdleBatchDetail(详情) → batchLog
  *
@@ -21,13 +22,15 @@
  *   1. 断线检测：监听 gameSocket 连接状态，断线超过 RECONNECT_PROGRESS_DELAY_MS 后
  *      自动调用 getIdleProgress 补全进度（避免频繁请求）
  *   2. 不自动弹出未读回放弹窗，由玩家主动点击历史记录查看
- *   3. Socket 事件只更新内存状态，不重新请求 DB（减少服务端压力）
- *   4. saveConfig 与 startIdle 均为乐观更新：先更新本地状态，失败时回滚
+ *   3. stopping 状态必须主动向服务端收敛，不能只依赖 idle:finished 事件
+ *   4. Socket 事件只更新内存状态，不重新请求 DB（减少服务端压力）
+ *   5. saveConfig 与 startIdle 均为乐观更新：先更新本地状态，失败时回滚
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { gameSocket } from '../../../../../services/gameSocket';
 import { getUnifiedApiErrorMessage, toUnifiedApiError } from '../../../../../services/api';
+import { SILENT_API_REQUEST_CONFIG } from '../../../../../services/api/requestConfig';
 import type { IdleUpdatePayload, IdleFinishedPayload } from '../../../../../services/gameSocket';
 import {
   startIdleSession,
@@ -56,6 +59,9 @@ import { BASE_IDLE_MAX_DURATION_MS } from '../utils/idleDurationOptions';
 
 /** 断线后延迟多久触发进度补全（ms） */
 const RECONNECT_PROGRESS_DELAY_MS = 30_000;
+
+/** 停止中状态向服务端收敛的轮询间隔（ms） */
+const STOPPING_STATUS_SYNC_INTERVAL_MS = 1_500;
 
 /** 默认配置（未从服务端加载时的初始值） */
 const DEFAULT_CONFIG: IdleConfigDto = {
@@ -143,6 +149,7 @@ export function useIdleBattle(options?: UseIdleBattleOptions): UseIdleBattleRetu
   const configSyncingRef = useRef(false);
   const hasLoadedConfigRef = useRef(false);
   const hasHydratedConfigRef = useRef(false);
+  const stoppingStatusSyncInFlightRef = useRef(false);
 
   // ============================================
   // 初始化：只加载当前挂机状态
@@ -433,7 +440,7 @@ export function useIdleBattle(options?: UseIdleBattleOptions): UseIdleBattleRetu
     setError(null);
     try {
       await stopIdleSession();
-      // 乐观更新：将 status 改为 stopping（等待 idle:finished 事件清空）
+      // 乐观更新：先切到 stopping，再由统一的停止态收敛逻辑确认最终结束。
       setActiveSession((prev) => prev ? { ...prev, status: 'stopping' } : null);
     } catch (err) {
       setError(getUnifiedApiErrorMessage(err, '停止挂机失败'));
@@ -453,6 +460,60 @@ export function useIdleBattle(options?: UseIdleBattleOptions): UseIdleBattleRetu
       setError(getUnifiedApiErrorMessage(err, '加载挂机历史失败'));
     }
   }, []);
+
+  /**
+   * 主动收敛“停止中”状态。
+   *
+   * 作用：
+   * - 统一承接“stop 请求成功后”和“idle:finished 事件丢失后”的状态校准逻辑；
+   * - 只复用已有 getIdleStatus 接口，不新增第二套停止态接口或页面侧分叉判断；
+   * - 会话一旦不再停留在同一个 stopping 会话上，立即刷新历史记录，保证面板与状态栏一致。
+   *
+   * 输入/输出：
+   * - 输入：正在收敛的 sessionId
+   * - 输出：无；内部按需更新 activeSession 与 history
+   *
+   * 边界条件：
+   * 1. 同一时刻只允许一个 stopping 状态同步请求在飞，避免慢网下产生并发轮询。
+   * 2. 静默请求只关闭自动 toast，不吞 Promise reject；这里只在轮询场景下选择不覆盖当前错误文案。
+   */
+  const syncStoppingStatus = useCallback(async (sessionId: string): Promise<void> => {
+    if (stoppingStatusSyncInFlightRef.current) {
+      return;
+    }
+
+    stoppingStatusSyncInFlightRef.current = true;
+    try {
+      const res = await getIdleStatus(SILENT_API_REQUEST_CONFIG);
+      const currentSession = res.session;
+      if (currentSession?.id === sessionId && currentSession.status === 'stopping') {
+        return;
+      }
+
+      setActiveSession(currentSession);
+      void loadHistory();
+    } catch {
+      // stopping 收敛轮询保持静默，等待下一轮重试，避免重复打断玩家。
+    } finally {
+      stoppingStatusSyncInFlightRef.current = false;
+    }
+  }, [loadHistory]);
+
+  useEffect(() => {
+    if (!activeSession || activeSession.status !== 'stopping') {
+      return;
+    }
+
+    const sessionId = activeSession.id;
+    void syncStoppingStatus(sessionId);
+    const timer = setInterval(() => {
+      void syncStoppingStatus(sessionId);
+    }, STOPPING_STATUS_SYNC_INTERVAL_MS);
+
+    return () => {
+      clearInterval(timer);
+    };
+  }, [activeSession?.id, activeSession?.status, syncStoppingStatus]);
 
   // ============================================
   // 回放控制
