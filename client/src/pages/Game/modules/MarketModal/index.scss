@@ -993,8 +993,17 @@
   border: 1px solid var(--border-color-soft);
 }
 
-.market-partner-technique-cell--hoverable {
+.market-partner-technique-trigger {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-align: left;
   cursor: pointer;
+}
+
+.market-partner-technique-cell--interactive {
   transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 
   &:hover {
@@ -1002,6 +1011,13 @@
     box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
     transform: translateY(-1px);
   }
+}
+
+.market-partner-technique-trigger:focus-visible .market-partner-technique-cell,
+.market-partner-technique-trigger:hover .market-partner-technique-cell {
+  border-color: color-mix(in srgb, var(--primary-color) 38%, var(--border-color-soft));
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
 }
 
 .market-partner-technique-name {
@@ -1055,6 +1071,70 @@
   display: flex;
   flex-direction: column;
   max-width: min(336px, calc(100vw - 48px));
+}
+
+.market-partner-technique-drawer {
+  .ant-drawer-header {
+    min-height: 44px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-color-soft);
+    background: var(--panel-bg);
+  }
+
+  .ant-drawer-title {
+    font-size: 13px;
+    font-weight: 900;
+    color: var(--text-color);
+  }
+
+  .ant-drawer-body {
+    min-height: 0;
+    background: var(--panel-bg);
+  }
+}
+
+.market-partner-technique-detail {
+  --technique-skill-title: var(--text-color);
+  --technique-skill-text: var(--text-color);
+  --technique-skill-muted: var(--text-secondary);
+  --technique-skill-border: var(--border-color-soft);
+  --technique-skill-surface: color-mix(in srgb, var(--panel-bg) 88%, var(--panel-bg-soft) 12%);
+  --technique-skill-card-bg: var(--panel-bg);
+  --technique-skill-accent: var(--primary-color);
+
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.market-partner-technique-detail-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.market-partner-technique-detail-name {
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.35;
+  color: var(--text-color);
+}
+
+.market-partner-technique-detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.market-partner-technique-detail-desc {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color-soft);
+  background: var(--panel-bg-soft);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
 }
 
 .market-list-detail-title {

@@ -343,7 +343,7 @@ const PartnerListSheet: React.FC<PartnerListSheetProps> = ({
           </div>
           <div className="market-list-sheet-section">
             <div className="market-list-sheet-section-title">功法</div>
-            <MarketPartnerTechniqueList techniques={partner.techniques} enableTooltip />
+            <MarketPartnerTechniqueList techniques={partner.techniques} skillDisplayMode="drawer" />
           </div>
         </div>
 
@@ -2406,7 +2406,7 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
                       </div>
                       <div className="market-list-detail-section">
                         <div className="market-list-detail-title">功法</div>
-                        <MarketPartnerTechniqueList techniques={selectedPartner.techniques} enableTooltip />
+                        <MarketPartnerTechniqueList techniques={selectedPartner.techniques} skillDisplayMode="tooltip" />
                       </div>
                     </div>
 
