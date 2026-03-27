@@ -51,7 +51,7 @@
 
   .bag-growth-header-name {
     font-size: 15px;
-    font-weight: 900;
+    font-weight: var(--font-weight-strong);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -885,7 +885,7 @@
 
 .bag-detail-name {
   font-size: 14px;
-  font-weight: 900;
+  font-weight: var(--font-weight-strong);
   color: var(--text-color);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -927,6 +927,7 @@
 
 .bag-detail-title {
   font-size: 11px;
+  font-weight: var(--font-weight-section);
   color: var(--text-color);
   margin-bottom: 6px;
 }
@@ -1119,7 +1120,7 @@
 
 .bag-craft-item-title {
   font-size: 13px;
-  font-weight: 900;
+  font-weight: var(--font-weight-title);
 }
 
 .bag-craft-item-meta {
@@ -1154,7 +1155,7 @@
 
 .bag-craft-detail-title {
   font-size: 15px;
-  font-weight: 900;
+  font-weight: var(--font-weight-strong);
 }
 
 .bag-craft-detail-meta {
@@ -1288,7 +1289,7 @@
 
 .bag-gem-item-title {
   font-size: 13px;
-  font-weight: 900;
+  font-weight: var(--font-weight-title);
 }
 
 .bag-gem-item-meta {
@@ -1320,7 +1321,7 @@
 
 .bag-gem-detail-title {
   font-size: 15px;
-  font-weight: 900;
+  font-weight: var(--font-weight-strong);
 }
 
 .bag-gem-detail-meta {

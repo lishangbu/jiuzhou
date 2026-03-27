@@ -72,7 +72,7 @@
 
 .team-left-name {
   font-size: 14px;
-  font-weight: 900;
+  font-weight: var(--font-weight-title);
   color: var(--text-color);
 }
 
@@ -95,7 +95,7 @@
     line-height: 34px;
     padding-inline: 12px;
     font-size: 12px;
-    font-weight: 800;
+    font-weight: var(--font-weight-title);
     white-space: nowrap;
   }
 }
@@ -104,7 +104,7 @@
   width: 100%;
   height: 40px;
   border-radius: 12px;
-  font-weight: 800;
+  font-weight: var(--font-weight-title);
 }
 
 .team-right {
@@ -142,7 +142,7 @@
 
 .team-title {
   font-size: 14px;
-  font-weight: 900;
+  font-weight: var(--font-weight-strong);
   color: var(--text-color);
 }
 
@@ -194,7 +194,7 @@
 
 .team-v {
   font-size: 12px;
-  font-weight: 900;
+  font-weight: var(--font-weight-strong);
   color: var(--text-color);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -205,6 +205,7 @@
   margin-top: 12px;
   margin-bottom: 10px;
   font-size: 12px;
+  font-weight: var(--font-weight-section);
   color: var(--text-tertiary);
 }
 
@@ -230,7 +231,7 @@
 .team-member-name {
   min-width: 0;
   font-size: 13px;
-  font-weight: 900;
+  font-weight: var(--font-weight-title);
   color: var(--text-color);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -277,7 +278,7 @@
 .team-mobile-card-title {
   min-width: 0;
   font-size: 13px;
-  font-weight: 900;
+  font-weight: var(--font-weight-title);
   color: var(--text-color);
   line-height: 1.35;
 }

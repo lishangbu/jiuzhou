@@ -10,6 +10,12 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background: var(--app-bg);
   color: var(--text-color);
+  --font-weight-regular: 400;
+  --font-weight-label: 500;
+  --font-weight-section: 600;
+  --font-weight-title: 700;
+  --font-weight-strong: 800;
+  --font-weight-display: 900;
   --app-bg: #f5f5f5;
   --panel-bg: #ffffff;
   --panel-bg-soft: #fafafa;

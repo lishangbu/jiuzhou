@@ -637,7 +637,7 @@
 
 .partner-stat-value {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: var(--font-weight-title);
   color: var(--text-color);
   line-height: 1.35;
   word-break: break-word;

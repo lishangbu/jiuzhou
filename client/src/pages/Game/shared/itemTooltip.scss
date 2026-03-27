@@ -60,7 +60,7 @@
 }
 
 .item-tooltip-title {
-  font-weight: 900;
+  font-weight: var(--font-weight-strong);
   font-size: 13px;
   color: var(--item-tooltip-title);
   min-width: 0;
@@ -78,7 +78,7 @@
   background: var(--item-tooltip-chip-bg);
   display: inline-flex;
   align-items: center;
-  font-weight: 900;
+  font-weight: var(--font-weight-strong);
   color: var(--item-tooltip-title);
   font-size: 12px;
 }
@@ -94,7 +94,7 @@
   height: 22px;
   padding: 0 10px;
   color: var(--item-tooltip-title);
-  font-weight: 800;
+  font-weight: var(--font-weight-title);
   font-size: 12px;
   display: inline-flex;
   align-items: center;
@@ -123,6 +123,7 @@
 
 .item-tooltip-section-title {
   font-size: 12px;
+  font-weight: var(--font-weight-section);
   color: var(--item-tooltip-title);
 }
 
@@ -139,7 +140,7 @@
 
 .item-tooltip-line {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: var(--font-weight-title);
   color: var(--item-tooltip-text);
   line-height: 1.35;
 }

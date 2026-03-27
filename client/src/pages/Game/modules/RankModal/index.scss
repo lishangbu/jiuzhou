@@ -41,7 +41,7 @@
 
 .rank-left-name {
   font-size: 14px;
-  font-weight: 900;
+  font-weight: var(--font-weight-title);
   color: var(--text-color);
 }
 
@@ -64,7 +64,7 @@
     line-height: 34px;
     padding-inline: 12px;
     font-size: 12px;
-    font-weight: 800;
+    font-weight: var(--font-weight-title);
     white-space: nowrap;
   }
 }
@@ -73,7 +73,7 @@
   width: 100%;
   height: 40px;
   border-radius: 12px;
-  font-weight: 800;
+  font-weight: var(--font-weight-title);
 }
 
 .rank-right {
@@ -113,7 +113,7 @@
 
 .rank-title {
   font-size: 14px;
-  font-weight: 900;
+  font-weight: var(--font-weight-strong);
   color: var(--text-color);
 }
 
@@ -128,7 +128,7 @@
     line-height: 32px;
     padding-inline: 12px;
     font-size: 12px;
-    font-weight: 800;
+    font-weight: var(--font-weight-title);
     white-space: nowrap;
   }
 }
@@ -183,7 +183,7 @@
 .rank-partner-name-button {
   min-width: 0;
   font-size: 13px;
-  font-weight: 900;
+  font-weight: var(--font-weight-title);
   color: var(--text-color);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -221,7 +221,7 @@
 .rank-partner-role,
 .rank-partner-level {
   font-size: 12px;
-  font-weight: 800;
+  font-weight: var(--font-weight-section);
   color: var(--text-secondary);
 }
 
@@ -263,7 +263,7 @@
   min-width: 0;
   flex: 1;
   font-size: 13px;
-  font-weight: 900;
+  font-weight: var(--font-weight-title);
   color: var(--text-color);
   overflow: hidden;
   text-overflow: ellipsis;

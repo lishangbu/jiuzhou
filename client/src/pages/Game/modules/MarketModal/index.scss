@@ -60,7 +60,7 @@
 
 .market-left-name {
   font-size: 14px;
-  font-weight: 900;
+  font-weight: var(--font-weight-title);
   color: var(--text-color);
 }
 
@@ -87,7 +87,7 @@
     line-height: 34px;
     padding-inline: 12px;
     font-size: 12px;
-    font-weight: 800;
+    font-weight: var(--font-weight-title);
     white-space: nowrap;
   }
 }
@@ -96,7 +96,7 @@
   width: 100%;
   height: 40px;
   border-radius: 12px;
-  font-weight: 800;
+  font-weight: var(--font-weight-title);
 }
 
 .market-right {
@@ -146,12 +146,12 @@
 }
 
 .market-asset-switch .ant-segmented-item-label {
-  font-weight: 800;
+  font-weight: var(--font-weight-title);
 }
 
 .market-title {
   font-size: 14px;
-  font-weight: 900;
+  font-weight: var(--font-weight-strong);
   color: var(--text-color);
 }
 
@@ -283,7 +283,7 @@
 
 .market-item-name {
   font-size: 15px;
-  font-weight: 900;
+  font-weight: var(--font-weight-title);
   color: var(--text-color);
   line-height: 1.2;
   white-space: nowrap;
@@ -326,7 +326,7 @@
 .market-tag.ant-tag {
   margin: 0;
   color: var(--text-color);
-  font-weight: 900;
+  font-weight: var(--font-weight-title);
 }
 
 .market-tag-mine.ant-tag {
@@ -692,7 +692,7 @@
 
 .market-buy-dialog__name {
   font-size: 15px;
-  font-weight: 900;
+  font-weight: var(--font-weight-strong);
   color: var(--text-color);
   line-height: 1.4;
   word-break: break-word;
@@ -760,7 +760,7 @@
 
 .market-buy-dialog__value {
   font-size: 14px;
-  font-weight: 800;
+  font-weight: var(--font-weight-strong);
   color: var(--text-color);
   min-width: 0;
   word-break: break-word;
@@ -813,7 +813,7 @@
     height: 100%;
     padding-inline: var(--market-buy-dialog-input-padding-inline);
     font-size: var(--market-buy-dialog-input-font-size);
-    font-weight: 800;
+    font-weight: var(--font-weight-strong);
     color: var(--text-color);
   }
 }
@@ -853,7 +853,7 @@
 
 .market-buy-dialog__total-value {
   font-size: 16px;
-  font-weight: 900;
+  font-weight: var(--font-weight-display);
   color: var(--text-color);
   min-width: 0;
   text-align: right;
@@ -1059,6 +1059,7 @@
 
 .market-list-detail-title {
   font-size: 12px;
+  font-weight: var(--font-weight-section);
   color: var(--text-tertiary);
   padding-bottom: 4px;
   border-bottom: 1px solid var(--border-color-soft);
@@ -1096,6 +1097,7 @@
 
 .market-partner-attr-row__value {
   color: var(--text-color);
+  font-weight: var(--font-weight-section);
 }
 
 .market-partner-attr-row__growth {
@@ -1116,14 +1118,13 @@
 }
 
 .market-list-detail-icon {
-  width: 54px;
-  height: 54px;
+  width: 100px;
+  height: 100px;
   object-fit: contain;
   display: block;
   border-radius: 12px;
   border: 1px solid var(--border-color-soft);
   background: var(--panel-bg);
-  padding: 6px;
 }
 
 .market-list-detail-icon {
@@ -1140,7 +1141,7 @@
 
 .market-list-detail-name {
   font-size: 16px;
-  font-weight: 900;
+  font-weight: var(--font-weight-strong);
   color: var(--text-color);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1717,8 +1718,8 @@
 }
 
 .market-list-sheet-icon-box {
-  width: 60px;
-  height: 60px;
+  width: 100px;
+  height: 100px;
   border-radius: 14px;
   border: 1.5px solid var(--border-color-soft);
   background: var(--panel-bg-soft);

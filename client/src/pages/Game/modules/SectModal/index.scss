@@ -34,7 +34,7 @@
 
 .sect-left-name {
   font-size: 14px;
-  font-weight: 900;
+  font-weight: var(--font-weight-title);
   color: var(--text-color);
 }
 
@@ -49,7 +49,7 @@
   width: 100%;
   height: 40px;
   border-radius: 12px;
-  font-weight: 800;
+  font-weight: var(--font-weight-title);
 }
 
 .sect-left-segmented-wrap {
@@ -64,7 +64,7 @@
     line-height: 34px;
     padding-inline: 12px;
     font-size: 12px;
-    font-weight: 800;
+    font-weight: var(--font-weight-title);
     white-space: nowrap;
   }
 }
@@ -144,7 +144,7 @@
 
 .sect-card-name {
   font-size: 18px;
-  font-weight: 900;
+  font-weight: var(--font-weight-strong);
   color: var(--text-color);
 }
 
@@ -265,7 +265,7 @@
 
 .sect-title {
   font-size: 14px;
-  font-weight: 900;
+  font-weight: var(--font-weight-strong);
   color: var(--text-color);
 }
 
@@ -542,7 +542,7 @@
 
 .sect-building-name {
   font-size: 16px;
-  font-weight: 900;
+  font-weight: var(--font-weight-title);
   color: var(--text-color);
 }
 
@@ -689,7 +689,7 @@
 
 .upgrade-btn {
   border-radius: 10px;
-  font-weight: 900;
+  font-weight: var(--font-weight-strong);
   height: 38px;
   padding-inline: 16px;
 }
@@ -793,7 +793,7 @@
 
 .sect-shop-item-name {
   font-size: 15px;
-  font-weight: 900;
+  font-weight: var(--font-weight-title);
   color: var(--text-color);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -876,7 +876,7 @@
 
 .sect-shop-price-value {
   font-size: 13px;
-  font-weight: 900;
+  font-weight: var(--font-weight-strong);
   color: var(--primary-color);
 
   &.is-shortage {
@@ -919,7 +919,7 @@
 
 .sect-quest-title {
   font-size: 14px;
-  font-weight: 900;
+  font-weight: var(--font-weight-title);
   color: var(--text-color);
 }
 

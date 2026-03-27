@@ -144,13 +144,13 @@
 
 .bp-progress-level {
   font-size: 12px;
-  font-weight: 900;
+  font-weight: var(--font-weight-strong);
   color: var(--text-color);
 }
 
 .bp-progress-exp {
   font-size: 12px;
-  font-weight: 800;
+  font-weight: var(--font-weight-title);
   color: var(--text-tertiary);
 }
 
@@ -177,6 +177,7 @@
 
 .bp-section-title {
   font-size: 13px;
+  font-weight: var(--font-weight-section);
   color: var(--text-color);
 }
 
@@ -207,7 +208,7 @@
 
 .bp-reward-level {
   font-size: 12px;
-  font-weight: 900;
+  font-weight: var(--font-weight-strong);
   color: var(--text-tertiary);
 }
 
@@ -225,7 +226,7 @@
 .bp-reward-name {
   width: 100%;
   font-size: 12px;
-  font-weight: 900;
+  font-weight: var(--font-weight-title);
   color: var(--text-color);
   text-align: center;
   overflow: hidden;
@@ -235,7 +236,7 @@
 
 .bp-reward-amount {
   font-size: 12px;
-  font-weight: 900;
+  font-weight: var(--font-weight-strong);
   color: var(--text-tertiary);
 }
 

@@ -15,6 +15,7 @@
 
   .technique-skill-section__title {
     font-size: 12px;
+    font-weight: var(--font-weight-section);
     color: var(--technique-skill-title);
     letter-spacing: 0.02em;
   }
@@ -53,7 +54,7 @@
 
   .technique-skill-section__summary-name {
     font-size: 12px;
-    font-weight: 800;
+    font-weight: var(--font-weight-title);
     color: var(--technique-skill-text);
     line-height: 1.35;
   }
@@ -144,7 +145,7 @@
 
   .technique-skill-section__card .skill-card-title {
     font-size: 13px;
-    font-weight: 800;
+    font-weight: var(--font-weight-title);
     color: var(--technique-skill-text);
     line-height: 1.3;
   }
@@ -175,7 +176,7 @@
   .technique-skill-section__card .skill-card-grid-value {
     color: var(--technique-skill-text);
     font-size: 11px;
-    font-weight: 700;
+    font-weight: var(--font-weight-title);
   }
 
   .technique-skill-section__card .skill-card-grid {
