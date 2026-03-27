@@ -27,7 +27,7 @@
           "万法道宫"
         ],
         "sort_weight": 110,
-        "enabled": true,
+        "enabled": false,
         "version": 1
       },
       "difficulties": [

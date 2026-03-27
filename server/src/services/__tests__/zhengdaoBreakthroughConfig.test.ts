@@ -47,7 +47,7 @@ const loadSeed = (): RealmBreakthroughSeed => {
   return JSON.parse(readFileSync(seedPath, 'utf-8')) as RealmBreakthroughSeed;
 };
 
-test('合道->证道突破配置应满足证道期前置/消耗/奖励口径', () => {
+test('合道->证道突破配置应满足证道期前置/消耗/奖励口径，并保留未开放版本锁', () => {
   const seed = loadSeed();
   const entry = (seed.breakthroughs ?? []).find(
     (row) => row.from === '炼神返虚·合道期' && row.to === '炼虚合道·证道期',
@@ -55,7 +55,7 @@ test('合道->证道突破配置应满足证道期前置/消耗/奖励口径', (
   assert.ok(entry, '缺少 合道期->证道期 突破条目');
 
   const requirements = entry.requirements ?? [];
-  assert.equal(requirements.some((row) => row.type === 'version_locked'), false, '证道期突破不应保留版本锁');
+  assert.equal(requirements.some((row) => row.type === 'version_locked'), true, '证道期突破应保留未开放版本锁');
 
   const expReq = requirements.find((row) => row.type === 'exp_min');
   assert.equal(expReq?.min, 6_400_000);
