@@ -180,7 +180,8 @@
   gap: 4px;
 }
 
-.rank-partner-name {
+.rank-partner-name,
+.rank-partner-name-button {
   min-width: 0;
   font-size: 13px;
   font-weight: 900;
@@ -188,6 +189,24 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.rank-partner-name-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rank-partner-name-button:hover {
+  color: var(--primary-color);
+}
+
+.rank-partner-name-button:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+  border-radius: 6px;
 }
 
 .rank-partner-tags {

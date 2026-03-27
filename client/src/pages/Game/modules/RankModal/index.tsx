@@ -23,7 +23,7 @@
  * 2. 移动端头部空间很紧，伙伴维度切换必须压在榜单头部而不是左侧导航里，否则会出现横向滚动和点击目标过密。
  */
 import { Button, Modal, Segmented, Table, Tag } from 'antd';
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
   ArenaRankRowDto,
   PartnerRankRowDto,
@@ -32,11 +32,13 @@ import type {
   WealthRankRowDto,
 } from '../../../../services/api';
 import { IMG_COIN as coin01 } from '../../shared/imageAssets';
+import PartnerPreviewOverlay from '../../shared/PartnerPreviewOverlay';
 import { getElementToneClassName } from '../../shared/elementTheme';
 import { getItemQualityTagClassName } from '../../shared/itemQuality';
 import PlayerName from '../../shared/PlayerName';
 import { formatPartnerElementLabel, resolvePartnerAvatar } from '../../shared/partnerDisplay';
 import { useIsMobile } from '../../shared/responsive';
+import { usePartnerPreview } from '../../shared/usePartnerPreview';
 import {
   PARTNER_RANK_METRIC_KEYS,
   PARTNER_RANK_METRIC_META,
@@ -61,6 +63,11 @@ const RankModal: React.FC<RankModalProps> = ({ open, onClose }) => {
   const [tab, setTab] = useState<RankTab>('realm');
   const [partnerMetric, setPartnerMetric] = useState<PartnerRankMetric>('level');
   const isMobile = useIsMobile();
+  const {
+    previewPartner,
+    openPartnerPreviewById,
+    closePartnerPreview,
+  } = usePartnerPreview();
   const {
     rankRowsByTab,
     partnerRankRowsByMetric,
@@ -92,6 +99,16 @@ const RankModal: React.FC<RankModalProps> = ({ open, onClose }) => {
     [],
   );
 
+  useEffect(() => {
+    if (!open) {
+      closePartnerPreview();
+    }
+  }, [closePartnerPreview, open]);
+
+  const handleOpenPartnerPreview = useCallback((partnerId: number) => {
+    void openPartnerPreviewById(partnerId);
+  }, [openPartnerPreviewById]);
+
   const renderPaneTop = (
     title: string,
     subtitle: string,
@@ -122,7 +139,14 @@ const RankModal: React.FC<RankModalProps> = ({ open, onClose }) => {
         alt={row.partnerName}
       />
       <div className="rank-partner-copy">
-        <div className="rank-partner-name">{row.partnerName}</div>
+        <button
+          type="button"
+          className="rank-partner-name-button"
+          onClick={() => handleOpenPartnerPreview(row.partnerId)}
+          title={`查看${row.partnerName}详情`}
+        >
+          {row.partnerName}
+        </button>
         {renderPartnerTags(row)}
       </div>
     </div>
@@ -500,59 +524,66 @@ const RankModal: React.FC<RankModalProps> = ({ open, onClose }) => {
   };
 
   return (
-    <Modal
-      open={open}
-      onCancel={onClose}
-      footer={null}
-      title={null}
-      centered
-      width={1080}
-      className="rank-modal"
-      destroyOnHidden
-      maskClosable
-      afterOpenChange={(visible) => {
-        if (!visible) return;
-        setTab('realm');
-        setPartnerMetric('level');
-      }}
-    >
-      <div className="rank-shell">
-        <div className="rank-left">
-          <div className="rank-left-title">
-            <img className="rank-left-icon" src={coin01} alt="排行" />
-            <div className="rank-left-name">排行</div>
+    <>
+      <Modal
+        open={open}
+        onCancel={onClose}
+        footer={null}
+        title={null}
+        centered
+        width={1080}
+        className="rank-modal"
+        destroyOnHidden
+        maskClosable
+        afterOpenChange={(visible) => {
+          if (!visible) return;
+          setTab('realm');
+          setPartnerMetric('level');
+        }}
+      >
+        <div className="rank-shell">
+          <div className="rank-left">
+            <div className="rank-left-title">
+              <img className="rank-left-icon" src={coin01} alt="排行" />
+              <div className="rank-left-name">排行</div>
+            </div>
+            {isMobile ? (
+              <div className="rank-left-segmented-wrap">
+                <Segmented
+                  className="rank-left-segmented"
+                  value={tab}
+                  options={mobileMenuOptions}
+                  onChange={(value) => {
+                    if (typeof value !== 'string') return;
+                    if (!RANK_TAB_KEYS.includes(value as RankTab)) return;
+                    setTab(value as RankTab);
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="rank-left-list">
+                {leftItems.map((item) => (
+                  <Button
+                    key={item.key}
+                    type={tab === item.key ? 'primary' : 'default'}
+                    className="rank-left-item"
+                    onClick={() => setTab(item.key)}
+                  >
+                    {item.label}
+                  </Button>
+                ))}
+              </div>
+            )}
           </div>
-          {isMobile ? (
-            <div className="rank-left-segmented-wrap">
-              <Segmented
-                className="rank-left-segmented"
-                value={tab}
-                options={mobileMenuOptions}
-                onChange={(value) => {
-                  if (typeof value !== 'string') return;
-                  if (!RANK_TAB_KEYS.includes(value as RankTab)) return;
-                  setTab(value as RankTab);
-                }}
-              />
-            </div>
-          ) : (
-            <div className="rank-left-list">
-              {leftItems.map((item) => (
-                <Button
-                  key={item.key}
-                  type={tab === item.key ? 'primary' : 'default'}
-                  className="rank-left-item"
-                  onClick={() => setTab(item.key)}
-                >
-                  {item.label}
-                </Button>
-              ))}
-            </div>
-          )}
+          <div className="rank-right">{panelContent()}</div>
         </div>
-        <div className="rank-right">{panelContent()}</div>
-      </div>
-    </Modal>
+      </Modal>
+      <PartnerPreviewOverlay
+        partner={previewPartner}
+        isMobile={isMobile}
+        onClose={closePartnerPreview}
+      />
+    </>
   );
 };
 

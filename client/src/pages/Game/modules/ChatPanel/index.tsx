@@ -1,20 +1,14 @@
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from 'react';
-import { App, Button, Drawer, Input, Popover, Select, Table, Tabs, Tooltip, type InputRef } from 'antd';
+import { Button, Drawer, Input, Popover, Select, Table, Tabs, Tooltip, type InputRef } from 'antd';
 import { BarChartOutlined, CloseOutlined, LineChartOutlined, SendOutlined } from '@ant-design/icons';
 import { gameSocket, type CharacterData, type OnlinePlayerDto } from '../../../../services/gameSocket';
-import {
-  getPartnerPreview,
-  getUnifiedApiErrorMessage,
-  SILENT_API_REQUEST_CONFIG,
-  type PartnerDisplayDto,
-} from '../../../../services/api';
 import type { InfoTarget } from '../InfoModal';
-import MarketPartnerBuyModal from '../MarketModal/MarketPartnerBuyModal';
-import MarketPartnerPreviewSheet from '../MarketModal/MarketPartnerPreviewSheet';
 import { parseBattleLootLine } from '../../shared/battleLoot';
+import PartnerPreviewOverlay from '../../shared/PartnerPreviewOverlay';
 import PhoneBindingDialog from '../../shared/PhoneBindingDialog';
 import PlayerName from '../../shared/PlayerName';
 import { useDeferredGameRequest } from '../../shared/useDeferredGameRequest';
+import { usePartnerPreview } from '../../shared/usePartnerPreview';
 import { usePhoneBindingStatus } from '../../shared/usePhoneBindingStatus';
 import StatsShell from './StatsShell';
 import { useStickyMessageScroll } from './useStickyMessageScroll';
@@ -406,7 +400,6 @@ const initialMessageBuckets = buildInitialMessageBuckets(initialMessages);
 const initialPrivateTargets = buildInitialPrivateTargets(initialMessageBuckets.all);
 
 const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPlayer, isMobile }, ref) => {
-  const { message } = App.useApp();
   const [activeChannel, setActiveChannel] = useState<ChatChannel>('all');
   const [inputValue, setInputValue] = useState('');
   const [messageBuckets, setMessageBuckets] = useState<MessageBuckets>(initialMessageBuckets);
@@ -426,8 +419,12 @@ const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPla
   const [outputActor, setOutputActor] = useState<string | undefined>(undefined);
   const [battleStatsFromTs, setBattleStatsFromTs] = useState(0);
   const [onlineDrawerOpen, setOnlineDrawerOpen] = useState(false);
-  const [previewPartner, setPreviewPartner] = useState<PartnerDisplayDto | null>(null);
   const [shouldLoadPhoneBindingStatus, setShouldLoadPhoneBindingStatus] = useState(false);
+  const {
+    previewPartner,
+    openPartnerPreviewById,
+    closePartnerPreview,
+  } = usePartnerPreview();
   const {
     status: phoneBindingStatus,
     refresh: refreshPhoneBindingStatus,
@@ -438,8 +435,6 @@ const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPla
   const privateMessagesContentRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<InputRef>(null);
   const myCharacterIdRef = useRef<number | null>(character?.id ?? null);
-  const partnerPreviewCacheRef = useRef<Map<number, PartnerDisplayDto>>(new Map());
-  const partnerPreviewRequestRef = useRef<Map<number, Promise<PartnerDisplayDto>>>(new Map());
 
   useEffect(() => {
     myCharacterIdRef.current = character?.id ?? null;
@@ -748,45 +743,13 @@ const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPla
 
   const activePrivateTarget = privateTargets.find((t) => t.id === activePrivateTargetId) ?? null;
 
-  const openPartnerPreview = useCallback((partner: PartnerDisplayDto) => {
-    setPreviewPartner(partner);
-  }, []);
-
-  const openPartnerPreviewById = useCallback(async (entityId: string) => {
+  const openPartnerPreviewByChatEntityId = useCallback(async (entityId: string) => {
     const partnerId = parseChatTokenEntityId(entityId);
     if (!partnerId) {
       return;
     }
-
-    const cachedPartner = partnerPreviewCacheRef.current.get(partnerId);
-    if (cachedPartner) {
-      openPartnerPreview(cachedPartner);
-      return;
-    }
-
-    const request = partnerPreviewRequestRef.current.get(partnerId) ?? (async () => {
-      const result = await getPartnerPreview(partnerId, SILENT_API_REQUEST_CONFIG);
-      if (!result.data) {
-        throw new Error('伙伴不存在');
-      }
-      return result.data;
-    })();
-
-    if (!partnerPreviewRequestRef.current.has(partnerId)) {
-      partnerPreviewRequestRef.current.set(partnerId, request);
-    }
-    try {
-      const partner = await request;
-      partnerPreviewCacheRef.current.set(partnerId, partner);
-      openPartnerPreview(partner);
-    } catch (error) {
-      message.error(getUnifiedApiErrorMessage(error, '伙伴详情加载失败'));
-    } finally {
-      if (partnerPreviewRequestRef.current.get(partnerId) === request) {
-        partnerPreviewRequestRef.current.delete(partnerId);
-      }
-    }
-  }, [message, openPartnerPreview]);
+    await openPartnerPreviewById(partnerId);
+  }, [openPartnerPreviewById]);
 
   const renderMessageContent = useCallback((msg: Message): ReactNode => {
     const content = String(msg.content ?? '');
@@ -806,7 +769,7 @@ const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPla
                 type="button"
                 className="message-partner-preview-name"
                 style={{ color: HEAVEN_PARTNER_PREVIEW_COLOR }}
-                onClick={() => void openPartnerPreviewById(segment.entityId)}
+                onClick={() => void openPartnerPreviewByChatEntityId(segment.entityId)}
                 title="查看伙伴详情"
               >
                 {segment.label}
@@ -821,7 +784,7 @@ const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPla
         })}
       </span>
     );
-  }, [openPartnerPreviewById]);
+  }, [openPartnerPreviewByChatEntityId]);
 
   const handleRemovePrivateTarget = (targetId: string) => {
     const nextTargets = privateTargets.filter((t) => t.id !== targetId);
@@ -1810,11 +1773,11 @@ const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPla
           description="当前账号尚未绑定手机号，所有聊天频道均已禁用。完成绑定后即可恢复世界、队伍、宗门与私聊发言。"
         />
       ) : null}
-      {previewPartner
-        ? isMobile
-          ? <MarketPartnerPreviewSheet partner={previewPartner} onClose={() => setPreviewPartner(null)} />
-          : <MarketPartnerBuyModal partner={previewPartner} onClose={() => setPreviewPartner(null)} />
-        : null}
+      <PartnerPreviewOverlay
+        partner={previewPartner}
+        isMobile={isMobile === true}
+        onClose={closePartnerPreview}
+      />
     </div>
   );
 });
