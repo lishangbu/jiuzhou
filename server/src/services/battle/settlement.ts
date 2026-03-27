@@ -56,7 +56,10 @@ import {
 } from "./runtime/state.js";
 import { stopBattleTicker } from "./runtime/ticker.js";
 import { removeBattleFromRedis } from "./runtime/persistence.js";
-import { settleArenaBattleIfNeeded } from "./pvp.js";
+import {
+  resolveArenaBattleSettlementContext,
+  settleArenaBattleIfNeeded,
+} from "./pvp.js";
 import {
   canReceiveBattleSessionRealtime,
   markBattleSessionFinished,
@@ -416,6 +419,10 @@ async function finishBattleCore(
       session: sessionSnapshot,
     };
   }
+  const arenaSettlementContext = resolveArenaBattleSettlementContext({
+    state,
+    session: sessionSnapshot,
+  });
 
   try {
     if (battleAchievementParticipants.length > 0) {
@@ -429,19 +436,25 @@ async function finishBattleCore(
       });
     }
 
-    if (state.battleType === "pvp") {
-      const challengerCharacterId = Math.floor(Number(state.teams.attacker.units[0]?.sourceId ?? 0));
-      const opponentCharacterId = Math.floor(Number(state.teams.defender.units[0]?.sourceId ?? 0));
-      const beforeProjection = await getArenaProjection(challengerCharacterId);
-      await settleArenaBattleIfNeeded(
-        battleId,
-        result.result as "attacker_win" | "defender_win" | "draw",
+    if (arenaSettlementContext) {
+      const beforeProjection = await getArenaProjection(
+        arenaSettlementContext.challengerCharacterId,
       );
-      const afterProjection = await getArenaProjection(challengerCharacterId);
+      await settleArenaBattleIfNeeded(
+        {
+          battleId,
+          battleResult: result.result as "attacker_win" | "defender_win" | "draw",
+          challengerCharacterId: arenaSettlementContext.challengerCharacterId,
+          opponentCharacterId: arenaSettlementContext.opponentCharacterId,
+        },
+      );
+      const afterProjection = await getArenaProjection(
+        arenaSettlementContext.challengerCharacterId,
+      );
       if (beforeProjection && afterProjection) {
         arenaDeltaForTask = {
-          challengerCharacterId,
-          opponentCharacterId,
+          challengerCharacterId: arenaSettlementContext.challengerCharacterId,
+          opponentCharacterId: arenaSettlementContext.opponentCharacterId,
           challengerScoreAfter: afterProjection.score,
           challengerScoreDelta: afterProjection.score - beforeProjection.score,
           challengerOutcome:
@@ -545,7 +558,7 @@ async function finishBattleCore(
       }
       void gameServer.pushCharacterUpdate(participantUserId);
     }
-    if (state.battleType === "pvp") {
+    if (arenaSettlementContext) {
       for (const p of participants) {
         const characterId = Number(p.characterId);
         if (!Number.isFinite(characterId) || characterId <= 0) continue;

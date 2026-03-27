@@ -16,6 +16,7 @@ import {
   createPVPBattle,
 } from "../../battle/battleFactory.js";
 import { BattleEngine } from "../../battle/battleEngine.js";
+import type { BattleState } from "../../battle/types.js";
 import {
   applyArenaBattleResultProjection,
   getArenaProjection,
@@ -23,6 +24,10 @@ import {
   getOnlineBattleCharacterSnapshotByUserId,
   upsertArenaProjection,
 } from "../onlineBattleProjectionService.js";
+import type {
+  BattleSessionSnapshot,
+  PvpBattleSessionContext,
+} from "../battleSession/types.js";
 import {
   calculateArenaRatingDelta,
   DEFAULT_ARENA_RATING,
@@ -44,6 +49,66 @@ import {
 } from "./shared/preparation.js";
 import { buildBattleSnapshotState } from "./runtime/realtime.js";
 import { computeRankPower } from "../shared/rankPower.js";
+
+export type ArenaBattleSettlementContext = {
+  challengerCharacterId: number;
+  opponentCharacterId: number;
+};
+
+/**
+ * 从权威战斗状态与会话上下文解析竞技场结算对象。
+ *
+ * 作用：
+ * - 统一用 `BattleState + BattleSession` 解析竞技场结算所需的挑战者 / 对手角色 ID。
+ * - 明确只对 `mode=arena` 的 PVP 会话放行，避免普通切磋误入竞技场积分链路。
+ *
+ * 输入 / 输出：
+ * - 输入：当前战斗状态 `state` 与绑定会话 `session`。
+ * - 输出：可结算时返回竞技场双方角色 ID，否则返回 `null`。
+ *
+ * 数据流 / 状态流：
+ * battle runtime state + attached session -> 本函数校验 arena 模式 -> 返回结算上下文 -> settlement/action 复用。
+ *
+ * 复用设计说明：
+ * - 把“竞技场才结算积分”的规则收敛到单一入口，避免 `settlement.ts` 与 `action.ts` 各自手写一套 mode/ID 判定。
+ * - 把脆弱的 `battleId` 字符串拆解移除，后续若 battleId 生成规则调整，只需维护这一处。
+ *
+ * 关键边界条件与坑点：
+ * - 会话缺失或不是 PVP arena 时必须直接返回 `null`，不能让普通 PVP 误扣竞技场次数。
+ * - 角色 sourceId / opponentCharacterId 非正整数时必须拒绝结算，避免脏会话把错误角色写进投影。
+ */
+export const resolveArenaBattleSettlementContext = (params: {
+  state: BattleState;
+  session: BattleSessionSnapshot | null | undefined;
+}): ArenaBattleSettlementContext | null => {
+  const { state, session } = params;
+  if (state.battleType !== "pvp" || !session || session.type !== "pvp") {
+    return null;
+  }
+
+  const sessionContext = session.context as PvpBattleSessionContext;
+  if (sessionContext.mode !== "arena") {
+    return null;
+  }
+
+  const challengerCharacterId = Math.floor(
+    Number(state.teams.attacker.units[0]?.sourceId ?? 0),
+  );
+  const opponentCharacterId = Math.floor(
+    Number(sessionContext.opponentCharacterId),
+  );
+  if (!Number.isFinite(challengerCharacterId) || challengerCharacterId <= 0) {
+    return null;
+  }
+  if (!Number.isFinite(opponentCharacterId) || opponentCharacterId <= 0) {
+    return null;
+  }
+
+  return {
+    challengerCharacterId,
+    opponentCharacterId,
+  };
+};
 
 export async function startPVPBattle(
   userId: number,
@@ -184,12 +249,17 @@ export async function startPVPBattle(
 }
 
 export async function settleArenaBattleIfNeeded(
-  battleId: string,
-  battleResult: "attacker_win" | "defender_win" | "draw",
+  params: {
+    battleId: string;
+    battleResult: "attacker_win" | "defender_win" | "draw";
+    challengerCharacterId: number;
+    opponentCharacterId: number;
+  },
 ): Promise<void> {
-  const battleIdSegments = battleId.split("-");
-  const challengerCharacterId = Number(battleIdSegments[2] ?? 0);
-  const opponentCharacterId = Number(battleIdSegments[3] ?? 0);
+  const battleId = String(params.battleId);
+  const battleResult = params.battleResult;
+  const challengerCharacterId = Math.floor(Number(params.challengerCharacterId));
+  const opponentCharacterId = Math.floor(Number(params.opponentCharacterId));
   if (!Number.isFinite(challengerCharacterId) || challengerCharacterId <= 0)
     return;
   if (!Number.isFinite(opponentCharacterId) || opponentCharacterId <= 0) return;

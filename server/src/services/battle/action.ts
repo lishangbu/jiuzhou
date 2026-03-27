@@ -38,7 +38,10 @@ import {
 } from "./runtime/ticker.js";
 import { removeBattleFromRedis } from "./runtime/persistence.js";
 import { buildBattleAbandonedRealtimePayload } from "./runtime/realtime.js";
-import { settleArenaBattleIfNeeded } from "./pvp.js";
+import {
+  resolveArenaBattleSettlementContext,
+  settleArenaBattleIfNeeded,
+} from "./pvp.js";
 import {
   abandonWaitingTransitionBattleSession,
   getAttachedBattleSessionSnapshot,
@@ -262,6 +265,10 @@ export async function abandonBattle(
 
   const state = engine.getState();
   const attachedSession = getAttachedBattleSessionSnapshot(battleId);
+  const arenaSettlementContext = resolveArenaBattleSettlementContext({
+    state,
+    session: attachedSession,
+  });
   const participants = normalizeBattleParticipantUserIds([
     ...(battleParticipants.get(battleId) || []),
     ...(attachedSession?.participantUserIds ?? []),
@@ -306,8 +313,13 @@ export async function abandonBattle(
   }
 
   try {
-    if (state.battleType === "pvp") {
-      await settleArenaBattleIfNeeded(battleId, "defender_win");
+    if (arenaSettlementContext) {
+      await settleArenaBattleIfNeeded({
+        battleId,
+        battleResult: "defender_win",
+        challengerCharacterId: arenaSettlementContext.challengerCharacterId,
+        opponentCharacterId: arenaSettlementContext.opponentCharacterId,
+      });
     }
   } catch (error) {
     battleActionLogger.warn({
@@ -335,7 +347,7 @@ export async function abandonBattle(
         }),
       );
       void gameServer.pushCharacterUpdate(participantUserId);
-      if (state.battleType === "pvp") {
+      if (arenaSettlementContext) {
         const snapshot = await getOnlineBattleCharacterSnapshotByUserId(participantUserId);
         const characterId = Number(snapshot?.characterId);
         if (Number.isFinite(characterId) && characterId > 0) {
