@@ -20,7 +20,7 @@
       "revive_map_id": "map-qingyun-village",
       "revive_room_id": "room-village-center",
       "sort_weight": 1000,
-      "enabled": false,
+      "enabled": true,
       "rooms": [
         {
           "id": "room-village-entrance",
