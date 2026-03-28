@@ -351,6 +351,33 @@ router.post('/:characterId/technique/unequip', asyncHandler(async (req, res) => 
 }));
 
 // ============================================
+// 散功（仅未装配功法）
+// POST /api/character/:characterId/technique/:techniqueId/dissipate
+// ============================================
+router.post('/:characterId/technique/:techniqueId/dissipate', asyncHandler(async (req, res) => {
+  const characterId = parseCharacterIdParam(req);
+  const techniqueId = getSingleParam(req.params.techniqueId);
+
+  if (characterId === null) {
+    throw new BusinessError('无效的角色ID');
+  }
+  if (!techniqueId) {
+    throw new BusinessError('缺少功法ID');
+  }
+
+  const result = await characterTechniqueService.dissipateTechnique(characterId, techniqueId);
+
+  if (result.success) {
+    const userId = req.userId!;
+    if (userId && Number.isFinite(userId)) {
+      await safePushCharacterUpdate(userId);
+    }
+  }
+
+  sendResult(res, result);
+}));
+
+// ============================================
 // 获取可用技能列表
 // GET /api/character/:characterId/skills/available
 // ============================================

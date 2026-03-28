@@ -182,6 +182,13 @@ export const unequipCharacterTechnique = (characterId: number, techniqueId: stri
   return api.post(`/character/${characterId}/technique/unequip`, { techniqueId });
 };
 
+export const dissipateCharacterTechnique = (
+  characterId: number,
+  techniqueId: string,
+): Promise<{ success: boolean; message: string }> => {
+  return api.post(`/character/${characterId}/technique/${techniqueId}/dissipate`);
+};
+
 export const equipCharacterSkill = (
   characterId: number,
   skillId: string,

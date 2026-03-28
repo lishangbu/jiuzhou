@@ -5,6 +5,7 @@ import { IMG_LINGSHI as lingshiIcon, IMG_TONGQIAN as tongqianIcon } from '../../
 import { getAttrLabel } from '../../shared/attrDisplay';
 import { gameSocket } from '../../../../services/gameSocket';
 import {
+  dissipateCharacterTechnique,
   discardTechniqueResearchDraft,
   equipCharacterSkill,
   equipCharacterTechnique,
@@ -56,6 +57,11 @@ import {
   buildTechniqueLayerSkillProgression,
   type TechniqueSkillProgressionEntry,
 } from './techniqueSkillProgression';
+import {
+  buildTechniqueDissipateConfirmLines,
+  buildTechniqueDissipateConfirmTitle,
+  resolveTechniqueDissipateActionState,
+} from './techniqueDissipateShared';
 import './index.scss';
 
 
@@ -857,6 +863,34 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
     }
   };
 
+  const handleDissipateTechnique = useCallback((techniqueId: string, techniqueName: string) => {
+    if (!characterId) return;
+
+    modal.confirm({
+      title: buildTechniqueDissipateConfirmTitle(techniqueName),
+      content: (
+        <div className="tech-confirm-lines">
+          {buildTechniqueDissipateConfirmLines(techniqueName).map((line) => (
+            <div key={line}>{line}</div>
+          ))}
+        </div>
+      ),
+      okText: '确认散功',
+      cancelText: '继续保留',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          const res = await dissipateCharacterTechnique(characterId, techniqueId);
+          if (!res?.success) throw new Error(res?.message || '散功失败');
+          message.success(`已散去「${techniqueName}」`);
+          await refreshStatus();
+        } catch {
+          void 0;
+        }
+      },
+    });
+  }, [characterId, message, modal, refreshStatus]);
+
   const equipSkillToSlot = async (skillId: string) => {
     if (!characterId) return;
     const s = availableSkills.find((x) => x.id === skillId);
@@ -1053,6 +1087,10 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
         <div className="tech-subtitle">已学功法</div>
         <div className="tech-learned-list">
           {learned.map((t) => {
+            const equippedSlot = equippedSlotByTechId.get(t.id) ?? null;
+            const dissipateAction = resolveTechniqueDissipateActionState(
+              equippedSlot ? slotLabels[equippedSlot] : null,
+            );
             const content = (
               <div className="tech-row">
                 <div className="tech-row-main">
@@ -1062,6 +1100,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
                     <Tag color="default">
                       {layerText(t.layer)}/{layerText(t.layers.length)}
                     </Tag>
+                    {equippedSlot ? <Tag color="blue">{slotLabels[equippedSlot]}</Tag> : null}
                     {t.tags.map((x) => (
                       <Tag key={x} color="default">
                         {x}
@@ -1081,6 +1120,15 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
                   </Button>
                   <Button size="small" onClick={() => openCultivate(t.id)}>
                     修炼
+                  </Button>
+                  <Button
+                    size="small"
+                    danger
+                    disabled={dissipateAction.disabled}
+                    title={dissipateAction.disabledReason ?? undefined}
+                    onClick={() => handleDissipateTechnique(t.id, t.name)}
+                  >
+                    {dissipateAction.label}
                   </Button>
                 </div>
               </div>

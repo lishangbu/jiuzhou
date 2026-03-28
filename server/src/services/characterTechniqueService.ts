@@ -616,6 +616,49 @@ class CharacterTechniqueService {
     };
   }
 
+  // ============================================
+  // 6.1 散去未装配功法（写操作，@Transactional）
+  // ============================================
+  @Transactional
+  async dissipateTechnique(
+    characterId: number,
+    techniqueId: string,
+  ): Promise<ServiceResult> {
+    const result = await query(
+      `SELECT id, technique_id, slot_type, slot_index
+       FROM character_technique
+       WHERE character_id = $1 AND technique_id = $2
+       FOR UPDATE`,
+      [characterId, techniqueId],
+    );
+
+    if (result.rows.length === 0) {
+      return { success: false, message: '未学习该功法' };
+    }
+
+    const row = result.rows[0] as Record<string, unknown>;
+    const slotType = row.slot_type === 'main' ? 'main' : row.slot_type === 'sub' ? 'sub' : null;
+    if (slotType) {
+      return { success: false, message: '已运功的功法不可散功，请先取消运功' };
+    }
+
+    const techniqueRowId = Number(row.id ?? 0) || 0;
+    if (techniqueRowId <= 0) {
+      return { success: false, message: '功法记录异常' };
+    }
+
+    await query(
+      `DELETE FROM character_technique
+       WHERE id = $1`,
+      [techniqueRowId],
+    );
+
+    return {
+      success: true,
+      message: '散功成功',
+    };
+  }
+
 
   // ============================================
   // 7. 获取角色可用技能列表（从已装备功法解锁的技能）（纯读，不加 @Transactional）
