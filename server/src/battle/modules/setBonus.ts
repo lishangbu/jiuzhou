@@ -35,6 +35,7 @@ interface SetBonusTriggerContext {
   damage?: number;
   damageType?: 'physical' | 'magic' | 'true';
   heal?: number;
+  affixTriggerChanceScale?: number;
 }
 
 interface SetBonusApplyResult {
@@ -97,8 +98,9 @@ export function triggerSetBonusEffects(
     if (!target || !target.isAlive) continue;
     const roundLimit = normalizeRoundLimit(params.round_limit);
     const quotaKey = buildTriggerQuotaKey(effect, params);
+    const scaledChance = resolveTriggerChance(effect, params, chance, context.affixTriggerChanceScale);
     if (isRoundLimitReached(owner, state.roundCount, quotaKey, roundLimit)) continue;
-    if (!passChance(state, chance)) continue;
+    if (!passChance(state, scaledChance)) continue;
 
     let applyResult: SetBonusApplyResult | null = null;
     switch (effect.effectType) {
@@ -838,6 +840,22 @@ function normalizeChance(value: unknown): number {
   const chanceRaw = asFiniteNumber(value);
   if (chanceRaw === null) return 1;
   return Math.max(0, Math.min(1, chanceRaw));
+}
+
+function resolveTriggerChance(
+  effect: BattleSetBonusEffect,
+  params: Record<string, unknown>,
+  chance: number,
+  affixTriggerChanceScale?: number,
+): number {
+  if (!buildAffixGroupKey(effect, params)) return chance;
+  const scale = normalizeAffixTriggerChanceScale(affixTriggerChanceScale);
+  return Math.max(0, Math.min(1, chance * scale));
+}
+
+function normalizeAffixTriggerChanceScale(value?: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 1;
+  return Math.max(0, Math.min(1, value));
 }
 
 function mergeIndependentChances(chances: number[]): number {

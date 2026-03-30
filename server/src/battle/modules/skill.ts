@@ -68,6 +68,7 @@ import {
 } from '../utils/buffSpec.js';
 import { appendBattleLog, appendBattleLogs } from '../logStream.js';
 import { buildAuraApplySummary } from '../utils/auraSummary.js';
+import { resolveSkillAffixTriggerChanceScale } from '../utils/affixTriggerBudget.js';
 
 interface SkillExecutionResult {
   success: boolean;
@@ -101,6 +102,7 @@ type SkillExecutionContext = {
   momentumGained: string[];
   momentumConsumed: string[];
   consumedNextSkillBuffIds: string[];
+  affixTriggerChanceScale: number;
 };
 
 type BuffOrDebuffEffect = SkillEffect & { type: 'buff' | 'debuff' };
@@ -119,7 +121,7 @@ function hasBuffRuntimeData(data: BuffRuntimeData): boolean {
   );
 }
 
-function createSkillExecutionContext(): SkillExecutionContext {
+function createSkillExecutionContext(skill: BattleSkill): SkillExecutionContext {
   return {
     momentumBonusRateByType: {
       damage: 0,
@@ -130,6 +132,7 @@ function createSkillExecutionContext(): SkillExecutionContext {
     momentumGained: [],
     momentumConsumed: [],
     consumedNextSkillBuffIds: [],
+    affixTriggerChanceScale: resolveSkillAffixTriggerChanceScale(skill),
   };
 }
 
@@ -573,12 +576,14 @@ function executeDamageEffect(
       target,
       damage: actualDamage,
       damageType,
+      affixTriggerChanceScale: context.affixTriggerChanceScale,
     });
     appendBattleLogs(state, onHitLogs);
     const onBeHitLogs = triggerSetBonusEffects(state, 'on_be_hit', target, {
       target: caster,
       damage: actualDamage,
       damageType,
+      affixTriggerChanceScale: context.affixTriggerChanceScale,
     });
     appendBattleLogs(state, onBeHitLogs);
     if (damageResult.isCrit) {
@@ -586,6 +591,7 @@ function executeDamageEffect(
         target,
         damage: actualDamage,
         damageType,
+        affixTriggerChanceScale: context.affixTriggerChanceScale,
       });
       appendBattleLogs(state, onCritLogs);
     }
@@ -595,6 +601,7 @@ function executeDamageEffect(
         target,
         damage: actualDamage,
         damageType,
+        affixTriggerChanceScale: context.affixTriggerChanceScale,
       });
       appendBattleLogs(state, onAllyHitLogs);
     }
@@ -734,7 +741,7 @@ export function executeSkill(
     return { success: false, error: '没有有效目标' };
   }
 
-  const context = createSkillExecutionContext();
+  const context = createSkillExecutionContext(skill);
 
   // 先落主动作日志，再按触发时机追加触发日志，保证日志顺序符合战斗时序
   const targetResults: TargetResult[] = [];
