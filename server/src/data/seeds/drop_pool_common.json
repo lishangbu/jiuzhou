@@ -825,7 +825,7 @@
     },
     {
       "id": "dp-common-dungeon-boss-unbind",
-      "name": "秘境BOSS功能道具通用掉落池",
+      "name": "秘境BOSS额外通用掉落池",
       "mode": "prob",
       "entries": [
         {
@@ -840,6 +840,13 @@
           "chance": 0.001,
           "qty_min": 1,
           "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "mat-gongfa-canye",
+          "chance": 1,
+          "qty_min": 10,
+          "qty_max": 30,
           "show_in_ui": true
         }
       ],

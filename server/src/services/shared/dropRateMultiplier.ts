@@ -42,7 +42,7 @@ const COMMON_POOL_MULTIPLIER: Record<MonsterKind, PoolMultiplierConfig> = {
 const EXCLUDED_COMMON_POOLS_FOR_MULTIPLIER = new Set<string>([
   'dp-common-monster-elite',
   'dp-common-monster-boss',
-  // 秘境BOSS功能道具需要严格按配置值展示与结算，不参与秘境/BOSS通用倍率放大。
+  // 秘境BOSS额外固定产出条目需要严格按配置值展示与结算，不参与秘境/BOSS通用倍率放大。
   'dp-common-dungeon-boss-unbind',
   'dp-common-dungeon-boss-advanced-recruit-token',
 ]);

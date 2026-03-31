@@ -25,6 +25,7 @@ import test from 'node:test';
 import {
   getAdjustedDropQuantityRange,
   getMonsterRealmAdjustedBaseQuantityRange,
+  shouldApplyDropQuantityMultiplier,
 } from '../shared/dropQuantityMultiplier.js';
 
 test('凡人境界应保持原始数量区间', () => {
@@ -90,6 +91,28 @@ test('最大值步进小于最小值步进时也应保持合法区间', () => {
     {
       qtyMin: 3,
       qtyMax: 3,
+    },
+  );
+});
+
+test('功法残页在秘境 BOSS 公共池下不应吃掉落数量倍率', () => {
+  assert.equal(shouldApplyDropQuantityMultiplier('mat-gongfa-canye'), false);
+  assert.deepEqual(
+    getAdjustedDropQuantityRange({
+      itemDefId: 'mat-gongfa-canye',
+      qtyMin: 15,
+      qtyMax: 30,
+      sourceType: 'common',
+      sourcePoolId: 'dp-common-dungeon-boss-unbind',
+      dropMultiplierOptions: {
+        isDungeonBattle: true,
+        monsterKind: 'boss',
+      },
+      monsterRealm: '炼神返虚·还虚期',
+    }),
+    {
+      qtyMin: 15,
+      qtyMax: 30,
     },
   );
 });
