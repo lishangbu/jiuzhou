@@ -12,7 +12,14 @@ import type {
   TargetResult,
   BattleUnit,
 } from '../types.js';
+import type { SkillAffixTriggerRuntimeState } from '../utils/affixTriggerBudget.js';
 import { rollChance } from '../utils/random.js';
+import {
+  buildSkillAffixTriggerRuntimeKey,
+  consumeSkillAffixTriggerSuccess,
+  readSkillAffixTriggerSuccessCount,
+  resolveAffixTriggerChanceBySuccessCount,
+} from '../utils/affixTriggerBudget.js';
 import { addBuff, addShield } from './buff.js';
 import { applyDamage, calculateDamage } from './damage.js';
 import { applyHealing } from './healing.js';
@@ -35,7 +42,7 @@ interface SetBonusTriggerContext {
   damage?: number;
   damageType?: 'physical' | 'magic' | 'true';
   heal?: number;
-  affixTriggerChanceScale?: number;
+  affixTriggerRuntimeState?: SkillAffixTriggerRuntimeState;
 }
 
 interface SetBonusApplyResult {
@@ -97,8 +104,9 @@ export function triggerSetBonusEffects(
     const target = effect.target === 'enemy' ? context.target : owner;
     if (!target || !target.isAlive) continue;
     const roundLimit = normalizeRoundLimit(params.round_limit);
-    const quotaKey = buildTriggerQuotaKey(effect, params);
-    const scaledChance = resolveTriggerChance(effect, params, chance, context.affixTriggerChanceScale);
+    const affixGroupKey = buildAffixGroupKey(effect, params);
+    const quotaKey = affixGroupKey ?? `set:${effect.setId}`;
+    const scaledChance = resolveTriggerChance(owner, affixGroupKey, chance, context.affixTriggerRuntimeState);
     if (isRoundLimitReached(owner, state.roundCount, quotaKey, roundLimit)) continue;
     if (!passChance(state, scaledChance)) continue;
 
@@ -132,6 +140,7 @@ export function triggerSetBonusEffects(
 
     if (!applyResult) continue;
     consumeRoundLimit(owner, state.roundCount, quotaKey, roundLimit);
+    consumeAffixTriggerSuccessState(owner, affixGroupKey, context.affixTriggerRuntimeState);
     logs.push(buildSetBonusActionLog(state, owner, effect, applyResult.targetResult));
     if (Array.isArray(applyResult.extraLogs) && applyResult.extraLogs.length > 0) {
       logs.push(...applyResult.extraLogs);
@@ -791,13 +800,6 @@ function buildAffixGroupKey(
   return `affix:${fallbackKey}`;
 }
 
-function buildTriggerQuotaKey(
-  effect: BattleSetBonusEffect,
-  params: Record<string, unknown>
-): string {
-  return buildAffixGroupKey(effect, params) ?? `set:${effect.setId}`;
-}
-
 function normalizeRoundLimit(value: unknown): number | null {
   const limit = asFiniteNumber(value);
   if (limit === null) return null;
@@ -843,19 +845,25 @@ function normalizeChance(value: unknown): number {
 }
 
 function resolveTriggerChance(
-  effect: BattleSetBonusEffect,
-  params: Record<string, unknown>,
+  owner: BattleUnit,
+  affixGroupKey: string | null,
   chance: number,
-  affixTriggerChanceScale?: number,
+  affixTriggerRuntimeState?: SkillAffixTriggerRuntimeState,
 ): number {
-  if (!buildAffixGroupKey(effect, params)) return chance;
-  const scale = normalizeAffixTriggerChanceScale(affixTriggerChanceScale);
-  return Math.max(0, Math.min(1, chance * scale));
+  if (!affixGroupKey) return chance;
+  const runtimeKey = buildSkillAffixTriggerRuntimeKey(owner.id, affixGroupKey);
+  const successCount = readSkillAffixTriggerSuccessCount(affixTriggerRuntimeState, runtimeKey);
+  return resolveAffixTriggerChanceBySuccessCount(chance, successCount);
 }
 
-function normalizeAffixTriggerChanceScale(value?: number): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return 1;
-  return Math.max(0, Math.min(1, value));
+function consumeAffixTriggerSuccessState(
+  owner: BattleUnit,
+  affixGroupKey: string | null,
+  affixTriggerRuntimeState?: SkillAffixTriggerRuntimeState,
+): void {
+  if (!affixGroupKey) return;
+  const runtimeKey = buildSkillAffixTriggerRuntimeKey(owner.id, affixGroupKey);
+  consumeSkillAffixTriggerSuccess(affixTriggerRuntimeState, runtimeKey);
 }
 
 function mergeIndependentChances(chances: number[]): number {
