@@ -47,6 +47,7 @@ import { applyStaminaDeltaByCharacterId } from './staminaService.js';
 import { getGameServer } from '../game/gameServer.js';
 import { createScopedLogger } from '../utils/logger.js';
 import { createSlowOperationLogger } from '../utils/slowOperationLogger.js';
+import { shouldContinueOnlineBattleSettlementDispatch } from './onlineBattleSettlementDrainPolicy.js';
 import {
   deleteDeferredSettlementTask,
   getDeferredSettlementTask,
@@ -58,6 +59,8 @@ import {
 
 const RUNNER_INTERVAL_MS = 1500;
 const MAX_CONCURRENT_SETTLEMENT_TASKS = 4;
+const SETTLEMENT_TICK_TIME_BUDGET_MS = 1200;
+const MAX_SETTLEMENT_TASKS_PER_TICK = MAX_CONCURRENT_SETTLEMENT_TASKS * 2;
 const settlementRunnerLogger = createScopedLogger('onlineBattle.settlementRunner');
 
 type DeferredSettlementMonsterSnapshot = DeferredSettlementTask['payload']['monsters'][number];
@@ -70,6 +73,45 @@ const collectUniqueParticipantCharacterIds = (
       .map((participant) => Math.floor(Number(participant.characterId)))
       .filter((characterId) => Number.isFinite(characterId) && characterId > 0),
   )].sort((left, right) => left - right);
+};
+
+/**
+ * 提取延迟结算任务的串行化资源键。
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1. 做什么：把同一秘境实例的 `dungeon-start` / `dungeon-clear` 任务收敛到同一个资源键，供 runner 做实例级串行调度。
+ * 2. 做什么：把资源键解析逻辑集中在单一入口，避免 pick / dispatch / finally 各自复制一套 instanceId 提取规则。
+ * 3. 不做什么：不修改任务状态，不访问 Redis/数据库，也不决定任务是否成功。
+ *
+ * 输入/输出：
+ * - 输入：单条延迟结算任务。
+ * - 输出：需要串行执行时返回稳定资源键；否则返回 `null`。
+ *
+ * 数据流/状态流：
+ * pending task -> runner 读取任务 -> 本函数提取资源键
+ * -> 同一资源键任务在同一时刻只允许一个进入真实落库。
+ *
+ * 关键边界条件与坑点：
+ * 1. `dungeon-start` 与 `dungeon-clear` 必须映射到同一个键，否则仍会并发冲到 `dungeon_instance` / `dungeon_record`。
+ * 2. 空字符串 `instanceId` 必须视为无效，不能生成伪键污染串行队列。
+ */
+const getDeferredSettlementSerializationKey = (
+  task: DeferredSettlementTask,
+): string | null => {
+  const candidates = [
+    task.payload.dungeonStartConsumption?.instanceId ?? null,
+    task.payload.dungeonSettlement?.instanceId ?? null,
+    task.payload.dungeonContext?.instanceId ?? null,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate !== 'string') continue;
+    const instanceId = candidate.trim();
+    if (!instanceId) continue;
+    return `dungeon-instance:${instanceId}`;
+  }
+
+  return null;
 };
 
 /**
@@ -430,6 +472,19 @@ const settleDungeonClearInDbInTransaction = async (
     }
   >();
 
+  const instanceLockResult = await query(
+    `
+      SELECT id
+      FROM dungeon_instance
+      WHERE id = $1
+      FOR UPDATE
+    `,
+    [dungeonSettlement.instanceId],
+  );
+  if (instanceLockResult.rows.length <= 0) {
+    throw new Error(`秘境实例不存在，无法执行通关结算: ${dungeonSettlement.instanceId}`);
+  }
+
   if (participantCharacterIds.length > 0) {
     await lockCharacterRewardSettlementTargets(participantCharacterIds);
 
@@ -750,6 +805,7 @@ class OnlineBattleSettlementRunner {
   private initialized = false;
   private drainPromise: Promise<void> | null = null;
   private activeTaskIds = new Set<string>();
+  private activeSerializationKeys = new Set<string>();
 
   /**
    * 选择当前这一轮允许处理的待执行任务。
@@ -777,13 +833,39 @@ class OnlineBattleSettlementRunner {
     options?: { onlyArena?: boolean },
   ): DeferredSettlementTask[] {
     if (limit <= 0) return [];
-    return listPendingDeferredSettlementTasks()
-      .filter((task) => {
-        if (this.activeTaskIds.has(task.taskId)) return false;
-        if (!options?.onlyArena) return true;
-        return task.payload.battleType === 'pvp' && task.payload.arenaDelta !== null;
-      })
-      .slice(0, limit);
+    const selectedTasks: DeferredSettlementTask[] = [];
+    const claimedSerializationKeys = new Set<string>();
+
+    for (const task of listPendingDeferredSettlementTasks()) {
+      if (this.activeTaskIds.has(task.taskId)) continue;
+      if (
+        options?.onlyArena
+        && !(task.payload.battleType === 'pvp' && task.payload.arenaDelta !== null)
+      ) {
+        continue;
+      }
+
+      const serializationKey = getDeferredSettlementSerializationKey(task);
+      if (
+        serializationKey
+        && (
+          this.activeSerializationKeys.has(serializationKey)
+          || claimedSerializationKeys.has(serializationKey)
+        )
+      ) {
+        continue;
+      }
+
+      selectedTasks.push(task);
+      if (serializationKey) {
+        claimedSerializationKeys.add(serializationKey);
+      }
+      if (selectedTasks.length >= limit) {
+        break;
+      }
+    }
+
+    return selectedTasks;
   }
 
   /**
@@ -810,6 +892,7 @@ class OnlineBattleSettlementRunner {
   private async processTask(
     task: DeferredSettlementTask,
   ): Promise<'success' | 'failed' | 'skipped'> {
+    const serializationKey = getDeferredSettlementSerializationKey(task);
     try {
       const freshTask = await getDeferredSettlementTask(task.taskId);
       if (!freshTask) {
@@ -835,6 +918,9 @@ class OnlineBattleSettlementRunner {
       return 'failed';
     } finally {
       this.activeTaskIds.delete(task.taskId);
+      if (serializationKey) {
+        this.activeSerializationKeys.delete(serializationKey);
+      }
     }
   }
 
@@ -857,10 +943,13 @@ class OnlineBattleSettlementRunner {
   }
 
   async flush(options?: { onlyArena?: boolean }): Promise<void> {
-    await this.tick(options);
+    await this.tick({
+      ...options,
+      drainAll: true,
+    });
   }
 
-  private async tick(options?: { onlyArena?: boolean }): Promise<void> {
+  private async tick(options?: { onlyArena?: boolean; drainAll?: boolean }): Promise<void> {
     if (this.drainPromise) {
       await this.drainPromise;
       return;
@@ -877,12 +966,17 @@ class OnlineBattleSettlementRunner {
         fields: {
           onlyArena: options?.onlyArena === true,
           maxConcurrency: MAX_CONCURRENT_SETTLEMENT_TASKS,
+          drainAll: options?.drainAll === true,
+          timeBudgetMs: SETTLEMENT_TICK_TIME_BUDGET_MS,
+          maxDispatchedTaskCount: MAX_SETTLEMENT_TASKS_PER_TICK,
         },
         thresholdMs: RUNNER_INTERVAL_MS,
       });
       let processedTaskCount = 0;
       let failedTaskCount = 0;
       let skippedTaskCount = 0;
+      let dispatchedTaskCount = 0;
+      const drainStartedAt = Date.now();
 
       try {
         const activePromises = new Map<
@@ -892,15 +986,29 @@ class OnlineBattleSettlementRunner {
 
         for (;;) {
           const availableSlots = MAX_CONCURRENT_SETTLEMENT_TASKS - activePromises.size;
-          if (availableSlots > 0) {
+          if (
+            availableSlots > 0
+            && shouldContinueOnlineBattleSettlementDispatch({
+              drainAll: options?.drainAll === true,
+              elapsedMs: Date.now() - drainStartedAt,
+              dispatchedTaskCount,
+              timeBudgetMs: SETTLEMENT_TICK_TIME_BUDGET_MS,
+              maxDispatchedTaskCount: MAX_SETTLEMENT_TASKS_PER_TICK,
+            })
+          ) {
             const tasksToStart = this.pickRunnableTasks(availableSlots, options);
             for (const task of tasksToStart) {
               this.activeTaskIds.add(task.taskId);
+              const serializationKey = getDeferredSettlementSerializationKey(task);
+              if (serializationKey) {
+                this.activeSerializationKeys.add(serializationKey);
+              }
               const taskPromise = this.processTask(task).then((outcome) => ({
                 taskId: task.taskId,
                 outcome,
               }));
               activePromises.set(task.taskId, taskPromise);
+              dispatchedTaskCount += 1;
               slowLogger.mark('dispatchTask', {
                 taskId: task.taskId,
                 activeTaskCount: activePromises.size,
@@ -929,6 +1037,7 @@ class OnlineBattleSettlementRunner {
         }
       } finally {
         slowLogger.flush({
+          dispatchedTaskCount,
           processedTaskCount,
           failedTaskCount,
           skippedTaskCount,
