@@ -259,7 +259,9 @@ class PartnerReboneService {
       const executionResult = await executeGeneratedPartnerRebone({
         characterId: params.characterId,
         partnerId: jobRow.partnerId,
-        refreshGeneratedSnapshots: false,
+        // 异步 worker 会在执行前预热一次定义缓存，这里必须在写库后再次失效，
+        // 否则 /partner/overview 仍可能读到洗髓前的旧伙伴模板。
+        refreshGeneratedSnapshots: true,
         includePartnerDetail: false,
       });
       if (!executionResult.success) {
