@@ -999,6 +999,20 @@
           "qty_min": 1,
           "qty_max": 1,
           "show_in_ui": true
+        },
+        {
+          "item_def_id": "book-lieyang-jian",
+          "chance": 0.12,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "book-hanbing-jue",
+          "chance": 0.12,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
         }
       ],
       "common_pool_ids": [
@@ -1271,6 +1285,20 @@
         },
         {
           "item_def_id": "set-cangyue-weapon",
+          "chance": 0.12,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "book-xuanjia-fanzhen-jue",
+          "chance": 0.12,
+          "qty_min": 1,
+          "qty_max": 1,
+          "show_in_ui": true
+        },
+        {
+          "item_def_id": "book-jiuyu-fuling-yin",
           "chance": 0.12,
           "qty_min": 1,
           "qty_max": 1,

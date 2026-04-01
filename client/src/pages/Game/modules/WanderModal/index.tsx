@@ -9,6 +9,7 @@ import {
 import { SILENT_API_REQUEST_CONFIG } from '../../../../services/api/requestConfig';
 import { formatGameCooldownRemaining } from '../../shared/cooldownText';
 import { buildWanderStoryReaderModel } from './storyReader';
+import { WANDER_PENDING_JOB_POLL_INTERVAL_MS } from './wanderShared';
 import './index.scss';
 
 /**
@@ -20,7 +21,7 @@ import './index.scss';
  * 3. 不做什么：不重复实现后端冷却限制，不接管正式称号装备逻辑，也不处理全局红点。
  *
  * 输入/输出：
- * - 输入：`open`、`onClose`。
+ * - 输入：`open`、`onClose`，以及可选的 `onOverviewChange` 用于把最新概览同步回主界面。
  * - 输出：用户关闭弹窗或完成当前奇遇交互后的界面更新。
  *
  * 数据流/状态流：
@@ -39,11 +40,12 @@ import './index.scss';
 interface WanderModalProps {
   open: boolean;
   onClose: () => void;
+  onOverviewChange?: (overview: WanderOverviewDto | null) => void;
 }
 
 type WanderOverviewRefreshMode = 'initial' | 'background';
 
-const WanderModal: React.FC<WanderModalProps> = ({ open, onClose }) => {
+const WanderModal: React.FC<WanderModalProps> = ({ open, onClose, onOverviewChange }) => {
   const { message } = App.useApp();
   const [loading, setLoading] = useState(false);
   const [overview, setOverview] = useState<WanderOverviewDto | null>(null);
@@ -55,7 +57,9 @@ const WanderModal: React.FC<WanderModalProps> = ({ open, onClose }) => {
     }
     try {
       const response = await getWanderOverview(mode === 'background' ? SILENT_API_REQUEST_CONFIG : undefined);
-      setOverview(response.data ?? null);
+      const nextOverview = response.data ?? null;
+      setOverview(nextOverview);
+      onOverviewChange?.(nextOverview);
     } catch {
       if (mode === 'initial') {
         setOverview(null);
@@ -65,7 +69,7 @@ const WanderModal: React.FC<WanderModalProps> = ({ open, onClose }) => {
         setLoading(false);
       }
     }
-  }, []);
+  }, [onOverviewChange]);
 
   const generateToday = useCallback(async () => {
     setActionKey('generate');
@@ -73,7 +77,7 @@ const WanderModal: React.FC<WanderModalProps> = ({ open, onClose }) => {
       const response = await generateWanderEpisode();
       setOverview((current) => {
         if (!current || !response.data) return current;
-        return {
+        const nextOverview = {
           ...current,
           hasPendingEpisode: false,
           canGenerate: false,
@@ -82,13 +86,15 @@ const WanderModal: React.FC<WanderModalProps> = ({ open, onClose }) => {
           cooldownRemainingSeconds: 0,
           currentGenerationJob: response.data.job,
         };
+        onOverviewChange?.(nextOverview);
+        return nextOverview;
       });
       message.success('当前云游已开始推演');
       await refreshOverview('background');
     } finally {
       setActionKey('');
     }
-  }, [message, refreshOverview]);
+  }, [message, onOverviewChange, refreshOverview]);
 
   const chooseOption = useCallback(async (episodeId: string, optionIndex: number) => {
     setActionKey(`choose:${episodeId}:${optionIndex}`);
@@ -125,7 +131,7 @@ const WanderModal: React.FC<WanderModalProps> = ({ open, onClose }) => {
 
     const timer = window.setInterval(() => {
       void refreshOverview('background');
-    }, 2000);
+    }, WANDER_PENDING_JOB_POLL_INTERVAL_MS);
 
     return () => window.clearInterval(timer);
   }, [currentGenerationJob?.generationId, currentGenerationJob?.status, open, refreshOverview]);

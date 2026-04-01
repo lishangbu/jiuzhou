@@ -37,6 +37,10 @@ import SignInModal from './modules/SignInModal';
 import PartnerModal from './modules/PartnerModal';
 import WanderModal from './modules/WanderModal';
 import TowerModal from './modules/TowerModal';
+import {
+  buildWanderIndicator,
+  resolveWanderIndicatorNextRefreshDelayMs,
+} from './modules/WanderModal/wanderShared';
 import { useIdleBattle, IdleBattlePanel, IdleBattleStatusBar } from './modules/IdleBattle';
 import type { IdleSessionDto } from './modules/IdleBattle/types';
 import {
@@ -56,6 +60,7 @@ import {
   getBattleSessionByBattleId,
   getDungeonInstance,
   getGameHomeOverview,
+  getWanderOverview,
   pickupRoomItem,
   SILENT_API_REQUEST_CONFIG,
   getInventoryItems,
@@ -79,6 +84,7 @@ import type {
   TechniqueResearchResultStatusDto,
   BattleSessionSnapshotDto,
   BattleStateDto,
+  WanderOverviewDto,
 } from '../../services/api';
 import { getMainQuestProgress, startDialogue, advanceDialogue, selectDialogueChoice, completeSection, type DialogueState, type MainQuestProgressDto } from '../../services/mainQuestApi';
 import { PARTNER_FEATURE_CODE } from '../../services/feature';
@@ -729,6 +735,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const [showSignInDot, setShowSignInDot] = useState(false);
   const [showMailDot, setShowMailDot] = useState(false);
   const [techniqueIndicatorStatus, setTechniqueIndicatorStatus] = useState<TechniqueResearchResultStatusDto | null>(null);
+  const [wanderOverview, setWanderOverview] = useState<WanderOverviewDto | null>(null);
   const [mailModalOpen, setMailModalOpen] = useState(false);
   const [settingModalOpen, setSettingModalOpen] = useState(false);
   const [homeOverviewSettled, setHomeOverviewSettled] = useState(false);
@@ -834,6 +841,7 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   const lastTeamBattleReplayIdentityRef = useRef<TeamBattleReplayIdentity | null>(null);
   const homeOverviewLoadingRef = useRef(false);
   const homeOverviewRequestSeqRef = useRef(0);
+  const wanderOverviewRequestSeqRef = useRef(0);
   const pendingHomeTaskSnapshotRef = useRef<GameHomeOverviewDto['task'] | null>(null);
   const pendingHomeMainQuestSnapshotRef = useRef<MainQuestProgressDto | null>(null);
   const characterId = character?.id ?? null;
@@ -852,6 +860,10 @@ const Game: FC<GameProps> = ({ onLogout }) => {
   );
   const { isCharacterOnline: isTeamCharacterOnline } = useRealtimeMemberPresence(
     teamPresenceMembers,
+  );
+  const wanderIndicator = useMemo(
+    () => buildWanderIndicator(wanderOverview),
+    [wanderOverview],
   );
 
   const clearBattleAutoCloseTimer = useCallback(() => {
@@ -1825,6 +1837,42 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     setTechniqueIndicatorStatus(resolveTechniqueResearchIndicatorStatus(status));
   }, []);
 
+  const applyWanderOverview = useCallback((overview: WanderOverviewDto | null) => {
+    wanderOverviewRequestSeqRef.current += 1;
+    setWanderOverview(overview);
+  }, []);
+
+  const refreshWanderOverview = useCallback(async (mode: 'replace' | 'preserve' = 'preserve') => {
+    if (!characterId) {
+      applyWanderOverview(null);
+      return;
+    }
+
+    const requestSeq = wanderOverviewRequestSeqRef.current + 1;
+    wanderOverviewRequestSeqRef.current = requestSeq;
+
+    try {
+      const response = await getWanderOverview(SILENT_API_REQUEST_CONFIG);
+      if (wanderOverviewRequestSeqRef.current !== requestSeq) {
+        return;
+      }
+      if (!response.success || !response.data) {
+        if (mode === 'replace') {
+          setWanderOverview(null);
+        }
+        return;
+      }
+      setWanderOverview(response.data);
+    } catch {
+      if (wanderOverviewRequestSeqRef.current !== requestSeq) {
+        return;
+      }
+      if (mode === 'replace') {
+        setWanderOverview(null);
+      }
+    }
+  }, [applyWanderOverview, characterId]);
+
   useEffect(() => {
     if (!characterId) {
       applyTeamOverview({ info: null, role: null, applications: [] });
@@ -2101,6 +2149,28 @@ const Game: FC<GameProps> = ({ onLogout }) => {
     });
   }, [applyTechniqueResearchStatus, characterId]);
 
+  useEffect(() => {
+    if (!characterId) {
+      applyWanderOverview(null);
+      return;
+    }
+    void refreshWanderOverview('replace');
+  }, [applyWanderOverview, characterId, refreshWanderOverview]);
+
+  useEffect(() => {
+    if (!characterId) {
+      return undefined;
+    }
+    const nextRefreshDelayMs = resolveWanderIndicatorNextRefreshDelayMs(wanderOverview);
+    if (nextRefreshDelayMs == null) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      void refreshWanderOverview();
+    }, nextRefreshDelayMs);
+    return () => window.clearTimeout(timer);
+  }, [characterId, refreshWanderOverview, wanderOverview]);
+
   const clearTaskIndicatorQueuedRefreshTimer = useCallback(() => {
     if (taskIndicatorQueuedRefreshTimerRef.current == null) return;
     window.clearTimeout(taskIndicatorQueuedRefreshTimerRef.current);
@@ -2324,8 +2394,23 @@ const Game: FC<GameProps> = ({ onLogout }) => {
         tooltip: getTechniqueResearchIndicatorTooltip(techniqueIndicatorStatus),
       };
     }
+    if (wanderIndicator.badgeDot) {
+      out.life = {
+        badgeDot: true,
+        tooltip: wanderIndicator.tooltip,
+      };
+    }
     return Object.keys(out).length > 0 ? out : undefined;
-  }, [achievementClaimableCount, isTeamLeader, sectMyApplicationCount, sectPendingApplicationCount, taskCompletableCount, teamApplicationUnread, techniqueIndicatorStatus]);
+  }, [
+    achievementClaimableCount,
+    isTeamLeader,
+    sectMyApplicationCount,
+    sectPendingApplicationCount,
+    taskCompletableCount,
+    teamApplicationUnread,
+    techniqueIndicatorStatus,
+    wanderIndicator,
+  ]);
 
   const towerRoomHeaderAction = useMemo(
     () => (
@@ -3171,7 +3256,11 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       />
       <BagModal open={bagModalOpen} onClose={() => setBagModalOpen(false)} />
       <PartnerModal open={partnerModalOpen} onClose={() => setPartnerModalOpen(false)} />
-      <WanderModal open={wanderModalOpen} onClose={() => setWanderModalOpen(false)} />
+      <WanderModal
+        open={wanderModalOpen}
+        onClose={() => setWanderModalOpen(false)}
+        onOverviewChange={applyWanderOverview}
+      />
       {warehouseModalOpen && (
         <WarehouseModal open={warehouseModalOpen} onClose={() => setWarehouseModalOpen(false)} />
       )}
