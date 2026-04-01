@@ -104,6 +104,12 @@ import {
   normalizeManagedAvatarValue,
 } from './uploadService.js';
 import { consumeSpecificItemInstance } from './inventory/shared/consume.js';
+import {
+  getTechniqueDetailByIdForPartner,
+  type SkillDefRow,
+  type TechniqueDefRow,
+  type TechniqueLayerRow,
+} from './techniqueService.js';
 
 export type {
   PartnerComputedAttrsDto,
@@ -138,6 +144,14 @@ export interface PartnerTechniqueUpgradeCostDto {
   spiritStones: number;
   exp: number;
   materials: Array<{ itemId: string; qty: number; itemName?: string; itemIcon?: string | null }>;
+}
+
+export interface PartnerTechniqueDetailDto {
+  technique: TechniqueDefRow;
+  layers: TechniqueLayerRow[];
+  skills: SkillDefRow[];
+  currentLayer: number;
+  isInnate: boolean;
 }
 
 export interface PartnerUpgradeTechniqueResultDto {
@@ -383,6 +397,68 @@ const loadPartnerTechniqueLearnContext = async (params: {
       learnedTechnique,
       maxTechniqueSlots,
       replaceableTechniqueIds,
+    },
+  };
+};
+
+type OwnedPartnerTechniqueContext = {
+  character: CharacterPartnerContextRow;
+  partnerRow: PartnerRow;
+  partnerDef: PartnerDefConfig;
+  techniqueEntry: EffectivePartnerTechniqueEntry;
+  techniqueMeta: PartnerTechniqueStaticMeta;
+};
+
+const loadOwnedPartnerTechniqueContext = async (params: {
+  characterId: number;
+  partnerId: number;
+  techniqueId: string;
+  forUpdate: boolean;
+}): Promise<PartnerResult<OwnedPartnerTechniqueContext>> => {
+  const unlockState = await assertPartnerSystemUnlocked(params.characterId);
+  if (!unlockState.success) {
+    return { success: false, message: unlockState.message };
+  }
+
+  const character = await loadCharacterPartnerContext(params.characterId, false);
+  if (!character) {
+    return { success: false, message: '角色不存在' };
+  }
+
+  const partnerRow = await loadSinglePartnerRow(params.characterId, params.partnerId, params.forUpdate);
+  if (!partnerRow) {
+    return { success: false, message: '伙伴不存在' };
+  }
+  const partnerDef = await loadPartnerDefinitionOrThrow(partnerRow.partner_def_id);
+
+  const techniqueMap = await loadPartnerTechniqueRows([params.partnerId], params.forUpdate);
+  const techniqueRows = techniqueMap.get(params.partnerId) ?? [];
+  const techniqueEntry = findEffectivePartnerTechniqueEntry(
+    partnerDef,
+    techniqueRows,
+    params.techniqueId,
+  );
+  if (!techniqueEntry) {
+    return { success: false, message: '该伙伴未学习此功法' };
+  }
+
+  const techniqueMeta = getPartnerTechniqueStaticMeta(
+    techniqueEntry.techniqueId,
+    techniqueEntry.currentLayer,
+  );
+  if (!techniqueMeta) {
+    return { success: false, message: '伙伴功法不存在或未开放' };
+  }
+
+  return {
+    success: true,
+    message: 'ok',
+    data: {
+      character,
+      partnerRow,
+      partnerDef,
+      techniqueEntry,
+      techniqueMeta,
     },
   };
 };
@@ -1403,38 +1479,19 @@ class PartnerService {
     techniqueId: string,
   ): Promise<PartnerResult<PartnerTechniqueUpgradeCostDto>> {
     try {
-      const unlockState = await assertPartnerSystemUnlocked(characterId);
-      if (!unlockState.success) {
-        return { success: false, message: unlockState.message };
-      }
-
-      const character = await loadCharacterPartnerContext(characterId, false);
-      if (!character) return { success: false, message: '角色不存在' };
-
-      const partnerRow = await loadSinglePartnerRow(characterId, partnerId, false);
-      if (!partnerRow) return { success: false, message: '伙伴不存在' };
-      const partnerDef = await loadPartnerDefinitionOrThrow(partnerRow.partner_def_id);
-
-      const techniqueMap = await loadPartnerTechniqueRows([partnerId], false);
-      const techniqueRows = techniqueMap.get(partnerId) ?? [];
-      const techniqueEntry = findEffectivePartnerTechniqueEntry(
-        partnerDef,
-        techniqueRows,
+      const contextResult = await loadOwnedPartnerTechniqueContext({
+        characterId,
+        partnerId,
         techniqueId,
-      );
-      if (!techniqueEntry) return { success: false, message: '该伙伴未学习此功法' };
-
-      const techniqueMeta = getPartnerTechniqueStaticMeta(
-        techniqueEntry.techniqueId,
-        techniqueEntry.currentLayer,
-      );
-      if (!techniqueMeta) {
-        return { success: false, message: '伙伴功法不存在或未开放' };
+        forUpdate: false,
+      });
+      if (!contextResult.success || !contextResult.data) {
+        return { success: false, message: contextResult.message };
       }
 
       const cost = await buildPartnerTechniqueUpgradeCost({
-        techniqueId: techniqueEntry.techniqueId,
-        techniqueMeta,
+        techniqueId: contextResult.data.techniqueEntry.techniqueId,
+        techniqueMeta: contextResult.data.techniqueMeta,
       });
       if (!cost) {
         return { success: false, message: '已达最高层数' };
@@ -1451,6 +1508,44 @@ class PartnerService {
     }
   }
 
+  async getTechniqueDetail(
+    characterId: number,
+    partnerId: number,
+    techniqueId: string,
+  ): Promise<PartnerResult<PartnerTechniqueDetailDto>> {
+    try {
+      const contextResult = await loadOwnedPartnerTechniqueContext({
+        characterId,
+        partnerId,
+        techniqueId,
+        forUpdate: false,
+      });
+      if (!contextResult.success || !contextResult.data) {
+        return { success: false, message: contextResult.message };
+      }
+
+      const detail = await getTechniqueDetailByIdForPartner(contextResult.data.techniqueEntry.techniqueId);
+      if (!detail) {
+        return { success: false, message: '伙伴功法详情不存在' };
+      }
+
+      return {
+        success: true,
+        message: '获取成功',
+        data: {
+          technique: detail.technique,
+          layers: detail.layers,
+          skills: detail.skills,
+          currentLayer: contextResult.data.techniqueEntry.currentLayer,
+          isInnate: contextResult.data.techniqueEntry.isInnate,
+        },
+      };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : '未知错误';
+      return { success: false, message: `伙伴功法详情读取失败：${reason}` };
+    }
+  }
+
   @Transactional
   async upgradeTechnique(
     characterId: number,
@@ -1458,40 +1553,29 @@ class PartnerService {
     techniqueId: string,
   ): Promise<PartnerResult<PartnerUpgradeTechniqueResultDto>> {
     try {
-      const unlockState = await assertPartnerSystemUnlocked(characterId);
-      if (!unlockState.success) {
-        return { success: false, message: unlockState.message };
+      const contextResult = await loadOwnedPartnerTechniqueContext({
+        characterId,
+        partnerId,
+        techniqueId,
+        forUpdate: true,
+      });
+      if (!contextResult.success || !contextResult.data) {
+        return { success: false, message: contextResult.message };
       }
 
-      const character = await loadCharacterPartnerContext(characterId, false);
-      if (!character) return { success: false, message: '角色不存在' };
-
-      const partnerRow = await loadSinglePartnerRow(characterId, partnerId, true);
-      if (!partnerRow) return { success: false, message: '伙伴不存在' };
+      const {
+        character,
+        partnerRow,
+        partnerDef,
+        techniqueEntry,
+        techniqueMeta,
+      } = contextResult.data;
       if (await loadActivePartnerMarketListing(partnerId, true)) {
         return { success: false, message: '已在坊市挂单的伙伴不可修炼功法' };
       }
       const fusionBlockedMessage = await getPartnerFusionBlockedMessage(partnerId, true, '修炼功法');
       if (fusionBlockedMessage) {
         return { success: false, message: fusionBlockedMessage };
-      }
-      const partnerDef = await loadPartnerDefinitionOrThrow(partnerRow.partner_def_id);
-
-      const persistedTechniqueMap = await loadPartnerTechniqueRows([partnerId], true);
-      const techniqueRows = persistedTechniqueMap.get(partnerId) ?? [];
-      const techniqueEntry = findEffectivePartnerTechniqueEntry(
-        partnerDef,
-        techniqueRows,
-        techniqueId,
-      );
-      if (!techniqueEntry) return { success: false, message: '该伙伴未学习此功法' };
-
-      const techniqueMeta = getPartnerTechniqueStaticMeta(
-        techniqueEntry.techniqueId,
-        techniqueEntry.currentLayer,
-      );
-      if (!techniqueMeta) {
-        return { success: false, message: '伙伴功法不存在或未开放' };
       }
 
       const cost = await buildPartnerTechniqueUpgradeCost({

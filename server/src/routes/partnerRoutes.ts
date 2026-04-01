@@ -433,6 +433,23 @@ router.get('/technique-upgrade-cost', asyncHandler(async (req, res) => {
   return sendResult(res, result);
 }));
 
+router.get('/technique-detail', asyncHandler(async (req, res) => {
+  const characterId = req.characterId!;
+  const partnerId = parsePositiveInt(req.query?.partnerId);
+  const techniqueId = parseNonEmptyText(getSingleQueryValue(req.query?.techniqueId));
+  if (!partnerId) {
+    sendResult(res, { success: false, message: 'partnerId 参数无效' });
+    return;
+  }
+  if (!techniqueId) {
+    sendResult(res, { success: false, message: 'techniqueId 参数无效' });
+    return;
+  }
+
+  const result = await partnerService.getTechniqueDetail(characterId, partnerId, techniqueId);
+  return sendResult(res, result);
+}));
+
 router.post('/upgrade-technique', asyncHandler(async (req, res) => {
   const userId = req.userId!;
   const characterId = req.characterId!;

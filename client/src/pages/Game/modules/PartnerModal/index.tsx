@@ -15,6 +15,7 @@ import {
   getPartnerOverview,
   getPartnerRecruitStatus,
   getPartnerSkillPolicy,
+  getPartnerTechniqueDetail,
   getPartnerTechniqueUpgradeCost,
   injectPartnerExp,
   learnPartnerTechnique,
@@ -29,6 +30,7 @@ import {
   type PartnerRecruitStatusDto,
   type PartnerSkillPolicyDto,
   type PartnerSkillPolicyEntryDto,
+  type PartnerTechniqueDetailDto,
   type PartnerTechniqueLearnPreviewDto,
   type PartnerTechniqueDto,
   type PartnerTechniqueUpgradeCostDto,
@@ -38,11 +40,12 @@ import {
 } from '../../../../services/api';
 import { gameSocket } from '../../../../services/gameSocket';
 import { getUnifiedApiErrorMessage } from '../../../../services/api';
-import { DEFAULT_ICON as partnerIcon } from '../../shared/resolveIcon';
+import { IMG_LINGSHI as lingshiIcon, IMG_TONGQIAN as tongqianIcon } from '../../shared/imageAssets';
+import { resolveIconUrl, DEFAULT_ICON as partnerIcon } from '../../shared/resolveIcon';
 import { dispatchPartnerChangedEvent, PARTNER_CHANGED_EVENT } from '../../shared/partnerTradeEvents';
 import { useIsMobile } from '../../shared/responsive';
 import { findRenameCardInventoryItem } from '../../shared/renameCard';
-import { getSkillCardSections, renderSkillTooltip } from '../TechniqueModal/skillDetailShared';
+import { renderSkillTooltip } from '../TechniqueModal/skillDetailShared';
 import {
   buildPartnerCombatAttrRows,
   buildPartnerUpgradeRuleLines,
@@ -52,7 +55,6 @@ import {
   formatPartnerAttrValue,
   formatPartnerLearnPreviewTitle,
   formatPartnerTechniqueLayerLabel,
-  formatPartnerTechniqueSkillToggleLabel,
   formatPartnerTechniqueUpgradeCostLines,
   formatPartnerLearnResult,
   formatPartnerLevelSummary,
@@ -97,6 +99,11 @@ import {
   resolvePartnerFusionSelectedQuality,
   togglePartnerFusionMaterialSelection,
 } from './partnerFusionShared';
+import TechniqueDetailPanel from '../../shared/TechniqueDetailPanel';
+import {
+  buildTechniqueDetailView,
+  type TechniqueDetailView,
+} from '../../shared/techniqueDetailView';
 import './index.scss';
 
 interface PartnerModalProps {
@@ -118,6 +125,21 @@ const PARTNER_SKILL_TOOLTIP_CLASS_NAMES = {
   root: 'skill-tooltip-overlay game-tooltip-surface-root',
   container: 'skill-tooltip-overlay-container game-tooltip-surface-container',
 } as const;
+
+const buildPartnerTechniqueDetailView = (
+  detail: PartnerTechniqueDetailDto,
+): TechniqueDetailView => {
+  return buildTechniqueDetailView({
+    technique: detail.technique,
+    currentLayer: detail.currentLayer,
+    layers: detail.layers,
+    skills: detail.skills,
+    resolveIcon: resolveIconUrl,
+    spiritStoneIcon: lingshiIcon,
+    expIcon: tongqianIcon,
+    extraTags: [detail.isInnate ? '天生功法' : '后天功法'],
+  });
+};
 
 /**
  * 伙伴系统主弹窗。
@@ -159,10 +181,14 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
   const [recruitBaseModelInput, setRecruitBaseModelInput] = useState('');
   const [selectedFusionMaterialIds, setSelectedFusionMaterialIds] = useState<number[]>([]);
   const [techniqueUpgradeCosts, setTechniqueUpgradeCosts] = useState<Record<string, PartnerTechniqueUpgradeCostDto | null>>({});
-  const [expandedTechniqueSkills, setExpandedTechniqueSkills] = useState<Record<string, boolean>>({});
+  const [techniqueDetailOpen, setTechniqueDetailOpen] = useState(false);
+  const [techniqueDetailLoading, setTechniqueDetailLoading] = useState(false);
+  const [techniqueDetail, setTechniqueDetail] = useState<TechniqueDetailView | null>(null);
   const [pendingTechniqueLearnPreview, setPendingTechniqueLearnPreview] = useState<PendingTechniqueLearnPreview | null>(null);
   const markingRecruitViewedRef = useRef(false);
   const markingFusionViewedRef = useRef(false);
+  const techniqueDetailCacheRef = useRef(new Map<string, PartnerTechniqueDetailDto>());
+  const techniqueDetailRequestIdRef = useRef(0);
 
   const applyRecruitStatus = useCallback((status: PartnerRecruitStatusDto | null) => {
     setRecruitStatus(status);
@@ -254,7 +280,9 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
       setRecruitBaseModelInput('');
       setSelectedFusionMaterialIds([]);
       setTechniqueUpgradeCosts({});
-      setExpandedTechniqueSkills({});
+      setTechniqueDetailOpen(false);
+      setTechniqueDetailLoading(false);
+      setTechniqueDetail(null);
       setPendingTechniqueLearnPreview(null);
       setActionKey('');
       return;
@@ -276,9 +304,16 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
   }, [overview]);
 
   useEffect(() => {
+    techniqueDetailCacheRef.current.clear();
+  }, [overview]);
+
+  useEffect(() => {
     setTechniqueResultText('');
     setTechniqueUpgradeCosts({});
-    setExpandedTechniqueSkills({});
+    setTechniqueDetailOpen(false);
+    setTechniqueDetailLoading(false);
+    setTechniqueDetail(null);
+    techniqueDetailRequestIdRef.current += 1;
     setSkillPolicy(null);
     setSkillPolicyDraftEntries([]);
     setDraggingSkillId(null);
@@ -300,6 +335,46 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
   }, [overview, selectedPartnerId]);
   const selectedPartnerActionLocked = selectedPartner?.tradeStatus === 'market_listed'
     || selectedPartner?.fusionStatus === 'fusion_locked';
+  const closeTechniqueDetail = useCallback(() => {
+    techniqueDetailRequestIdRef.current += 1;
+    setTechniqueDetailOpen(false);
+    setTechniqueDetailLoading(false);
+  }, []);
+  const openTechniqueDetail = useCallback(async (technique: PartnerTechniqueDto) => {
+    if (!selectedPartner) return;
+
+    const cacheKey = `${selectedPartner.id}:${technique.techniqueId}`;
+    const cached = techniqueDetailCacheRef.current.get(cacheKey) ?? null;
+    const requestId = techniqueDetailRequestIdRef.current + 1;
+    techniqueDetailRequestIdRef.current = requestId;
+    setTechniqueDetailOpen(true);
+    setTechniqueDetailLoading(true);
+
+    if (cached) {
+      setTechniqueDetail(buildPartnerTechniqueDetailView(cached));
+      setTechniqueDetailLoading(false);
+      return;
+    }
+
+    setTechniqueDetail(null);
+
+    try {
+      const res = await getPartnerTechniqueDetail(selectedPartner.id, technique.techniqueId);
+      if (techniqueDetailRequestIdRef.current !== requestId) return;
+      if (!res.success || !res.data) {
+        throw new Error(getUnifiedApiErrorMessage(res, '获取伙伴功法详情失败'));
+      }
+      techniqueDetailCacheRef.current.set(cacheKey, res.data);
+      setTechniqueDetail(buildPartnerTechniqueDetailView(res.data));
+    } catch {
+      if (techniqueDetailRequestIdRef.current !== requestId) return;
+      setTechniqueDetail(null);
+    } finally {
+      if (techniqueDetailRequestIdRef.current === requestId) {
+        setTechniqueDetailLoading(false);
+      }
+    }
+  }, [selectedPartner]);
   const {
     canRenamePartner,
     renameSubmitting,
@@ -875,13 +950,6 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
     });
   }, [message, modal, refreshRecruitStatus]);
 
-  const toggleTechniqueSkills = useCallback((techniqueId: string) => {
-    setExpandedTechniqueSkills((current) => ({
-      ...current,
-      [techniqueId]: !current[techniqueId],
-    }));
-  }, []);
-
   const renderPartnerListPanel = () => {
     if (loading && !overview) {
       return (
@@ -1135,8 +1203,6 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
               ? formatPartnerTechniqueUpgradeCostLines(upgradeCost)
               : [];
             const isMaxLayer = technique.currentLayer >= technique.maxLayer;
-            const hasSkills = technique.skills.length > 0;
-            const skillExpanded = expandedTechniqueSkills[technique.techniqueId] ?? false;
             return (
               <div key={technique.techniqueId} className="partner-technique-card">
                 <div className="partner-card-body">
@@ -1161,75 +1227,20 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
                       <div>暂无被动加成</div>
                     )}
                   </div>
-                  {hasSkills ? (
-                    <div className="partner-technique-skill-section">
-                      <Button
-                        type="text"
-                        className="partner-technique-skill-toggle"
-                        onClick={() => toggleTechniqueSkills(technique.techniqueId)}
-                      >
-                        {formatPartnerTechniqueSkillToggleLabel(technique, skillExpanded)}
-                      </Button>
-                      {skillExpanded ? (
-                        <div className="partner-technique-skill-list">
-                          {technique.skills.map((skill) => {
-                            const sections = getSkillCardSections(skill);
-                            const compactMetaItems = [
-                              ...sections.metaItems,
-                              ...sections.gridItems,
-                            ];
-                            return (
-                              <div key={skill.id} className="partner-technique-skill-item">
-                                <img
-                                  className="partner-technique-skill-icon"
-                                  src={resolvePartnerAvatar(skill.icon)}
-                                  alt={skill.name}
-                                />
-                                <div className="partner-technique-skill-main">
-                                  <div className="partner-technique-skill-name">{skill.name}</div>
-                                  {compactMetaItems.length > 0 ? (
-                                    <div className="partner-technique-skill-meta">
-                                      {compactMetaItems.map((item) => (
-                                        <span
-                                          key={`${skill.id}-${item.label}-${item.value}`}
-                                          className="partner-technique-skill-meta-pill"
-                                        >
-                                          <span className="partner-technique-skill-meta-label">
-                                            {item.label}
-                                          </span>
-                                          <span className="partner-technique-skill-meta-value">
-                                            {item.value}
-                                          </span>
-                                        </span>
-                                      ))}
-                                    </div>
-                                  ) : null}
-                                  <div className="partner-technique-skill-summary">
-                                    {sections.summaryItems.length > 0 ? (
-                                      sections.summaryItems.map((item, index) => (
-                                        <div
-                                          key={`${skill.id}-${item.label}-${index}`}
-                                          className={`partner-technique-skill-summary-line${item.isEffect ? ' is-effect' : ''}`}
-                                        >
-                                          {item.value}
-                                        </div>
-                                      ))
-                                    ) : (
-                                      <div className="partner-technique-skill-summary-line">
-                                        暂无详细信息
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        null
-                      )}
-                    </div>
-                  ) : null}
+                  <div className="partner-technique-detail-row">
+                    <span className="partner-technique-detail-count">
+                      当前已解锁技能 {technique.skills.length} 个
+                    </span>
+                    <Button
+                      type="text"
+                      className="partner-technique-detail-button"
+                      onClick={() => {
+                        void openTechniqueDetail(technique);
+                      }}
+                    >
+                      查看详情
+                    </Button>
+                  </div>
                 </div>
                 {!isMaxLayer ? (
                   <div className="partner-card-footer">
@@ -2079,6 +2090,25 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
     );
   };
 
+  const techniqueDetailModalNode = (
+    <Modal
+      open={techniqueDetailOpen}
+      onCancel={closeTechniqueDetail}
+      footer={null}
+      title="功法详情"
+      centered
+      width="min(720px, calc(100vw - 16px))"
+      className="tech-submodal"
+      destroyOnHidden
+    >
+      {techniqueDetailLoading ? (
+        <Skeleton active paragraph={{ rows: isMobile ? 6 : 8 }} />
+      ) : (
+        <TechniqueDetailPanel detail={techniqueDetail} isMobile={isMobile} />
+      )}
+    </Modal>
+  );
+
   if (isMobile) {
     return (
       <>
@@ -2095,6 +2125,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
         >
           {renderBody()}
         </Drawer>
+        {techniqueDetailModalNode}
         {renameModalNode}
         {renderTechniqueLearnPreviewModal()}
       </>
@@ -2117,6 +2148,7 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
       >
         {renderBody()}
       </Modal>
+      {techniqueDetailModalNode}
       {renameModalNode}
       {renderTechniqueLearnPreviewModal()}
     </>

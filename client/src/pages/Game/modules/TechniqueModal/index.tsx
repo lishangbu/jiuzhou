@@ -2,7 +2,6 @@ import { App, Button, Input, Modal, Segmented, Table, Tag, Tooltip } from 'antd'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { resolveIconUrl, DEFAULT_ICON as coin01 } from '../../shared/resolveIcon';
 import { IMG_LINGSHI as lingshiIcon, IMG_TONGQIAN as tongqianIcon } from '../../shared/imageAssets';
-import { getAttrLabel } from '../../shared/attrDisplay';
 import { gameSocket } from '../../../../services/gameSocket';
 import {
   dissipateCharacterTechnique,
@@ -47,71 +46,33 @@ import {
   resolveTechniqueResearchBurningWordDisplayValue,
   resolveTechniqueResearchBurningWordRequestValue,
 } from './researchPromptShared';
-import { getSkillInlineSummary, renderSkillInlineDetails, renderSkillTooltip } from './skillDetailShared';
+import { renderSkillInlineDetails, renderSkillTooltip } from './skillDetailShared';
 import {
-  formatTechniqueBonusAmount,
   getMergedUnlockedTechniqueBonuses,
   type TechniqueBonus,
 } from './bonusShared';
-import {
-  buildTechniqueLayerSkillProgression,
-  type TechniqueSkillProgressionEntry,
-} from './techniqueSkillProgression';
 import {
   buildTechniqueDissipateConfirmLines,
   buildTechniqueDissipateConfirmTitle,
   resolveTechniqueDissipateActionState,
 } from './techniqueDissipateShared';
+import TechniqueDetailPanel from '../../shared/TechniqueDetailPanel';
+import {
+  buildTechniqueDetailView,
+  type TechniqueDetailCostItem as TechniqueCostItem,
+  type TechniqueDetailSkill as TechniqueSkill,
+  type TechniqueDetailView as Technique,
+} from '../../shared/techniqueDetailView';
 import './index.scss';
 
 
 type TechQuality = '黄' | '玄' | '地' | '天';
-
-type TechniqueSkill = {
-  id: string;
-  name: string;
-  icon: string;
-  // 完整技能数据用于Tooltip显示
-  description?: string;
-  cost_lingqi?: number;
-  cost_lingqi_rate?: number;
-  cost_qixue?: number;
-  cost_qixue_rate?: number;
-  cooldown?: number;
-  target_type?: string;
-  target_count?: number;
-  damage_type?: string | null;
-  element?: string;
-  effects?: TechniqueSkillProgressionEntry['effects'];
-};
-
-type TechniqueCostItem = { id: string; name: string; icon: string; amount: number };
-
-type TechniqueLayer = {
-  layer: number;
-  bonuses: TechniqueBonus[];
-  skills: TechniqueSkill[];
-  cost: TechniqueCostItem[];
-};
-
-type Technique = {
-  id: string;
-  name: string;
-  quality: TechQuality;
-  tags: string[];
-  icon: string;
-  desc: string;
-  layer: number;
-  layers: TechniqueLayer[];
-};
 
 type TechniquePanel = 'slots' | 'learned' | 'bonus' | 'skills' | 'research';
 
 type SlotKey = 'main' | 'sub1' | 'sub2' | 'sub3';
 
 type SkillSlot = { id: string; name: string; icon: string } | null;
-
-type PassiveEntry = { key: string; value: number };
 
 const qualityColor: Record<TechQuality, string> = {
   天: 'var(--rarity-tian)',
@@ -138,18 +99,6 @@ const SKILL_TOOLTIP_CLASS_NAMES = {
 } as const;
 
 const resolveIcon = resolveIconUrl;
-
-const mapQuality = (value: unknown): TechQuality => {
-  if (value === '天' || value === '地' || value === '玄' || value === '黄') return value;
-  return '黄';
-};
-
-const normalizePassiveKey = (raw: string): string =>
-  raw
-    .trim()
-    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-    .replace(/-/g, '_')
-    .toLowerCase();
 
 const getTechniqueUnlockedInfo = (t: Technique): { bonuses: TechniqueBonus[]; skills: TechniqueSkill[] } => {
   const unlockedLayers = t.layers.slice(0, Math.max(0, Math.min(t.layer, t.layers.length)));
@@ -235,80 +184,21 @@ const renderTechniqueTooltip = (t: Technique): React.ReactNode => {
   );
 };
 
-const coercePassiveEntries = (raw: unknown): PassiveEntry[] => {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .map((x) => {
-      if (!x || typeof x !== 'object') return null;
-      const rawKey = (x as { key?: unknown }).key;
-      const value = (x as { value?: unknown }).value;
-      if (typeof rawKey !== 'string') return null;
-      if (typeof value !== 'number') return null;
-      const key = normalizePassiveKey(rawKey);
-      if (!key) return null;
-      return { key, value };
-    })
-    .filter((v): v is PassiveEntry => !!v);
-};
-
-const coerceMaterials = (
-  raw: unknown,
-): Array<{ itemId: string; qty: number; itemName?: string; itemIcon?: string | null | undefined }> => {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .map((x) => {
-      if (!x || typeof x !== 'object') return null;
-      const itemId = (x as { itemId?: unknown }).itemId;
-      const qty = (x as { qty?: unknown }).qty;
-      const itemName = (x as { itemName?: unknown }).itemName;
-      const itemIcon = (x as { itemIcon?: unknown }).itemIcon;
-      if (typeof itemId !== 'string') return null;
-      if (typeof qty !== 'number') return null;
-      const out: { itemId: string; qty: number; itemName?: string; itemIcon?: string | null } = { itemId, qty };
-      if (typeof itemName === 'string') out.itemName = itemName;
-      if (typeof itemIcon === 'string' || itemIcon === null) out.itemIcon = itemIcon;
-      return out;
-    })
-    .filter((v): v is { itemId: string; qty: number; itemName?: string; itemIcon?: string | null } => v !== null);
-};
-
 const buildTechniqueView = (
   ct: CharacterTechniqueDto | null,
   technique: TechniqueDefDto,
   layers: TechniqueLayerDto[],
   skills: SkillDefDto[],
 ): Technique => {
-  const layerSkillProgression = buildTechniqueLayerSkillProgression(layers, skills, resolveIcon);
-  return {
-    id: technique.id,
-    name: technique.name,
-    quality: mapQuality(technique.quality),
-    tags: Array.isArray(technique.tags) ? technique.tags : [],
-    icon: resolveIcon(technique.icon),
-    desc: technique.long_desc || technique.description || '',
-    layer: Math.max(0, ct?.current_layer ?? 0),
-    layers: layers.map((lv) => {
-      const passives = coercePassiveEntries(lv.passives).map((p) => ({
-        key: p.key,
-        label: getAttrLabel(p.key),
-        value: formatTechniqueBonusAmount(p.key, p.value),
-        amount: p.value,
-      }));
-      const unlockSkills = layerSkillProgression.get(lv.layer) ?? [];
-      const cost: TechniqueCostItem[] = [];
-      if (lv.cost_spirit_stones > 0) cost.push({ id: 'spirit_stones', name: '灵石', icon: lingshiIcon, amount: lv.cost_spirit_stones });
-      if (lv.cost_exp > 0) cost.push({ id: 'exp', name: '经验', icon: tongqianIcon, amount: lv.cost_exp });
-      coerceMaterials(lv.cost_materials).forEach((m) => {
-        cost.push({ id: m.itemId, name: m.itemName ?? m.itemId, icon: resolveIcon(m.itemIcon ?? null), amount: m.qty });
-      });
-      return {
-        layer: lv.layer,
-        bonuses: passives,
-        skills: unlockSkills,
-        cost,
-      };
-    }),
-  };
+  return buildTechniqueDetailView({
+    technique,
+    currentLayer: Math.max(0, ct?.current_layer ?? 0),
+    layers,
+    skills,
+    resolveIcon,
+    spiritStoneIcon: lingshiIcon,
+    expIcon: tongqianIcon,
+  });
 };
 
 const slotLabels: Record<SlotKey, string> = {
@@ -1498,152 +1388,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
         className="tech-submodal"
         destroyOnHidden
       >
-        {(() => {
-          const t = detailTechnique ?? null;
-          if (!t) return <div className="tech-empty">未找到功法</div>;
-          const layerRows = t.layers.map((lv) => ({
-            layer: lv.layer,
-            unlocked: lv.layer <= t.layer,
-            bonuses: lv.bonuses,
-            skills: lv.skills,
-          }));
-          return (
-            <div className="tech-detail">
-              <div className="tech-detail-header">
-                <img className="tech-detail-icon" src={t.icon} alt={t.name} />
-                <div className="tech-detail-meta">
-                  <div className="tech-detail-name">
-                    <span>{t.name}</span>
-                    <Tag className={getItemQualityTagClassName(t.quality)}>{getItemQualityLabel(t.quality)}</Tag>
-                    <Tag color="default">
-                      {layerText(t.layer)}/{layerText(t.layers.length)}
-                    </Tag>
-                  </div>
-                  <div className="tech-detail-tags">
-                    {t.tags.map((x) => (
-                      <Tag key={x} color="default">
-                        {x}
-                      </Tag>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <div className="tech-detail-desc">{t.desc}</div>
-              <div className="tech-detail-section-title">层数加成与技能</div>
-              {isMobile ? (
-                <div className="tech-layer-mobile-list">
-                  {layerRows.map((row) => (
-                    <div key={`layer-${row.layer}`} className={`tech-layer-mobile-item ${row.unlocked ? 'is-unlocked' : ''}`}>
-                      <div className="tech-layer-mobile-head">
-                        <div className="tech-layer-mobile-title">第{row.layer}层</div>
-                        <Tag color={row.unlocked ? 'green' : 'default'}>{row.unlocked ? '已解锁' : '未解锁'}</Tag>
-                      </div>
-
-                      <div className="tech-layer-mobile-section">
-                        <div className="tech-layer-mobile-label">加成</div>
-                        {row.bonuses.length ? (
-                          <div className="tech-layer-cell">
-                            {row.bonuses.map((b) => (
-                              <div key={`${row.layer}-${b.label}-${b.value}`} className="tech-layer-cell-line">
-                                <span className="tech-layer-cell-k">{b.label}</span>
-                                <span className="tech-layer-cell-v">{b.value}</span>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="tech-layer-cell-empty">无</span>
-                        )}
-                      </div>
-
-                      <div className="tech-layer-mobile-section">
-                        <div className="tech-layer-mobile-label">技能变化</div>
-                        {row.skills.length ? (
-                          <div className="tech-layer-mobile-skills">
-                            {row.skills.map((s) => (
-                              <div key={`${row.layer}-${s.id}`} className="tech-layer-mobile-skill">
-                                <div className="tech-layer-mobile-skill-top">
-                                  <img className="tech-layer-mobile-skill-icon" src={s.icon} alt={s.name} />
-                                  <span className="tech-layer-mobile-skill-name">{s.name}</span>
-                                </div>
-                                <div className="tech-layer-mobile-skill-desc">{getSkillInlineSummary(s)}</div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="tech-layer-cell-empty">无</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <Table
-                  size="small"
-                  rowKey={(row) => String(row.layer)}
-                  pagination={false}
-                  className="tech-layer-table"
-                  columns={[
-                    {
-                      title: '层数',
-                      dataIndex: 'layer',
-                      key: 'layer',
-                      width: 70,
-                      render: (v: number) => `第${v}层`,
-                    },
-                    {
-                      title: '状态',
-                      dataIndex: 'unlocked',
-                      key: 'unlocked',
-                      width: 86,
-                      render: (v: boolean) => <Tag color={v ? 'green' : 'default'}>{v ? '已解锁' : '未解锁'}</Tag>,
-                    },
-                    {
-                      title: '加成',
-                      dataIndex: 'bonuses',
-                      key: 'bonuses',
-                      render: (list: TechniqueBonus[]) => (
-                        <div className="tech-layer-cell">
-                          {list.length ? (
-                            list.map((b) => (
-                              <div key={`${b.label}-${b.value}`} className="tech-layer-cell-line">
-                                <span className="tech-layer-cell-k">{b.label}</span>
-                                <span className="tech-layer-cell-v">{b.value}</span>
-                              </div>
-                            ))
-                          ) : (
-                            <span className="tech-layer-cell-empty">无</span>
-                          )}
-                        </div>
-                      ),
-                    },
-                    {
-                      title: '技能变化',
-                      dataIndex: 'skills',
-                      key: 'skills',
-                      render: (list: TechniqueSkill[]) => (
-                        <div className="tech-layer-skill-cell">
-                          {list.length ? (
-                            list.map((s) => (
-                              <Tooltip key={s.id} title={renderSkillTooltip(s)} placement="top" classNames={SKILL_TOOLTIP_CLASS_NAMES}>
-                                <div className="tech-layer-skill-pill">
-                                  <img className="tech-layer-skill-pill-icon" src={s.icon} alt={s.name} />
-                                  <span className="tech-layer-skill-pill-name">{s.name}</span>
-                                </div>
-                              </Tooltip>
-                            ))
-                          ) : (
-                            <span className="tech-layer-cell-empty">无</span>
-                          )}
-                        </div>
-                      ),
-                    },
-                  ]}
-                  dataSource={layerRows}
-                />
-              )}
-            </div>
-          );
-        })()}
+        <TechniqueDetailPanel detail={detailTechnique} isMobile={isMobile} />
       </Modal>
 
       <Modal

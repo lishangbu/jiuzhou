@@ -27,13 +27,25 @@ export type TechniqueLayerDto = {
   layer: number;
   cost_spirit_stones: number;
   cost_exp: number;
-  cost_materials: unknown;
-  passives: unknown;
+  cost_materials: TechniqueLayerCostMaterialDto[];
+  passives: TechniquePassiveDto[];
   unlock_skill_ids: string[];
   upgrade_skill_ids: string[];
   required_realm: string | null;
   required_quest_id: string | null;
   layer_desc: string | null;
+};
+
+export type TechniqueLayerCostMaterialDto = {
+  itemId: string;
+  qty: number;
+  itemName?: string;
+  itemIcon?: string | null;
+};
+
+export type TechniquePassiveDto = {
+  key: string;
+  value: number;
 };
 
 export type SkillDefDto = {

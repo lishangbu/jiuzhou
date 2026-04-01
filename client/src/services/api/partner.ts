@@ -2,6 +2,7 @@ import api from './core';
 import type { CharacterFeatureCode } from '../feature';
 import type { AxiosRequestConfig } from 'axios';
 import { withRequestParams } from './requestConfig';
+import type { SkillDefDto, TechniqueDefDto, TechniqueLayerDto } from './technique';
 
 export type PartnerGrowthDto = {
   max_qixue: number;
@@ -95,6 +96,14 @@ export type PartnerTechniqueUpgradeCostDto = {
     itemName?: string;
     itemIcon?: string | null;
   }>;
+};
+
+export type PartnerTechniqueDetailDto = {
+  technique: TechniqueDefDto;
+  layers: TechniqueLayerDto[];
+  skills: SkillDefDto[];
+  currentLayer: number;
+  isInnate: boolean;
 };
 
 export type PartnerBookDto = {
@@ -394,6 +403,12 @@ export interface PartnerTechniqueUpgradeCostResponse {
   data?: PartnerTechniqueUpgradeCostDto;
 }
 
+export interface PartnerTechniqueDetailResponse {
+  success: boolean;
+  message: string;
+  data?: PartnerTechniqueDetailDto;
+}
+
 export interface PartnerUpgradeTechniqueResponse {
   success: boolean;
   message: string;
@@ -558,6 +573,15 @@ export const getPartnerTechniqueUpgradeCost = (
   techniqueId: string,
 ): Promise<PartnerTechniqueUpgradeCostResponse> => {
   return api.get('/partner/technique-upgrade-cost', {
+    params: { partnerId, techniqueId },
+  });
+};
+
+export const getPartnerTechniqueDetail = (
+  partnerId: number,
+  techniqueId: string,
+): Promise<PartnerTechniqueDetailResponse> => {
+  return api.get('/partner/technique-detail', {
     params: { partnerId, techniqueId },
   });
 };

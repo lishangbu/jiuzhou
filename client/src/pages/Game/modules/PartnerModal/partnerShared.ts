@@ -187,16 +187,6 @@ export const formatPartnerTechniqueUpgradeCostLines = (
   return lines;
 };
 
-export const formatPartnerTechniqueSkillToggleLabel = (
-  technique: PartnerTechniqueDto,
-  expanded: boolean,
-): string => {
-  if (expanded) {
-    return `收起技能（${technique.skills.length}）`;
-  }
-  return `已解锁技能 ${technique.skills.length} 个`;
-};
-
 export const formatPartnerLearnResult = (
   learnedTechnique: PartnerTechniqueDto,
   replacedTechnique: PartnerTechniqueDto | null,

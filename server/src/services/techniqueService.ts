@@ -206,6 +206,13 @@ export const getTechniqueLayersByTechniqueId = async (techniqueId: string): Prom
     isCharacterVisibleTechniqueDefinition(entry)
   )) ?? null;
   const qualityMultiplier = resolveTechniqueCostMultiplierByQuality(techniqueDef?.quality);
+  return buildTechniqueLayerRows(techniqueId, qualityMultiplier);
+};
+
+const buildTechniqueLayerRows = async (
+  techniqueId: string,
+  qualityMultiplier: number,
+): Promise<TechniqueLayerRow[]> => {
   const rows = getTechniqueLayerDefinitions()
     .filter((entry) => entry.enabled !== false)
     .filter((entry) => entry.technique_id === techniqueId)
@@ -237,6 +244,18 @@ export const getTechniqueLayersByTechniqueId = async (techniqueId: string): Prom
     });
     return { ...r, cost_materials: materials };
   });
+};
+
+export const getTechniqueLayersByTechniqueIdForPartner = async (
+  techniqueId: string,
+): Promise<TechniqueLayerRow[]> => {
+  const techniqueDef = getTechniqueDefinitions().find((entry) => (
+    entry.id === techniqueId &&
+    entry.enabled !== false
+  )) ?? null;
+  if (!techniqueDef) return [];
+  const qualityMultiplier = resolveTechniqueCostMultiplierByQuality(techniqueDef.quality);
+  return buildTechniqueLayerRows(techniqueId, qualityMultiplier);
 };
 
 export const getSkillsByTechniqueId = async (techniqueId: string): Promise<SkillDefRow[]> => {
@@ -295,6 +314,27 @@ export const getTechniqueDetailById = async (
   return {
     technique,
     layers: applyTechniqueLayerVisibility(layers, visibility),
+    skills,
+  };
+};
+
+export const getTechniqueDetailByIdForPartner = async (
+  techniqueId: string,
+): Promise<TechniqueDetailRow | null> => {
+  const techniqueEntry = getTechniqueDefinitions().find((entry) => (
+    entry.id === techniqueId &&
+    entry.enabled !== false
+  )) ?? null;
+  if (!techniqueEntry) return null;
+
+  const [layers, skills] = await Promise.all([
+    getTechniqueLayersByTechniqueIdForPartner(techniqueId),
+    getSkillsByTechniqueId(techniqueId),
+  ]);
+
+  return {
+    technique: mapTechniqueDefRow(techniqueEntry),
+    layers,
     skills,
   };
 };
