@@ -891,6 +891,55 @@ const buildPartnerTechniqueUpgradeCost = async (params: {
   };
 };
 
+const buildPartnerTechniqueDetailDto = async (params: {
+  techniqueId: string;
+  currentLayer: number;
+  isInnate: boolean;
+}): Promise<PartnerTechniqueDetailDto | null> => {
+  const detail = await getTechniqueDetailByIdForPartner(params.techniqueId);
+  if (!detail) {
+    return null;
+  }
+
+  return {
+    technique: detail.technique,
+    layers: detail.layers,
+    skills: detail.skills,
+    currentLayer: params.currentLayer,
+    isInnate: params.isInnate,
+  };
+};
+
+const loadPreviewPartnerTechniqueDetail = async (
+  partnerId: number,
+  techniqueId: string,
+): Promise<PartnerResult<PartnerTechniqueDetailDto>> => {
+  const partner = await loadPartnerDisplayById(partnerId);
+  if (!partner) {
+    return { success: false, message: '伙伴不存在' };
+  }
+
+  const technique = partner.techniques.find((entry) => entry.techniqueId === techniqueId) ?? null;
+  if (!technique) {
+    return { success: false, message: '该伙伴未学习此功法' };
+  }
+
+  const detail = await buildPartnerTechniqueDetailDto({
+    techniqueId: technique.techniqueId,
+    currentLayer: technique.currentLayer,
+    isInnate: technique.isInnate,
+  });
+  if (!detail) {
+    return { success: false, message: '伙伴功法详情不存在' };
+  }
+
+  return {
+    success: true,
+    message: '获取成功',
+    data: detail,
+  };
+};
+
 const buildPartnerRewardDto = (
   partnerId: number,
   definition: PartnerDefConfig,
@@ -1565,37 +1614,12 @@ class PartnerService {
   }
 
   async getTechniqueDetail(
-    characterId: number,
+    _characterId: number,
     partnerId: number,
     techniqueId: string,
   ): Promise<PartnerResult<PartnerTechniqueDetailDto>> {
     try {
-      const contextResult = await loadOwnedPartnerTechniqueContext({
-        characterId,
-        partnerId,
-        techniqueId,
-        forUpdate: false,
-      });
-      if (!contextResult.success || !contextResult.data) {
-        return { success: false, message: contextResult.message };
-      }
-
-      const detail = await getTechniqueDetailByIdForPartner(contextResult.data.techniqueEntry.techniqueId);
-      if (!detail) {
-        return { success: false, message: '伙伴功法详情不存在' };
-      }
-
-      return {
-        success: true,
-        message: '获取成功',
-        data: {
-          technique: detail.technique,
-          layers: detail.layers,
-          skills: detail.skills,
-          currentLayer: contextResult.data.techniqueEntry.currentLayer,
-          isInnate: contextResult.data.techniqueEntry.isInnate,
-        },
-      };
+      return loadPreviewPartnerTechniqueDetail(partnerId, techniqueId);
     } catch (error) {
       const reason = error instanceof Error ? error.message : '未知错误';
       return { success: false, message: `伙伴功法详情读取失败：${reason}` };
