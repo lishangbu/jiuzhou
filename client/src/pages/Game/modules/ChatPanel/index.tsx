@@ -11,12 +11,12 @@ import { buildPlayerInfoTarget } from '../../shared/playerInfoTarget';
 import { useDeferredGameRequest } from '../../shared/useDeferredGameRequest';
 import { usePartnerPreview } from '../../shared/usePartnerPreview';
 import { usePhoneBindingStatus } from '../../shared/usePhoneBindingStatus';
+import ChatChannelSelector from './ChatChannelSelector';
 import StatsShell from './StatsShell';
+import { CHAT_CHANNEL_ITEMS, type ChatChannel, type PublicChatChannel } from './chatChannelConfig';
 import { useStickyMessageScroll } from './useStickyMessageScroll';
 import './index.scss';
 
-type ChatChannel = 'all' | 'world' | 'team' | 'sect' | 'private' | 'battle' | 'system';
-type PublicChatChannel = Exclude<ChatChannel, 'all' | 'private'>;
 const MAX_MESSAGES_PER_CHANNEL = 200;
 const MAX_MESSAGES_ALL = 1200;
 const CHAT_PHONE_BINDING_REQUIRED_MESSAGE = '绑定手机号后才可在聊天频道发言';
@@ -923,6 +923,13 @@ const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPla
       .filter((m) => Boolean(m.content));
   }, [battleStatsFromTs, dropStatsOpen, messageBuckets.battle, outputStatsOpen]);
 
+  const handleChannelChange = useCallback((nextChannel: ChatChannel) => {
+    setActiveChannel(nextChannel);
+    if (nextChannel === 'private' && !activePrivateTargetId) {
+      setActivePrivateTargetId(privateTargets[0]?.id ?? '');
+    }
+  }, [activePrivateTargetId, privateTargets]);
+
   const dropStats = useMemo(() => {
     const details: DropDetailRow[] = [];
     const byItem = new Map<string, { quantity: number; dropCount: number; receiverQty: Map<string, number> }>();
@@ -1104,16 +1111,6 @@ const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPla
     return { details, byActorRows, bySkillRows, actors, skills };
   }, [battleMessages]);
 
-  const channelItems = [
-    { key: 'all', label: '综合' },
-    { key: 'world', label: '世界' },
-    { key: 'team', label: '队伍' },
-    { key: 'sect', label: '宗门' },
-    { key: 'private', label: '私聊' },
-    { key: 'battle', label: '战况' },
-    { key: 'system', label: '系统' },
-  ];
-
   const chatPhoneBindingBlocked = phoneBindingStatus?.enabled === true && phoneBindingStatus.isBound !== true;
 
   const canSend =
@@ -1269,80 +1266,75 @@ const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPla
     );
   }, [onlinePlayers, openPrivateChat, isMobile]);
 
+  const channelActions = (
+    <div className="chat-tabs-actions">
+      {isMobile ? (
+        <>
+          <Button
+            type="text"
+            size="small"
+            className="chat-online-button"
+            onClick={() => {
+              gameSocket.requestOnlinePlayers();
+              setOnlineDrawerOpen(true);
+            }}
+          >
+            在线 {onlineTotal}
+          </Button>
+          <Drawer
+            title={`在线玩家 (${onlineTotal})`}
+            placement="bottom"
+            open={onlineDrawerOpen}
+            onClose={() => setOnlineDrawerOpen(false)}
+            height="60vh"
+            className="chat-online-drawer"
+            styles={{ body: { padding: '0 12px 12px' } }}
+          >
+            {onlinePopoverContent}
+          </Drawer>
+        </>
+      ) : (
+        <Popover
+          trigger="click"
+          placement="bottomRight"
+          content={onlinePopoverContent}
+          overlayClassName="chat-online-popover-overlay"
+          onOpenChange={(open) => {
+            if (open) gameSocket.requestOnlinePlayers();
+          }}
+        >
+          <Button type="text" size="small" className="chat-online-button">
+            在线 {onlineTotal}
+          </Button>
+        </Popover>
+      )}
+      <Tooltip title={isMobile ? '' : '掉落统计'}>
+        <Button
+          type="text"
+          size="small"
+          icon={<BarChartOutlined />}
+          onClick={() => setDropStatsOpen(true)}
+        />
+      </Tooltip>
+      <Tooltip title={isMobile ? '' : '输出统计'}>
+        <Button
+          type="text"
+          size="small"
+          icon={<LineChartOutlined />}
+          onClick={() => setOutputStatsOpen(true)}
+        />
+      </Tooltip>
+    </div>
+  );
+
   return (
     <div className={`chat-panel ${activeChannel === 'private' ? 'is-private' : ''}`}>
-      <Tabs
-        activeKey={activeChannel}
-        onChange={(key) => {
-          const nextChannel = key as ChatChannel;
-          setActiveChannel(nextChannel);
-          if (nextChannel === 'private' && !activePrivateTargetId) {
-            setActivePrivateTargetId(privateTargets[0]?.id ?? '');
-          }
-        }}
-        items={channelItems}
-        size="small"
-        className="chat-tabs"
-        tabBarExtraContent={
-          <div className="chat-tabs-actions">
-            {isMobile ? (
-              <>
-                <Button
-                  type="text"
-                  size="small"
-                  className="chat-online-button"
-                  onClick={() => {
-                    gameSocket.requestOnlinePlayers();
-                    setOnlineDrawerOpen(true);
-                  }}
-                >
-                  在线 {onlineTotal}
-                </Button>
-                <Drawer
-                  title={`在线玩家 (${onlineTotal})`}
-                  placement="bottom"
-                  open={onlineDrawerOpen}
-                  onClose={() => setOnlineDrawerOpen(false)}
-                  height="60vh"
-                  className="chat-online-drawer"
-                  styles={{ body: { padding: '0 12px 12px' } }}
-                >
-                  {onlinePopoverContent}
-                </Drawer>
-              </>
-            ) : (
-              <Popover
-                trigger="click"
-                placement="bottomRight"
-                content={onlinePopoverContent}
-                overlayClassName="chat-online-popover-overlay"
-                onOpenChange={(open) => {
-                  if (open) gameSocket.requestOnlinePlayers();
-                }}
-              >
-                <Button type="text" size="small" className="chat-online-button">
-                  在线 {onlineTotal}
-                </Button>
-              </Popover>
-            )}
-            <Tooltip title={isMobile ? '' : '掉落统计'}>
-              <Button
-                type="text"
-                size="small"
-                icon={<BarChartOutlined />}
-                onClick={() => setDropStatsOpen(true)}
-              />
-            </Tooltip>
-            <Tooltip title={isMobile ? '' : '输出统计'}>
-              <Button
-                type="text"
-                size="small"
-                icon={<LineChartOutlined />}
-                onClick={() => setOutputStatsOpen(true)}
-              />
-            </Tooltip>
-          </div>
-        }
+      <ChatChannelSelector
+        isMobile={Boolean(isMobile)}
+        activeChannel={activeChannel}
+        channelItems={CHAT_CHANNEL_ITEMS}
+        actions={channelActions}
+        onChange={handleChannelChange}
       />
 
       <StatsShell title="掉落统计" open={dropStatsOpen} onClose={() => setDropStatsOpen(false)} isMobile={isMobile}>
@@ -1360,7 +1352,7 @@ const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPla
           <Tabs
             size="small"
             activeKey={dropTabKey}
-            onChange={(k) => setDropTabKey(k as typeof dropTabKey)}
+            onChange={(k: string) => setDropTabKey(k as typeof dropTabKey)}
             className="chat-stats-tabs"
             items={[
               {
@@ -1486,7 +1478,7 @@ const ChatPanelBase = forwardRef<ChatPanelHandle, ChatPanelProps>(({ onSelectPla
           <Tabs
             size="small"
             activeKey={outputTabKey}
-            onChange={(k) => setOutputTabKey(k as typeof outputTabKey)}
+            onChange={(k: string) => setOutputTabKey(k as typeof outputTabKey)}
             className="chat-stats-tabs"
             items={[
               {
