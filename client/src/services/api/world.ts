@@ -35,6 +35,7 @@ export type MapObjectDto =
       task_marker?: '!' | '?';
       task_tracked?: boolean;
       title?: string;
+      titleDescription?: string;
       gender?: string;
       realm?: string;
       avatar?: string | null;
@@ -48,6 +49,7 @@ export type MapObjectDto =
       task_marker?: '!' | '?';
       task_tracked?: boolean;
       title?: string;
+      titleDescription?: string;
       gender?: string;
       realm?: string;
       avatar?: string | null;
@@ -74,6 +76,7 @@ export type MapObjectDto =
       };
       name: string;
       title?: string;
+      titleDescription?: string;
       gender?: string;
       realm?: string;
       avatar?: string | null;
@@ -88,6 +91,7 @@ export type MapObjectDto =
       task_marker?: '!' | '?';
       task_tracked?: boolean;
       title?: string;
+      titleDescription?: string;
       gender?: string;
       realm?: string;
       avatar?: string | null;

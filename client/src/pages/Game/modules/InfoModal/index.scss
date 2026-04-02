@@ -1,3 +1,5 @@
+@use '../../../../styles/tag' as appTag;
+
 .info-modal {
   .ant-modal-content {
     padding: 0;
@@ -44,13 +46,6 @@
   flex: 0 0 auto;
 }
 
-.info-modal-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-color);
-  flex: 0 0 auto;
-}
-
 .info-modal-realname {
   font-size: 14px;
   font-weight: 700;
@@ -87,6 +82,16 @@
   padding: 10px 0 4px;
 }
 
+.info-modal-title-desc {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .info-modal-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -119,6 +124,16 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+}
+
+.info-modal-tag.ant-tag {
+  margin: 0;
+  @include appTag.ant-tag-base(var(--panel-bg-soft), 999px);
+}
+
+.info-modal-tag--header.ant-tag {
+  flex: 0 0 auto;
+  @include appTag.chip-accent(var(--warning-color), var(--panel-bg), 18%, 10%, 34%, 88%);
 }
 
 .info-modal-text {

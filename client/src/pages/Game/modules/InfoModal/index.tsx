@@ -1,4 +1,4 @@
-import { Avatar, Button, Modal, Table, Tabs } from 'antd';
+import { Avatar, Button, Modal, Table, Tabs, Tag } from 'antd';
 import { UserOutlined } from '@ant-design/icons';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -102,6 +102,7 @@ const InfoModal: React.FC<InfoModalProps> = ({ open, target, onClose, onAction }
   const showTarget = resolvedTarget ?? null;
   const avatarUrl = resolveAvatarUrl(showTarget?.avatar ?? undefined);
   const titleText = showTarget?.title?.trim() || '';
+  const titleDescriptionText = showTarget?.titleDescription?.trim() || '';
   const nameText = showTarget?.name?.trim() || '';
   const genderText = showTarget?.gender ?? '-';
   const realmText = showTarget?.realm ?? '-';
@@ -384,7 +385,7 @@ const InfoModal: React.FC<InfoModalProps> = ({ open, target, onClose, onAction }
             <div className="info-modal-header-right">
               <div className="info-modal-name">
                 <span className="info-modal-type">{typeText}</span>
-                <span className="info-modal-title">{titleText}</span>
+                {titleText ? <Tag className="info-modal-tag info-modal-tag--header">{titleText}</Tag> : null}
                 <PlayerName
                   name={nameText}
                   monthCardActive={showTarget.type === 'player' ? showTarget.monthCardActive : false}
@@ -397,6 +398,7 @@ const InfoModal: React.FC<InfoModalProps> = ({ open, target, onClose, onAction }
                 <span className="dot">·</span>
                 <span>境界：{realmText}</span>
               </div>
+              {titleDescriptionText ? <div className="info-modal-title-desc">{titleDescriptionText}</div> : null}
             </div>
           </div>
           <div className="info-modal-body">{loading ? <div className="info-modal-empty">加载中...</div> : renderTabs()}</div>

@@ -40,6 +40,7 @@ import {
   CHARACTER_ATTR_LABEL_MAP,
   CHARACTER_RATIO_ATTR_KEY_SET,
 } from './shared/characterAttrRegistry.js';
+import { listTitleDefinitionsByIds } from './titleDefinitionService.js';
 
 type InfoTargetType = 'npc' | 'monster' | 'item' | 'player';
 
@@ -109,6 +110,10 @@ type EquippedRow = {
 type EquippedTechniqueRow = {
   technique_id: string | null;
   current_layer: number | null;
+};
+
+type EquippedTitleRow = {
+  title_id: string | null;
 };
 
 const attrLabelMap: Record<string, string> = {
@@ -227,6 +232,38 @@ const formatChance = (mode: string, chance: number, weight: number, totalWeight:
     return formatRatioPercent(weight / totalWeight);
   }
   return formatRatioPercent(chance);
+};
+
+const loadEquippedTitlePresentation = async (
+  characterId: number,
+): Promise<{ name: string; description?: string } | null> => {
+  const titleResult = await query<EquippedTitleRow>(
+    `
+      SELECT title_id
+      FROM character_title ct
+      WHERE ct.character_id = $1
+        AND ct.is_equipped = true
+        AND (ct.expires_at IS NULL OR ct.expires_at > NOW())
+      ORDER BY ct.id ASC
+      LIMIT 1
+    `,
+    [characterId],
+  );
+
+  const titleId = String(titleResult.rows[0]?.title_id ?? '').trim();
+  if (!titleId) return null;
+
+  const titleDefinition = (await listTitleDefinitionsByIds([titleId])).get(titleId) ?? null;
+  if (!titleDefinition) return null;
+
+  const name = String(titleDefinition.name ?? '').trim();
+  if (!name) return null;
+
+  const description = String(titleDefinition.description ?? '').trim();
+  return {
+    name,
+    description: description || undefined,
+  };
 };
 
 const buildPlayerStats = (
@@ -474,7 +511,7 @@ export const getInfoTargetDetail = async (type: InfoTargetType, id: string): Pro
     const characterId = Math.floor(Number(id));
     if (!Number.isFinite(characterId) || characterId <= 0) return null;
 
-    const [computed, equipRes, techRes] = await Promise.all([
+    const [computed, equipRes, techRes, equippedTitlePresentation, monthCardActiveMap] = await Promise.all([
       getCharacterComputedByCharacterId(characterId),
       query(
         `
@@ -499,6 +536,8 @@ export const getInfoTargetDetail = async (type: InfoTargetType, id: string): Pro
         `,
         [characterId]
       ),
+      loadEquippedTitlePresentation(characterId),
+      getMonthCardActiveMapByCharacterIds([characterId]),
     ]);
 
     if (!computed) return null;
@@ -547,8 +586,9 @@ export const getInfoTargetDetail = async (type: InfoTargetType, id: string): Pro
       .filter((x): x is { name: string; level: string; type: string } => Boolean(x));
 
     const name = computed.nickname.trim() || `修士${computed.id}`;
-    const title = computed.title.trim() || '散修';
-    const monthCardActive = (await getMonthCardActiveMapByCharacterIds([computed.id])).get(computed.id) ?? false;
+    const persistedTitle = computed.title.trim();
+    const title = equippedTitlePresentation?.name ?? (persistedTitle || '散修');
+    const monthCardActive = monthCardActiveMap.get(computed.id) ?? false;
 
     return {
       type: 'player',
@@ -556,6 +596,7 @@ export const getInfoTargetDetail = async (type: InfoTargetType, id: string): Pro
       name,
       monthCardActive,
       title,
+      titleDescription: equippedTitlePresentation?.description,
       gender: normalizeGender(computed.gender) ?? '-',
       realm: buildFullRealm(computed.realm, computed.sub_realm),
       avatar: computed.avatar ?? null,
