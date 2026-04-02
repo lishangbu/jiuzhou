@@ -24,6 +24,7 @@ import type { PoolClient, QueryResult, QueryResultRow } from 'pg';
 import * as database from '../../config/database.js';
 import { redis } from '../../config/redis.js';
 import { mailService } from '../mailService.js';
+import { TECHNIQUE_RESEARCH_COOLDOWN_BYPASS_FRAGMENT_COST } from '../shared/techniqueResearchCost.js';
 import { techniqueGenerationService, type ServiceResult } from '../techniqueGenerationService.js';
 
 type SqlValue = boolean | Date | number | string | null;
@@ -206,7 +207,7 @@ test('failPendingGenerationJob: AI 生成失败且已消耗顿悟符时应同时
         return createQueryResult([
           {
             status: 'pending',
-            cost_points: 2_500,
+            cost_points: TECHNIQUE_RESEARCH_COOLDOWN_BYPASS_FRAGMENT_COST,
             used_cooldown_bypass_token: true,
           },
         ]);
@@ -244,7 +245,7 @@ test('failPendingGenerationJob: AI 生成失败且已消耗顿悟符时应同时
       items: [
         {
           itemDefId: 'mat-gongfa-canye',
-          quantity: 2500,
+          quantity: TECHNIQUE_RESEARCH_COOLDOWN_BYPASS_FRAGMENT_COST,
         },
         {
           itemDefId: 'token-005',
@@ -257,7 +258,7 @@ test('failPendingGenerationJob: AI 生成失败且已消耗顿悟符时应同时
     sourceRefId: 'research-job-2',
     metadata: {
       generationId: 'research-job-2',
-      refundFragments: 2500,
+      refundFragments: TECHNIQUE_RESEARCH_COOLDOWN_BYPASS_FRAGMENT_COST,
       refundCooldownBypassToken: true,
       reason: 'AI生成异常，已自动退款：模型超时 对应返还已通过邮件发放，请前往邮箱领取。',
     },

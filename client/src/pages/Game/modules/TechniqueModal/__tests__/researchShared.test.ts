@@ -10,14 +10,17 @@ import {
   resolveTechniqueResearchSubmitState,
 } from '../researchShared';
 
+const TECHNIQUE_RESEARCH_BASE_FRAGMENT_COST = 4_000;
+const TECHNIQUE_RESEARCH_COOLDOWN_BYPASS_FRAGMENT_COST = 2_000;
+
 const buildStatus = (
   overrides: Partial<TechniqueResearchStatusData> = {},
 ): TechniqueResearchStatusData => ({
   unlockRealm: '炼炁化神·结胎期',
   unlocked: true,
   fragmentBalance: 6_000,
-  fragmentCost: 5_000,
-  cooldownBypassFragmentCost: 2_500,
+  fragmentCost: TECHNIQUE_RESEARCH_BASE_FRAGMENT_COST,
+  cooldownBypassFragmentCost: TECHNIQUE_RESEARCH_COOLDOWN_BYPASS_FRAGMENT_COST,
   cooldownHours: 72,
   cooldownUntil: null,
   cooldownRemainingSeconds: 0,
@@ -90,8 +93,8 @@ describe('researchShared', () => {
   });
 
   it('resolveTechniqueResearchCurrentFragmentCost: 启用顿悟符时应切换到折后残页消耗', () => {
-    expect(resolveTechniqueResearchCurrentFragmentCost(buildStatus(), true)).toBe(2_500);
-    expect(resolveTechniqueResearchCurrentFragmentCost(buildStatus(), false)).toBe(5_000);
+    expect(resolveTechniqueResearchCurrentFragmentCost(buildStatus(), true)).toBe(TECHNIQUE_RESEARCH_COOLDOWN_BYPASS_FRAGMENT_COST);
+    expect(resolveTechniqueResearchCurrentFragmentCost(buildStatus(), false)).toBe(TECHNIQUE_RESEARCH_BASE_FRAGMENT_COST);
   });
 
   it('resolveTechniqueResearchActionState: 未解锁时应禁用开始领悟', () => {
@@ -110,7 +113,7 @@ describe('researchShared', () => {
 
   it('resolveTechniqueResearchActionState: 功法残页不足时应禁用开始领悟', () => {
     const actionState = resolveTechniqueResearchActionState(buildStatus({
-      fragmentBalance: 2_499,
+      fragmentBalance: TECHNIQUE_RESEARCH_COOLDOWN_BYPASS_FRAGMENT_COST - 1,
     }), true);
 
     expect(actionState.canGenerate).toBe(false);
@@ -118,7 +121,7 @@ describe('researchShared', () => {
 
   it('resolveTechniqueResearchActionState: 启用顿悟符后余额达到折后成本时应允许开始领悟', () => {
     const actionState = resolveTechniqueResearchActionState(buildStatus({
-      fragmentBalance: 2_500,
+      fragmentBalance: TECHNIQUE_RESEARCH_COOLDOWN_BYPASS_FRAGMENT_COST,
       cooldownUntil: '2026-03-11T10:00:00.000Z',
       cooldownRemainingSeconds: 3_600,
     }), true);

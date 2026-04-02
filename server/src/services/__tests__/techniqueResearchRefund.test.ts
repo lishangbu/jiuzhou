@@ -28,19 +28,23 @@ import {
   TECHNIQUE_RESEARCH_COOLDOWN_BYPASS_TOKEN_COST,
   TECHNIQUE_RESEARCH_COOLDOWN_BYPASS_TOKEN_ITEM_DEF_ID,
 } from '../shared/techniqueResearchCooldownBypass.js';
-import { TECHNIQUE_RESEARCH_FRAGMENT_ITEM_DEF_ID } from '../shared/techniqueResearchCost.js';
+import {
+  TECHNIQUE_RESEARCH_BASE_FRAGMENT_COST,
+  TECHNIQUE_RESEARCH_COOLDOWN_BYPASS_FRAGMENT_COST,
+  TECHNIQUE_RESEARCH_FRAGMENT_ITEM_DEF_ID,
+} from '../shared/techniqueResearchCost.js';
 
 test('resolveTechniqueResearchRefundFragments: 失败退款默认应全额返还', () => {
   assert.equal(
-    resolveTechniqueResearchRefundFragments(5_000, TECHNIQUE_RESEARCH_FULL_REFUND_RATE),
-    5_000,
+    resolveTechniqueResearchRefundFragments(TECHNIQUE_RESEARCH_BASE_FRAGMENT_COST, TECHNIQUE_RESEARCH_FULL_REFUND_RATE),
+    TECHNIQUE_RESEARCH_BASE_FRAGMENT_COST,
   );
 });
 
 test('resolveTechniqueResearchRefundFragments: 草稿过期应只返还一半消耗', () => {
   assert.equal(
-    resolveTechniqueResearchRefundFragments(5_000, TECHNIQUE_RESEARCH_EXPIRED_DRAFT_REFUND_RATE),
-    2_500,
+    resolveTechniqueResearchRefundFragments(TECHNIQUE_RESEARCH_BASE_FRAGMENT_COST, TECHNIQUE_RESEARCH_EXPIRED_DRAFT_REFUND_RATE),
+    TECHNIQUE_RESEARCH_COOLDOWN_BYPASS_FRAGMENT_COST,
   );
 });
 
@@ -53,14 +57,14 @@ test('resolveTechniqueResearchRefundFragments: 异常输入应保守回退到非
 test('buildTechniqueResearchRefundRewardPayload: pending 失败且消耗过顿悟符时应同时返还残页与顿悟符', () => {
   assert.deepEqual(
     buildTechniqueResearchRefundRewardPayload({
-      refundFragments: 2_500,
+      refundFragments: TECHNIQUE_RESEARCH_COOLDOWN_BYPASS_FRAGMENT_COST,
       refundCooldownBypassToken: true,
     }),
     {
       items: [
         {
           itemDefId: TECHNIQUE_RESEARCH_FRAGMENT_ITEM_DEF_ID,
-          quantity: 2_500,
+          quantity: TECHNIQUE_RESEARCH_COOLDOWN_BYPASS_FRAGMENT_COST,
         },
         {
           itemDefId: TECHNIQUE_RESEARCH_COOLDOWN_BYPASS_TOKEN_ITEM_DEF_ID,
