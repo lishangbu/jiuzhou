@@ -53,7 +53,6 @@ import {
   buildPartnerTechniqueDto,
   type EffectivePartnerTechniqueEntry,
   findEffectivePartnerTechniqueEntry,
-  getPartnerInnateTechniqueIds,
   getPartnerTechniqueStaticMeta,
   loadPartnerDisplayById,
   loadPartnerRows,
@@ -72,6 +71,7 @@ import {
   type PartnerTechniqueRow,
   type PartnerTechniqueSkillDto,
 } from './shared/partnerView.js';
+import { ensurePartnerInnateTechniquesVisible } from './shared/partnerInnateTechniqueVisibility.js';
 import { loadPartnerMarketTradeStateMap, loadActivePartnerMarketListing } from './shared/partnerMarketState.js';
 import {
   loadActivePartnerFusionMaterial,
@@ -981,12 +981,9 @@ const createPartnerInstanceFromDefinition = async (params: {
     PARTNER_GROWTH_KEYS.map((key) => [key, 1000]),
   ) as PartnerGrowthValues;
 
-  const innateTechniqueIds = getPartnerInnateTechniqueIds(definition);
-  for (const techniqueId of innateTechniqueIds) {
-    const techniqueMeta = getPartnerTechniqueStaticMeta(techniqueId, 1);
-    if (!techniqueMeta) {
-      throw new Error(`伙伴天生功法不存在: ${techniqueId}`);
-    }
+  const innateTechniqueVisibility = await ensurePartnerInnateTechniquesVisible(definition);
+  if (!innateTechniqueVisibility.success) {
+    throw new Error(`伙伴天生功法不存在: ${innateTechniqueVisibility.missingTechniqueIds.join(', ')}`);
   }
 
   const activated = false;

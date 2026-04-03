@@ -73,6 +73,7 @@ import { persistGeneratedTechniqueCandidateTx } from './generatedTechniquePersis
 import { callConfiguredTextModel } from '../ai/openAITextClient.js';
 import type { GeneratedTechniqueType } from './techniqueGenerationConstraints.js';
 import type { TechniqueGenerationCandidate } from '../techniqueGenerationService.js';
+import { ensurePartnerInnateTechniquesVisible } from './partnerInnateTechniqueVisibility.js';
 
 export type GeneratedPartnerPreviewTechniqueDto = {
   techniqueId: string;
@@ -875,6 +876,7 @@ export const buildGeneratedPartnerPreviewByPartnerDefId = async (
 ): Promise<GeneratedPartnerPreviewDto | null> => {
   const definition = await getPartnerDefinitionById(partnerDefId);
   if (!definition) return null;
+  await ensurePartnerInnateTechniquesVisible(definition);
   return buildGeneratedPartnerPreviewFromDefinition(definition);
 };
 
@@ -982,6 +984,11 @@ export const persistGeneratedPartnerPreviewTx = async (params: {
 
   await refreshGeneratedTechniqueSnapshots();
   await refreshGeneratedPartnerSnapshots();
+
+  const innateTechniqueVisibility = await ensurePartnerInnateTechniquesVisible(partnerDef);
+  if (!innateTechniqueVisibility.success) {
+    throw new Error(`伙伴天生功法不存在: ${innateTechniqueVisibility.missingTechniqueIds.join(', ')}`);
+  }
 
   return {
     preview: buildGeneratedPartnerPreviewFromDefinition(partnerDef),
