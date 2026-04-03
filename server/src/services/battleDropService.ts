@@ -37,13 +37,17 @@ import {
   type CharacterRewardDelta,
 } from './shared/characterRewardSettlement.js';
 import { resolveQualityRankFromName } from './shared/itemQuality.js';
-import { lockCharacterRewardSettlementTargets } from './shared/characterRewardTargetLock.js';
+import {
+  lockCharacterRewardSettlementTargets,
+  normalizeCharacterRewardTargetIds,
+} from './shared/characterRewardTargetLock.js';
 import { getRealmOrderIndex } from './shared/realmRules.js';
 import type {
   IdleBattleRewardSettlementPlan,
   IdleRewardPlanDropEntry,
   RewardItemEntry,
 } from './idle/types.js';
+import { createSlowOperationLogger } from '../utils/slowOperationLogger.js';
 
 // ============================================
 // 类型定义
@@ -77,6 +81,8 @@ interface DropPool {
   mode: DropPoolMode;
   entries: DropPoolEntry[];
 }
+
+const BATTLE_REWARD_SETTLEMENT_SLOW_THRESHOLD_MS = 200;
 
 type RollDropsOptions = {
   isDungeonBattle?: boolean;
@@ -1143,218 +1149,265 @@ class BattleDropService {
     const pendingMailByReceiver = new Map<number, { userId: number; items: MailAttachItem[] }>();
     const collectCounts = new Map<string, { characterId: number; itemDefId: string; qty: number }>();
     const pendingCharacterRewardDeltas = new Map<number, CharacterRewardDelta>();
-    const participantCharacterIds = [...new Set(
-      plan.perPlayerRewards
-        .map((reward) => Number(reward.characterId))
-        .filter((characterId) => Number.isInteger(characterId) && characterId > 0),
-    )].sort((left, right) => left - right);
+    const participantCharacterIds = normalizeCharacterRewardTargetIds(
+      plan.perPlayerRewards.map((reward) => Number(reward.characterId)),
+    );
     const requiresInventoryMutation = plan.drops.length > 0;
+    const slowLogger = createSlowOperationLogger({
+      label: 'battleDropService.settleBattleRewardPlan',
+      thresholdMs: BATTLE_REWARD_SETTLEMENT_SLOW_THRESHOLD_MS,
+      fields: {
+        rewardPlayerCount: plan.perPlayerRewards.length,
+        dropCount: plan.drops.length,
+        requiresInventoryMutation,
+      },
+    });
+    let collectEventCount = 0;
+    let pendingMailCount = 0;
+    let success = false;
 
-    for (const reward of plan.perPlayerRewards) {
-      addCharacterRewardDelta(pendingCharacterRewardDeltas, reward.characterId, {
-        exp: reward.exp,
-        silver: reward.silver,
+    try {
+      for (const reward of plan.perPlayerRewards) {
+        addCharacterRewardDelta(pendingCharacterRewardDeltas, reward.characterId, {
+          exp: reward.exp,
+          silver: reward.silver,
+        });
+      }
+      slowLogger.mark('aggregateRewardDeltas', {
+        rewardDeltaCharacterCount: pendingCharacterRewardDeltas.size,
       });
-    }
 
-    if (requiresInventoryMutation && participantCharacterIds.length > 0) {
-      await lockCharacterRewardSettlementTargets(participantCharacterIds);
-    }
+      if (requiresInventoryMutation && participantCharacterIds.length > 0) {
+        await lockCharacterRewardSettlementTargets(participantCharacterIds);
+        slowLogger.mark('lockCharacterRewardSettlementTargets', {
+          lockedCharacterCount: participantCharacterIds.length,
+        });
+      }
 
-    const autoDisassembleSettings = new Map<number, AutoDisassembleSetting>();
-    if (requiresInventoryMutation && participantCharacterIds.length > 0) {
-      const settingResult = await query(
-        `
-          SELECT id, auto_disassemble_enabled, auto_disassemble_rules
-          FROM characters
-          WHERE id = ANY($1)
-        `,
-        [participantCharacterIds],
-      );
-      for (const row of settingResult.rows as Array<{
-        id: number;
-        auto_disassemble_enabled: boolean | null;
-        auto_disassemble_rules: unknown;
-      }>) {
-        autoDisassembleSettings.set(
-          Number(row.id),
-          normalizeAutoDisassembleSetting({
-            enabled: row.auto_disassemble_enabled,
-            rules: row.auto_disassemble_rules,
-          }),
+      const autoDisassembleSettings = new Map<number, AutoDisassembleSetting>();
+      if (requiresInventoryMutation && participantCharacterIds.length > 0) {
+        const settingResult = await query(
+          `
+            SELECT id, auto_disassemble_enabled, auto_disassemble_rules
+            FROM characters
+            WHERE id = ANY($1)
+          `,
+          [participantCharacterIds],
         );
+        for (const row of settingResult.rows as Array<{
+          id: number;
+          auto_disassemble_enabled: boolean | null;
+          auto_disassemble_rules: unknown;
+        }>) {
+          autoDisassembleSettings.set(
+            Number(row.id),
+            normalizeAutoDisassembleSetting({
+              enabled: row.auto_disassemble_enabled,
+              rules: row.auto_disassemble_rules,
+            }),
+          );
+        }
+        slowLogger.mark('loadAutoDisassembleSettings', {
+          settingCharacterCount: autoDisassembleSettings.size,
+        });
       }
-    }
 
-    const result = this.buildDistributeResultFromBattleRewardPlan(plan);
-    let totalSilver = plan.totalSilver;
+      const result = this.buildDistributeResultFromBattleRewardPlan(plan);
+      let totalSilver = plan.totalSilver;
 
-    const appendCollectCount = (characterId: number, itemDefId: string, qty: number): void => {
-      const key = `${characterId}|${itemDefId}`;
-      const existing = collectCounts.get(key);
-      if (existing) {
-        existing.qty += qty;
-      } else {
-        collectCounts.set(key, { characterId, itemDefId, qty });
-      }
-    };
-
-    const appendRewardRecord = (
-      characterId: number,
-      itemDefId: string,
-      itemName: string,
-      quantity: number,
-      instanceIds: number[],
-    ): void => {
-      result.rewards.items.push({ itemDefId, itemName, quantity, instanceIds, receiverId: characterId });
-      const playerReward = result.perPlayerRewards?.find((reward) => reward.characterId === characterId);
-      if (playerReward) {
-        playerReward.items.push({ itemDefId, itemName, quantity, instanceIds });
-      }
-    };
-
-    const queuePendingMailItem = (
-      receiverUserId: number,
-      receiverCharacterId: number,
-      attachItem: MailAttachItem,
-    ): void => {
-      const existing = pendingMailByReceiver.get(receiverCharacterId) ?? {
-        userId: receiverUserId,
-        items: [],
+      const appendCollectCount = (characterId: number, itemDefId: string, qty: number): void => {
+        const key = `${characterId}|${itemDefId}`;
+        const existing = collectCounts.get(key);
+        if (existing) {
+          existing.qty += qty;
+        } else {
+          collectCounts.set(key, { characterId, itemDefId, qty });
+        }
       };
-      const keyA = JSON.stringify(attachItem.options?.equipOptions || null);
-      const found = existing.items.find((entry) => {
-        const keyB = JSON.stringify(entry.options?.equipOptions || null);
-        return entry.item_def_id === attachItem.item_def_id
-          && (entry.options?.bindType || 'none') === (attachItem.options?.bindType || 'none')
-          && keyB === keyA;
-      });
-      if (found) {
-        found.qty += attachItem.qty;
-      } else {
-        existing.items.push(attachItem);
-      }
-      pendingMailByReceiver.set(receiverCharacterId, existing);
-    };
 
-    result.rewards.items = [];
-    if (result.perPlayerRewards) {
-      for (const playerReward of result.perPlayerRewards) {
-        playerReward.items = [];
-      }
-    }
-
-    for (const drop of plan.drops) {
-      const receiverCharacterId = Number(drop.receiverCharacterId);
-      if (!Number.isInteger(receiverCharacterId) || receiverCharacterId <= 0) {
-        console.warn(`奖励分发跳过：非法角色ID ${String(drop.receiverCharacterId)}`);
-        continue;
-      }
-
-      const sourceMeta = this.getRewardItemMeta(drop.itemDefId);
-      const createOptions: CreateItemOptions = {
-        location: 'bag',
-        bindType: drop.bindType,
-        obtainedFrom: 'battle_drop',
-      };
-      if (sourceMeta.category === 'equipment') {
-        createOptions.equipOptions = {
-          fuyuan: drop.receiverFuyuan,
-          ...(drop.qualityWeights ? { qualityWeights: drop.qualityWeights } : {}),
-        };
-      }
-
-      const receiverAutoDisassemble =
-        autoDisassembleSettings.get(receiverCharacterId)
-        ?? normalizeAutoDisassembleSetting({ enabled: false, rules: undefined });
-
-      const grantResult = await grantRewardItemWithAutoDisassemble({
-        characterId: receiverCharacterId,
-        itemDefId: drop.itemDefId,
-        qty: drop.quantity,
-        bindType: drop.bindType,
-        itemMeta: {
-          itemName: sourceMeta.name,
-          category: sourceMeta.category,
-          subCategory: sourceMeta.subCategory,
-          effectDefs: sourceMeta.effectDefs,
-          qualityRank: sourceMeta.qualityRank,
-          disassemblable: sourceMeta.disassemblable,
-        },
-        autoDisassembleSetting: receiverAutoDisassemble,
-        sourceObtainedFrom: 'battle_drop',
-        sourceEquipOptions: createOptions.equipOptions,
-        createItem: async ({ itemDefId, qty, bindType, obtainedFrom, equipOptions }) => {
-          return itemService.createItem(drop.receiverUserId, receiverCharacterId, itemDefId, qty, {
-            location: 'bag',
-            obtainedFrom,
-            ...(bindType ? { bindType } : {}),
-            ...(equipOptions ? { equipOptions } : {}),
-          });
-        },
-        addSilver: async (ownerCharacterId, silverGain) => {
-          const safeSilver = Math.max(0, Math.floor(Number(silverGain) || 0));
-          if (safeSilver <= 0) return { success: true, message: '无需增加银两' };
-          addCharacterRewardDelta(pendingCharacterRewardDeltas, ownerCharacterId, {
-            silver: safeSilver,
-          });
-          return { success: true, message: '银两增加成功' };
-        },
-      });
-
-      for (const warning of grantResult.warnings) {
-        console.warn(`战斗掉落自动分解失败: ${warning}`);
-      }
-
-      for (const mailItem of grantResult.pendingMailItems) {
-        queuePendingMailItem(drop.receiverUserId, receiverCharacterId, mailItem);
-      }
-
-      if (grantResult.gainedSilver > 0) {
-        totalSilver += grantResult.gainedSilver;
-        result.rewards.silver += grantResult.gainedSilver;
-        const playerReward = result.perPlayerRewards?.find((reward) => reward.characterId === receiverCharacterId);
+      const appendRewardRecord = (
+        characterId: number,
+        itemDefId: string,
+        itemName: string,
+        quantity: number,
+        instanceIds: number[],
+      ): void => {
+        result.rewards.items.push({ itemDefId, itemName, quantity, instanceIds, receiverId: characterId });
+        const playerReward = result.perPlayerRewards?.find((reward) => reward.characterId === characterId);
         if (playerReward) {
-          playerReward.silver += grantResult.gainedSilver;
+          playerReward.items.push({ itemDefId, itemName, quantity, instanceIds });
+        }
+      };
+
+      const queuePendingMailItem = (
+        receiverUserId: number,
+        receiverCharacterId: number,
+        attachItem: MailAttachItem,
+      ): void => {
+        const existing = pendingMailByReceiver.get(receiverCharacterId) ?? {
+          userId: receiverUserId,
+          items: [],
+        };
+        const keyA = JSON.stringify(attachItem.options?.equipOptions || null);
+        const found = existing.items.find((entry) => {
+          const keyB = JSON.stringify(entry.options?.equipOptions || null);
+          return entry.item_def_id === attachItem.item_def_id
+            && (entry.options?.bindType || 'none') === (attachItem.options?.bindType || 'none')
+            && keyB === keyA;
+        });
+        if (found) {
+          found.qty += attachItem.qty;
+        } else {
+          existing.items.push(attachItem);
+        }
+        pendingMailByReceiver.set(receiverCharacterId, existing);
+      };
+
+      result.rewards.items = [];
+      if (result.perPlayerRewards) {
+        for (const playerReward of result.perPlayerRewards) {
+          playerReward.items = [];
         }
       }
 
-      for (const granted of grantResult.grantedItems) {
-        const grantedMeta =
-          granted.itemDefId === drop.itemDefId
-            ? sourceMeta
-            : this.getRewardItemMeta(granted.itemDefId);
-        appendCollectCount(receiverCharacterId, granted.itemDefId, granted.qty);
-        appendRewardRecord(receiverCharacterId, granted.itemDefId, grantedMeta.name, granted.qty, granted.itemIds);
-      }
-    }
+      for (const drop of plan.drops) {
+        const receiverCharacterId = Number(drop.receiverCharacterId);
+        if (!Number.isInteger(receiverCharacterId) || receiverCharacterId <= 0) {
+          console.warn(`奖励分发跳过：非法角色ID ${String(drop.receiverCharacterId)}`);
+          continue;
+        }
 
-    for (const entry of collectCounts.values()) {
-      await recordCollectItemEvent(entry.characterId, entry.itemDefId, entry.qty);
-    }
+        const sourceMeta = this.getRewardItemMeta(drop.itemDefId);
+        const createOptions: CreateItemOptions = {
+          location: 'bag',
+          bindType: drop.bindType,
+          obtainedFrom: 'battle_drop',
+        };
+        if (sourceMeta.category === 'equipment') {
+          createOptions.equipOptions = {
+            fuyuan: drop.receiverFuyuan,
+            ...(drop.qualityWeights ? { qualityWeights: drop.qualityWeights } : {}),
+          };
+        }
 
-    for (const [receiverCharacterId, entry] of pendingMailByReceiver.entries()) {
-      const chunkSize = 10;
-      for (let index = 0; index < entry.items.length; index += chunkSize) {
-        const chunk = entry.items.slice(index, index + chunkSize);
-        const mailResult = await sendSystemMail(
-          entry.userId,
-          receiverCharacterId,
-          '战斗掉落补发',
-          '由于背包已满，部分战斗掉落已通过邮件补发，请前往邮箱领取。',
-          { items: chunk },
-          30,
-        );
-        if (!mailResult.success) {
-          console.warn(`战斗掉落补发邮件发送失败: ${mailResult.message}`);
+        const receiverAutoDisassemble =
+          autoDisassembleSettings.get(receiverCharacterId)
+          ?? normalizeAutoDisassembleSetting({ enabled: false, rules: undefined });
+
+        const grantResult = await grantRewardItemWithAutoDisassemble({
+          characterId: receiverCharacterId,
+          itemDefId: drop.itemDefId,
+          qty: drop.quantity,
+          bindType: drop.bindType,
+          itemMeta: {
+            itemName: sourceMeta.name,
+            category: sourceMeta.category,
+            subCategory: sourceMeta.subCategory,
+            effectDefs: sourceMeta.effectDefs,
+            qualityRank: sourceMeta.qualityRank,
+            disassemblable: sourceMeta.disassemblable,
+          },
+          autoDisassembleSetting: receiverAutoDisassemble,
+          sourceObtainedFrom: 'battle_drop',
+          sourceEquipOptions: createOptions.equipOptions,
+          createItem: async ({ itemDefId, qty, bindType, obtainedFrom, equipOptions }) => {
+            return itemService.createItem(drop.receiverUserId, receiverCharacterId, itemDefId, qty, {
+              location: 'bag',
+              obtainedFrom,
+              ...(bindType ? { bindType } : {}),
+              ...(equipOptions ? { equipOptions } : {}),
+            });
+          },
+          addSilver: async (ownerCharacterId, silverGain) => {
+            const safeSilver = Math.max(0, Math.floor(Number(silverGain) || 0));
+            if (safeSilver <= 0) return { success: true, message: '无需增加银两' };
+            addCharacterRewardDelta(pendingCharacterRewardDeltas, ownerCharacterId, {
+              silver: safeSilver,
+            });
+            return { success: true, message: '银两增加成功' };
+          },
+          });
+
+        for (const warning of grantResult.warnings) {
+          console.warn(`战斗掉落自动分解失败: ${warning}`);
+        }
+
+        for (const mailItem of grantResult.pendingMailItems) {
+          queuePendingMailItem(drop.receiverUserId, receiverCharacterId, mailItem);
+        }
+
+        if (grantResult.gainedSilver > 0) {
+          totalSilver += grantResult.gainedSilver;
+          result.rewards.silver += grantResult.gainedSilver;
+          const playerReward = result.perPlayerRewards?.find((reward) => reward.characterId === receiverCharacterId);
+          if (playerReward) {
+            playerReward.silver += grantResult.gainedSilver;
+          }
+        }
+
+        for (const granted of grantResult.grantedItems) {
+          const grantedMeta =
+            granted.itemDefId === drop.itemDefId
+              ? sourceMeta
+              : this.getRewardItemMeta(granted.itemDefId);
+          appendCollectCount(receiverCharacterId, granted.itemDefId, granted.qty);
+          appendRewardRecord(receiverCharacterId, granted.itemDefId, grantedMeta.name, granted.qty, granted.itemIds);
         }
       }
-    }
 
-    await applyCharacterRewardDeltas(pendingCharacterRewardDeltas);
-    result.message = '奖励分发成功';
-    result.rewards.silver = totalSilver;
-    return result;
+      slowLogger.mark('grantRewardDrops', {
+        grantedDropCount: result.rewards.items.length,
+        pendingMailReceiverCount: pendingMailByReceiver.size,
+      });
+
+      collectEventCount = collectCounts.size;
+      for (const entry of collectCounts.values()) {
+        await recordCollectItemEvent(entry.characterId, entry.itemDefId, entry.qty);
+      }
+      slowLogger.mark('recordCollectItemEvents', {
+        collectEventCount,
+      });
+
+      for (const [receiverCharacterId, entry] of pendingMailByReceiver.entries()) {
+        const chunkSize = 10;
+        for (let index = 0; index < entry.items.length; index += chunkSize) {
+          const chunk = entry.items.slice(index, index + chunkSize);
+          pendingMailCount += 1;
+          const mailResult = await sendSystemMail(
+            entry.userId,
+            receiverCharacterId,
+            '战斗掉落补发',
+            '由于背包已满，部分战斗掉落已通过邮件补发，请前往邮箱领取。',
+            { items: chunk },
+            30,
+          );
+          if (!mailResult.success) {
+            console.warn(`战斗掉落补发邮件发送失败: ${mailResult.message}`);
+          }
+        }
+      }
+      slowLogger.mark('sendPendingMail', {
+        pendingMailCount,
+        pendingMailReceiverCount: pendingMailByReceiver.size,
+      });
+
+      await applyCharacterRewardDeltas(pendingCharacterRewardDeltas);
+      slowLogger.mark('applyCharacterRewardDeltas', {
+        rewardDeltaCharacterCount: pendingCharacterRewardDeltas.size,
+      });
+      result.message = '奖励分发成功';
+      result.rewards.silver = totalSilver;
+      success = true;
+      return result;
+    } finally {
+      slowLogger.flush({
+        success,
+        rewardPlayerCount: plan.perPlayerRewards.length,
+        dropCount: plan.drops.length,
+        collectEventCount,
+        pendingMailCount,
+      });
+    }
   }
 
   async previewBattleRewards(
