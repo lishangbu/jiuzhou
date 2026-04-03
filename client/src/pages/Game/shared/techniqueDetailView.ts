@@ -25,6 +25,7 @@
 import type { SkillDefDto, TechniqueDefDto, TechniqueLayerCostMaterialDto, TechniqueLayerDto } from '../../../services/api';
 import { getAttrLabel } from './attrDisplay';
 import { formatTechniqueBonusAmount } from '../modules/TechniqueModal/bonusShared';
+import { shouldDisplayTechniquePassiveAmount } from './techniquePassiveDisplay';
 import {
   buildTechniqueLayerSkillProgression,
   type TechniqueSkillProgressionEntry,
@@ -91,6 +92,7 @@ const normalizePassiveKey = (raw: string): string =>
 
 const toTechniqueBonuses = (passives: TechniqueLayerDto['passives']): TechniqueDetailBonus[] => {
   return passives
+    .filter((passive) => shouldDisplayTechniquePassiveAmount(passive.value))
     .map((passive) => {
       const key = normalizePassiveKey(passive.key);
       if (!key) return null;
