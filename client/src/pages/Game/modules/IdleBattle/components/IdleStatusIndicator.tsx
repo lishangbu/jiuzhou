@@ -8,7 +8,8 @@
  *
  * 输入/输出：
  *   - activeSession: 当前活跃会话（null 时组件不渲染）
- *   - onOpenPanel: 点击指示器时打开挂机面板的回调
+ *   - onOpenPanel: 可选；需要点击进入挂机面板时传入
+ *   - compact: 是否使用紧凑展示；移动端开启后不显示秒级时间
  *
  * 数据流：
  *   useIdleBattle.activeSession → props.activeSession → 本地 elapsed 计时器 → 展示
@@ -17,6 +18,7 @@
  * 关键边界条件：
  *   1. elapsed 计时器每秒 tick，组件卸载时必须清除，避免内存泄漏
  *   2. status === 'stopping' 时显示"停止中"标签，不再更新计时
+ *   3. compact 模式不能继续展示秒级跳动，避免移动端头部频繁抖动
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -31,14 +33,18 @@ import './IdleStatusIndicator.scss';
 // ============================================
 
 /**
- * 将毫秒数格式化为 "X时Y分Z秒" 形式
+ * 将毫秒数格式化为桌面端/移动端可读时长
  * 复用点：仅此处使用，不抽到全局 util（避免过度抽象）
  */
-const formatElapsed = (ms: number): string => {
+const formatElapsed = (ms: number, compact: boolean): string => {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
   const h = Math.floor(totalSec / 3600);
   const m = Math.floor((totalSec % 3600) / 60);
   const s = totalSec % 60;
+  if (compact) {
+    if (h > 0) return `${h}时${m}分`;
+    return `${m}分${s}秒`;
+  }
   if (h > 0) return `${h}时${m}分`;
   if (m > 0) return `${m}分${s}秒`;
   return `${s}秒`;
@@ -51,6 +57,7 @@ const formatElapsed = (ms: number): string => {
 interface IdleStatusIndicatorProps {
   activeSession: IdleSessionDto;
   onOpenPanel?: () => void;
+  compact?: boolean;
 }
 
 // ============================================
@@ -60,6 +67,7 @@ interface IdleStatusIndicatorProps {
 const IdleStatusIndicator: React.FC<IdleStatusIndicatorProps> = ({
   activeSession,
   onOpenPanel,
+  compact = false,
 }) => {
   // 实时已挂机时长（每秒更新）
   const [elapsed, setElapsed] = useState<number>(() =>
@@ -132,20 +140,26 @@ const IdleStatusIndicator: React.FC<IdleStatusIndicatorProps> = ({
     </div>
   );
 
+  const interactiveProps = onOpenPanel ? {
+    role: 'button' as const,
+    tabIndex: 0,
+    onClick: onOpenPanel,
+    onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onOpenPanel();
+      }
+    },
+    'aria-label': '挂机状态，点击打开挂机面板',
+  } : {
+    'aria-label': '挂机状态',
+  };
+
   return (
     <Tooltip title={tooltipContent} placement="bottomRight">
       <div
-        className={`idle-status-indicator${isStopping ? ' is-stopping' : ''}`}
-        role="button"
-        tabIndex={0}
-        onClick={onOpenPanel}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            onOpenPanel?.();
-          }
-        }}
-        aria-label="挂机状态，点击打开挂机面板"
+        className={`idle-status-indicator${isStopping ? ' is-stopping' : ''}${onOpenPanel ? ' is-clickable' : ''}`}
+        {...interactiveProps}
       >
         {/* 状态图标 */}
         <span className="idle-status-icon">
@@ -157,7 +171,7 @@ const IdleStatusIndicator: React.FC<IdleStatusIndicatorProps> = ({
         </span>
 
         {/* 挂机时长 */}
-        <span className="idle-status-elapsed">{formatElapsed(elapsed)}</span>
+        <span className="idle-status-elapsed">{formatElapsed(elapsed, compact)}</span>
 
         {/* 状态标签 */}
         {isStopping ? (
@@ -166,10 +180,6 @@ const IdleStatusIndicator: React.FC<IdleStatusIndicatorProps> = ({
           <Tag color="success" className="idle-status-tag">挂机中</Tag>
         )}
 
-        {/* 背包满警告点 */}
-        {activeSession.bagFullFlag && (
-          <span className="idle-status-bag-full" title="存在邮件补发" aria-label="存在邮件补发" />
-        )}
       </div>
     </Tooltip>
   );

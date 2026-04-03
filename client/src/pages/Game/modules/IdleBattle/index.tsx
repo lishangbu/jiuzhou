@@ -159,6 +159,7 @@ export const IdleBattlePanel: React.FC<IdleBattlePanelProps> = ({ idle }) => {
 interface IdleBattleStatusBarProps {
   idle: UseIdleBattleReturn;
   onOpenPanel?: () => void;
+  compact?: boolean;
 }
 
 /**
@@ -168,6 +169,7 @@ interface IdleBattleStatusBarProps {
 export const IdleBattleStatusBar: React.FC<IdleBattleStatusBarProps> = ({
   idle,
   onOpenPanel,
+  compact = false,
 }) => {
   if (!idle.activeSession) return null;
 
@@ -175,6 +177,7 @@ export const IdleBattleStatusBar: React.FC<IdleBattleStatusBarProps> = ({
     <IdleStatusIndicator
       activeSession={idle.activeSession}
       onOpenPanel={onOpenPanel}
+      compact={compact}
     />
   );
 };

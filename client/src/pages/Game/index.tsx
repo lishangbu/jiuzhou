@@ -1,5 +1,4 @@
-import { App, Badge, Button, Drawer, Modal, Tag, Tabs, Tooltip } from 'antd';
-import { MailOutlined, SettingOutlined, LogoutOutlined, CalendarOutlined } from '@ant-design/icons';
+import { App, Button, Drawer, Modal, Tag, Tabs, Tooltip } from 'antd';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type FC } from 'react';
 import PlayerInfo from './modules/PlayerInfo';
 import { formatSignedNumber, formatSignedPercent } from './shared/formatAttr';
@@ -37,6 +36,7 @@ import SignInModal from './modules/SignInModal';
 import PartnerModal from './modules/PartnerModal';
 import WanderModal from './modules/WanderModal';
 import TowerModal from './modules/TowerModal';
+import GameHeader from './modules/GameHeader';
 import {
   buildWanderIndicator,
   resolveWanderIndicatorNextRefreshDelayMs,
@@ -90,9 +90,6 @@ import { getMainQuestProgress, startDialogue, advanceDialogue, selectDialogueCho
 import { PARTNER_FEATURE_CODE } from '../../services/feature';
 import { getMyTeam, getTeamApplications, leaveTeam, type TeamApplication, type TeamInfo } from '../../services/teamApi';
 import {
-  IMG_GAME_HEADER_LOGO as gameHeaderLogo,
-  IMG_LINGSHI as lingshi,
-  IMG_TONGQIAN as tongqian,
   IMG_EQUIP_MALE as equipMale,
   IMG_EQUIP_FEMALE as equipFemale,
 } from './shared/imageAssets';
@@ -1172,6 +1169,18 @@ const Game: FC<GameProps> = ({ onLogout }) => {
       gatherTickTimerRef.current = null;
     }
     setGatherAction({ running: false });
+  }, []);
+
+  const handleOpenSignInModal = useCallback(() => {
+    setSignInModalOpen(true);
+  }, []);
+
+  const handleOpenMailModal = useCallback(() => {
+    setMailModalOpen(true);
+  }, []);
+
+  const handleOpenSettingModal = useCallback(() => {
+    setSettingModalOpen(true);
   }, []);
 
   useEffect(() => {
@@ -2501,62 +2510,25 @@ const Game: FC<GameProps> = ({ onLogout }) => {
         onAutoModeChange={handleAutoModeChange}
         onCastSkill={handleBattleCastSkill}
       />
-      <header className="game-header">
-        <div className="game-header-left">
-          <img className="game-header-logo" src={gameHeaderLogo} alt="九州修仙录" />
-          <div className="game-header-meta">
-            <div className="game-header-title">九州修仙录</div>
-            <div className="game-header-version">v{version}</div>
-          </div>
-        </div>
-
-        <div className="game-header-right">
-          {gatherAction.running ? <GatherProgressHeader gatherAction={gatherAction} onStop={stopGatherLoop} /> : null}
-          {/* 挂机状态指示器：仅在活跃会话时显示 */}
+      <GameHeader
+        isMobile={isMobile}
+        version={version}
+        spiritStones={spiritStones}
+        silver={silver}
+        gatherStatusNode={gatherAction.running ? <GatherProgressHeader gatherAction={gatherAction} onStop={stopGatherLoop} /> : null}
+        idleStatusNode={(
           <IdleBattleStatusBar
             idle={idle}
-            onOpenPanel={() => setIdleModalOpen(true)}
+            compact={isMobile}
           />
-
-          <div className="game-header-currency">
-            <img className="game-header-currency-icon" src={lingshi} alt="灵石" />
-            <span className="game-header-currency-value">{spiritStones.toLocaleString()}</span>
-          </div>
-          <div className="game-header-currency">
-            <img className="game-header-currency-icon" src={tongqian} alt="银两" />
-            <span className="game-header-currency-value">{silver.toLocaleString()}</span>
-          </div>
-
-          <Badge dot={showSignInDot} offset={[-2, 2]}>
-            <Button
-              className="game-header-icon-btn"
-              type="text"
-              icon={<CalendarOutlined />}
-              aria-label="签到"
-              onClick={() => setSignInModalOpen(true)}
-            />
-          </Badge>
-          <Badge dot={showMailDot} offset={[-2, 2]}>
-            <Button
-              className="game-header-icon-btn"
-              type="text"
-              icon={<MailOutlined />}
-              aria-label="邮箱"
-              onClick={() => setMailModalOpen(true)}
-            />
-          </Badge>
-          <Button
-            className="game-header-icon-btn"
-            type="text"
-            icon={<SettingOutlined />}
-            aria-label="设置"
-            onClick={() => setSettingModalOpen(true)}
-          />
-          {onLogout && (
-            <Button className="game-header-icon-btn" type="text" icon={<LogoutOutlined />} aria-label="退出" onClick={onLogout} />
-          )}
-        </div>
-      </header>
+        )}
+        showSignInDot={showSignInDot}
+        showMailDot={showMailDot}
+        onOpenSignIn={handleOpenSignInModal}
+        onOpenMail={handleOpenMailModal}
+        onOpenSetting={handleOpenSettingModal}
+        onLogout={onLogout}
+      />
 
       <div className="game-container">
         {!isMobile ? (

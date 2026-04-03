@@ -13,17 +13,21 @@
   background: var(--panel-bg-soft, rgba(0, 0, 0, 0.04));
   color: var(--text-color);
   font-size: 12px;
-  cursor: pointer;
+  cursor: default;
   user-select: none;
   transition: background 0.15s, border-color 0.15s;
   white-space: nowrap;
 
-  &:hover {
+  &.is-clickable {
+    cursor: pointer;
+  }
+
+  &.is-clickable:hover {
     background: var(--panel-bg-hover, rgba(0, 0, 0, 0.08));
     border-color: var(--primary-color, #1677ff);
   }
 
-  &:focus-visible {
+  &.is-clickable:focus-visible {
     outline: 2px solid var(--primary-color, #1677ff);
     outline-offset: 2px;
   }
@@ -64,14 +68,6 @@
 }
 
 // 背包满警告红点
-.idle-status-bag-full {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-error, #ff4d4f);
-  flex-shrink: 0;
-}
-
 // ============================================
 // Tooltip 内容样式
 // ============================================
@@ -110,17 +106,18 @@
 // 移动端适配
 // ============================================
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .idle-status-indicator {
     padding: 3px 6px;
     gap: 4px;
+    max-width: 100%;
   }
 
   .idle-status-elapsed {
-    min-width: 28px;
+    min-width: 24px;
   }
 
-  // 移动端隐藏 Stamina 数值，节省空间
+  .idle-status-tag,
   .idle-status-stamina {
     display: none;
   }
