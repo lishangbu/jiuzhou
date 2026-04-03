@@ -1030,45 +1030,47 @@ class GameServer {
     }
 
     const executed = await this.runTrackedTask(async () => {
-      this.characterPushInFlight.add(userId);
-      try {
-        const socketId = this.userSocketMap.get(userId);
-        if (!socketId) return;
+      await runWithDatabaseAccessAllowed(async () => {
+        this.characterPushInFlight.add(userId);
+        try {
+          const socketId = this.userSocketMap.get(userId);
+          if (!socketId) return;
 
-        const session = this.sessions.get(socketId);
-        const prevCharacter = session?.character ?? null;
-        const character = await this.loadCharacter(userId, {
-          previousCharacter: prevCharacter,
-        });
-        if (session) {
-          this.syncCharacterSocketBinding(socketId, prevCharacter, character);
-          session.character = character;
-          session.lastUpdate = Date.now();
-        }
-
-        const delta = this.diffCharacter(prevCharacter, character);
-        if (delta) {
-          // 增量推送：仅发送变化字段 + id 用于客户端校验
-          this.io.to(socketId).emit("game:character", {
-            type: "delta",
-            delta: { ...delta, id: character!.id },
+          const session = this.sessions.get(socketId);
+          const prevCharacter = session?.character ?? null;
+          const character = await this.loadCharacter(userId, {
+            previousCharacter: prevCharacter,
           });
-        } else {
-          // 全量推送：首次加载 / 角色为 null / 无变化时也发全量确保同步
-          this.io
-            .to(socketId)
-            .emit("game:character", { type: "full", character });
+          if (session) {
+            this.syncCharacterSocketBinding(socketId, prevCharacter, character);
+            session.character = character;
+            session.lastUpdate = Date.now();
+          }
+
+          const delta = this.diffCharacter(prevCharacter, character);
+          if (delta) {
+            // 增量推送：仅发送变化字段 + id 用于客户端校验
+            this.io.to(socketId).emit("game:character", {
+              type: "delta",
+              delta: { ...delta, id: character!.id },
+            });
+          } else {
+            // 全量推送：首次加载 / 角色为 null / 无变化时也发全量确保同步
+            this.io
+              .to(socketId)
+              .emit("game:character", { type: "full", character });
+          }
+          if (this.shouldRefreshOnlinePlayers(prevCharacter, character)) {
+            this.scheduleEmitOnlinePlayers(false);
+          }
+        } finally {
+          this.characterPushInFlight.delete(userId);
+          if (this.characterPushQueued.has(userId)) {
+            this.characterPushQueued.delete(userId);
+            this.scheduleCharacterPush(userId);
+          }
         }
-        if (this.shouldRefreshOnlinePlayers(prevCharacter, character)) {
-          this.scheduleEmitOnlinePlayers(false);
-        }
-      } finally {
-        this.characterPushInFlight.delete(userId);
-        if (this.characterPushQueued.has(userId)) {
-          this.characterPushQueued.delete(userId);
-          this.scheduleCharacterPush(userId);
-        }
-      }
+      });
     });
 
     if (executed === undefined) {
