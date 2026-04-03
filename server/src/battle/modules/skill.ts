@@ -227,6 +227,10 @@ function resolveDefaultSkillEffectTargetMode(
   skill: BattleSkill,
   effect: SkillEffect,
 ): SkillEffectTargetMode {
+  if (normalizeBuffKind(effect.buffKind) === 'aura') {
+    return 'self';
+  }
+
   switch (effect.type) {
     case 'buff':
       return 'self';

@@ -570,6 +570,8 @@ test('旧减益光环子效果缺失 target 且误写成 buff 时，仍应按敌
 
   engine.startBattle();
 
+  const auraHostBuff = caster.buffs.find((buff) => Boolean(buff.aura));
+  assert.ok(auraHostBuff, '未显式写 target 的减益光环也应先挂载宿主 Buff');
   assert.equal(enemy.currentAttrs.mingzhong, 0.15, '旧数据里的命中压制应按减益方向结算');
   assert.equal(enemy.currentAttrs.sudu, 130, '旧数据里的减速光环应真正压到敌方速度');
 });

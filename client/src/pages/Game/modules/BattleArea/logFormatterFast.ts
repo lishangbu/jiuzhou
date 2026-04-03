@@ -143,6 +143,23 @@ const buildNamedSummary = (
   return `${normalizedName}（${parts.join('，')}）`;
 };
 
+const isPureAuraHostApplicationTarget = (
+  actorId: string,
+  target: BattleActionTargetDto,
+): boolean => {
+  if (String(target.targetId || '') !== actorId) return false;
+  if ((target.hits ?? []).length > 0) return false;
+  if (toSafeInt(target.damage) > 0 || toSafeInt(target.heal) > 0) return false;
+  if ((target.resources ?? []).length > 0) return false;
+  if ((target.buffsRemoved ?? []).length > 0) return false;
+  if ((target.marksApplied ?? []).length > 0 || (target.marksConsumed ?? []).length > 0) return false;
+  if ((target.momentumGained ?? []).length > 0 || (target.momentumConsumed ?? []).length > 0) return false;
+  if (target.controlApplied || target.controlResisted) return false;
+
+  const translatedBuffsApplied = translateBuffNames(target.buffsApplied);
+  return translatedBuffsApplied.length > 0 && translatedBuffsApplied.every((entry) => entry.includes('光环'));
+};
+
 const buildTargetSummary = (target: BattleActionTargetDto): string => {
   const parts: string[] = [];
 
@@ -212,8 +229,16 @@ const buildActionLogLine = (log: Extract<BattleLogEntryDto, { type: 'action' }>)
   const skillName = normalizeName(log.skillName, '未知技能');
   const verb = String(log.skillId || '').startsWith('proc-') ? '触发' : '施展';
   const actionHead = `${roundText} ${actorName} ${verb}【${skillName}】`;
+  const rawTargets = log.targets ?? [];
 
-  const targets = (log.targets ?? []).map((target) => buildTargetSummary(target)).filter(Boolean);
+  if (
+    rawTargets.length > 0
+    && rawTargets.every((target) => isPureAuraHostApplicationTarget(String(log.actorId || ''), target))
+  ) {
+    return actionHead;
+  }
+
+  const targets = rawTargets.map((target) => buildTargetSummary(target)).filter(Boolean);
   if (targets.length === 0) return actionHead;
   return `${actionHead}，目标：${targets.join('；')}`;
 };
@@ -265,9 +290,7 @@ const buildAuraLogLine = (log: Extract<BattleLogEntryDto, { type: 'aura' }>): st
   const roundText = buildRoundLabel(log.round);
   const unitName = normalizeName(log.unitName, '未知单位');
   const buffName = normalizeName(translateBuffName(log.buffName), String(log.buffName));
-  const subResults = (log.subResults ?? [])
-    .map((subResult) => buildAuraSubResultSummary(subResult))
-    .filter(Boolean);
+  const subResults = (log.subResults ?? []).map((subResult) => buildAuraSubResultSummary(subResult)).filter(Boolean);
 
   if (subResults.length === 0) {
     return `${roundText} ${unitName} 的【${buffName}】生效`;
