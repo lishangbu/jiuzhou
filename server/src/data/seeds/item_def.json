@@ -2688,7 +2688,7 @@
       "stack_max": 9999,
       "bind_type": "none",
       "tradeable": true,
-      "icon": "/assets/items/xuling-jinghua.png",
+      "icon": "/assets/items/tianque-lingsha.webp",
       "description": "万法天阙律纹沉降后留下的灵性砂晶，是稳固法印底纹的核心材料。",
       "long_desc": "灵砂会随天阙法则起伏改变纹路，只有在律纹回落时才能完整收束，是证道期野外循环与法印锻底的基础资源。",
       "tags": [
@@ -2711,7 +2711,7 @@
       "stack_max": 9999,
       "bind_type": "none",
       "tradeable": true,
-      "icon": "/assets/items/hedao-qiyin.webp",
+      "icon": "/assets/items/zhendao-fayin.webp",
       "description": "在万法道宫高压问律中压成的法则印记，是合道迈向证道的核心凭证。",
       "long_desc": "法印必须在道宫的并临法则中反复压实，既是突破材料，也是判断修士能否承受更高法则追偿的硬门槛。",
       "tags": [
