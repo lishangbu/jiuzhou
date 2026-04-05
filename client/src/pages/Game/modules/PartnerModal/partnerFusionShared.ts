@@ -24,6 +24,7 @@ import type {
   PartnerFusionPreviewDto,
   PartnerFusionStatusDto,
 } from '../../../../services/api';
+import { ITEM_QUALITY_ASC_ORDER, type ItemQualityName } from '../../shared/itemQuality';
 
 type PartnerFusionIndicator = {
   badgeDot: boolean;
@@ -35,7 +36,6 @@ export type PartnerFusionPanelView =
   | { kind: 'preview'; job: PartnerFusionJobDto; preview: PartnerFusionPreviewDto }
   | { kind: 'failed'; job: PartnerFusionJobDto; errorMessage: string };
 
-const PARTNER_FUSION_QUALITY_ORDER = ['黄', '玄', '地', '天'] as const;
 const PARTNER_FUSION_DOWNGRADE_RATE = 5;
 const PARTNER_FUSION_SAME_RATE = 85;
 const PARTNER_FUSION_UPGRADE_RATE = 10;
@@ -97,15 +97,15 @@ export const resolvePartnerFusionRateLines = (
   sourceQuality: string,
   selectedPartners: readonly Pick<PartnerDetailDto, 'element'>[] = [],
 ): string[] => {
-  const qualityIndex = PARTNER_FUSION_QUALITY_ORDER.findIndex((entry) => entry === sourceQuality);
+  const qualityIndex = ITEM_QUALITY_ASC_ORDER.findIndex((entry) => entry === sourceQuality);
   const upgradeBonusRate = resolvePartnerFusionUpgradeBonusRate(selectedPartners);
   const sameQualityRate = PARTNER_FUSION_SAME_RATE - upgradeBonusRate;
   const upgradeQualityRate = PARTNER_FUSION_UPGRADE_RATE + upgradeBonusRate;
   if (qualityIndex < 0) {
     return [`${sameQualityRate}% 同品级`, `${PARTNER_FUSION_DOWNGRADE_RATE}% -1 品级`, `${upgradeQualityRate}% +1 品级`];
   }
-  const lowerQuality = PARTNER_FUSION_QUALITY_ORDER[qualityIndex - 1];
-  const higherQuality = PARTNER_FUSION_QUALITY_ORDER[qualityIndex + 1];
+  const lowerQuality = ITEM_QUALITY_ASC_ORDER[qualityIndex - 1];
+  const higherQuality = ITEM_QUALITY_ASC_ORDER[qualityIndex + 1];
   const lines: string[] = [];
   if (lowerQuality) {
     lines.push(`${PARTNER_FUSION_DOWNGRADE_RATE}% 获得${lowerQuality}品伙伴`);
@@ -158,19 +158,30 @@ export const groupPartnersByFusionQuality = (
   partners: PartnerDetailDto[],
   selectedQuality: string | null,
 ): Array<{ quality: string; partners: PartnerDetailDto[] }> => {
-  const visiblePartners = partners.filter((partner) => {
+  const qualityBuckets: Record<ItemQualityName, PartnerDetailDto[]> = {
+    黄: [],
+    玄: [],
+    地: [],
+    天: [],
+  };
+
+  for (const partner of partners) {
     if (partner.isActive || partner.tradeStatus === 'market_listed') {
-      return false;
+      continue;
     }
     if (selectedQuality && partner.quality !== selectedQuality) {
-      return false;
+      continue;
     }
-    return true;
-  });
-  return PARTNER_FUSION_QUALITY_ORDER
+    if (partner.quality !== '黄' && partner.quality !== '玄' && partner.quality !== '地' && partner.quality !== '天') {
+      continue;
+    }
+    qualityBuckets[partner.quality].push(partner);
+  }
+
+  return ITEM_QUALITY_ASC_ORDER
     .map((quality) => ({
       quality,
-      partners: visiblePartners.filter((partner) => partner.quality === quality),
+      partners: qualityBuckets[quality],
     }))
     .filter((entry) => entry.partners.length > 0);
 };

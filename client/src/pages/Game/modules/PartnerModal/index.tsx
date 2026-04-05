@@ -67,6 +67,7 @@ import {
   getPartnerEmptySlotCount,
   hasPartnerLevelLimitApplied,
   getPartnerVisibleBaseAttrs,
+  groupPartnersByListQuality,
   groupPartnerSkillPolicyEntries,
   movePartnerSkillPolicyEntry,
   PARTNER_PANEL_OPTIONS,
@@ -485,6 +486,10 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
   const fusionRateLines = useMemo(
     () => (fusionSelectedQuality ? resolvePartnerFusionRateLines(fusionSelectedQuality, selectedFusionMaterials) : []),
     [fusionSelectedQuality, selectedFusionMaterials],
+  );
+  const groupedPartnerList = useMemo(
+    () => groupPartnersByListQuality(overview?.partners ?? []),
+    [overview?.partners],
   );
 
   useEffect(() => {
@@ -1090,58 +1095,68 @@ const PartnerModal: React.FC<PartnerModalProps> = ({ open, onClose }) => {
           <span>伙伴列表</span>
           <Tag color="blue">角色可灌注经验 {characterExp.toLocaleString()}</Tag>
         </div>
-        <div className="partner-list">
-          {overview.partners.map((partner) => {
-            const statusTags = resolvePartnerStatusTagDescriptors(partner, 'list');
-            return (
-              <div
-                key={partner.id}
-                className={`partner-list-item${selectedPartnerId === partner.id ? ' is-selected' : ''}${partner.isActive ? ' is-active' : ''}`}
-                role="button"
-                tabIndex={0}
-                onClick={() => setSelectedPartnerId(partner.id)}
-                onKeyDown={(event) => {
-                  if (event.currentTarget !== event.target) return;
-                  if (event.key !== 'Enter' && event.key !== ' ') return;
-                  event.preventDefault();
-                  setSelectedPartnerId(partner.id);
-                }}
-              >
-                <img className="partner-list-thumb" src={resolvePartnerAvatar(partner.avatar)} alt={partner.name} />
-                <div className="partner-list-main">
-                  <div className="partner-list-info">
-                    <div className="partner-list-name">{getPartnerDisplayName(partner)}</div>
-                    <div className="partner-list-desc">
-                      {formatPartnerLevelSummary(partner)} · <span className={getElementTextClassName(partner.element)}>{formatPartnerElementLabel(partner.element)}</span> · {partner.role}
-                    </div>
-                    <div className="partner-tag-row">
-                      {statusTags.map((tag) => (
-                        <Tag key={tag.key} color={tag.color}>{tag.label}</Tag>
-                      ))}
-                      <Tag className={getItemQualityTagClassName(partner.quality)}>{partner.quality}</Tag>
-                    </div>
-                  </div>
-                  <div className="partner-action-row partner-list-action-row">
-                    <Button
-                      type={partner.isActive ? 'default' : 'primary'}
-                      loading={actionKey === `${partner.isActive ? 'dismiss' : 'activate'}-${partner.id}`}
-                      disabled={partner.tradeStatus === 'market_listed' || partner.fusionStatus === 'fusion_locked'}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        if (partner.isActive) {
-                          void handleDismiss(partner.id);
-                          return;
-                        }
-                        void handleActivate(partner.id);
+        <div className="partner-list-quality-groups">
+          {groupedPartnerList.map((group) => (
+            <div key={group.quality} className="partner-list-quality-group">
+              <div className="partner-list-quality-head">
+                <Tag className={getItemQualityTagClassName(group.quality)}>{group.quality}</Tag>
+                <span className="partner-meta">{group.partners.length} 位伙伴</span>
+              </div>
+              <div className="partner-list">
+                {group.partners.map((partner) => {
+                  const statusTags = resolvePartnerStatusTagDescriptors(partner, 'list');
+                  return (
+                    <div
+                      key={partner.id}
+                      className={`partner-list-item${selectedPartnerId === partner.id ? ' is-selected' : ''}${partner.isActive ? ' is-active' : ''}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedPartnerId(partner.id)}
+                      onKeyDown={(event) => {
+                        if (event.currentTarget !== event.target) return;
+                        if (event.key !== 'Enter' && event.key !== ' ') return;
+                        event.preventDefault();
+                        setSelectedPartnerId(partner.id);
                       }}
                     >
-                      {resolvePartnerActionLabel(partner.isActive)}
-                    </Button>
-                  </div>
-                </div>
+                      <img className="partner-list-thumb" src={resolvePartnerAvatar(partner.avatar)} alt={partner.name} />
+                      <div className="partner-list-main">
+                        <div className="partner-list-info">
+                          <div className="partner-list-name">{getPartnerDisplayName(partner)}</div>
+                          <div className="partner-list-desc">
+                            {formatPartnerLevelSummary(partner)} · <span className={getElementTextClassName(partner.element)}>{formatPartnerElementLabel(partner.element)}</span> · {partner.role}
+                          </div>
+                          <div className="partner-tag-row">
+                            {statusTags.map((tag) => (
+                              <Tag key={tag.key} color={tag.color}>{tag.label}</Tag>
+                            ))}
+                            <Tag className={getItemQualityTagClassName(partner.quality)}>{partner.quality}</Tag>
+                          </div>
+                        </div>
+                        <div className="partner-action-row partner-list-action-row">
+                          <Button
+                            type={partner.isActive ? 'default' : 'primary'}
+                            loading={actionKey === `${partner.isActive ? 'dismiss' : 'activate'}-${partner.id}`}
+                            disabled={partner.tradeStatus === 'market_listed' || partner.fusionStatus === 'fusion_locked'}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              if (partner.isActive) {
+                                void handleDismiss(partner.id);
+                                return;
+                              }
+                              void handleActivate(partner.id);
+                            }}
+                          >
+                            {resolvePartnerActionLabel(partner.isActive)}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
       </div>
     );

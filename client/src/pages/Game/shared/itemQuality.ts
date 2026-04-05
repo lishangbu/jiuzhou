@@ -1,10 +1,13 @@
 /**
- * 作用：统一处理前端物品品质（黄/玄/地/天）的解析、展示文案与样式类名。
- * 不做什么：不负责品质数值计算与排序，仅做 UI 展示所需的轻量映射。
+ * 作用：统一处理前端物品品质（黄/玄/地/天）的解析、展示文案、列表顺序常量与样式类名。
+ * 不做什么：不负责品质数值计算，仅做 UI 展示与前端排序所需的轻量映射。
  */
 
 export type ItemQualityKey = 'huang' | 'xuan' | 'di' | 'tian';
 export type ItemQualityName = '黄' | '玄' | '地' | '天';
+
+export const ITEM_QUALITY_ASC_ORDER: readonly ItemQualityName[] = ['黄', '玄', '地', '天'];
+export const ITEM_QUALITY_DESC_ORDER: readonly ItemQualityName[] = ['天', '地', '玄', '黄'];
 
 export type ItemQualityMeta = {
   key: ItemQualityKey;

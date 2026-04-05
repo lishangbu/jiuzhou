@@ -32,6 +32,9 @@ export const CHANGE_LOG_ENTRIES: readonly ChangeLogEntrySource[] = [
   {
     releasedAt: '2026-04-05',
     sections: [
+      '优化成就界面，称号单独成一个菜单项展示，增加称号搜索功能',
+      '优化伙伴列表界面，按品阶分组显示',
+      '<div class="my-4 border-t border-gray-200 dark:border-gray-700"></div>',
       '修复部分任务无法完成的异常问题',
       '升级云游奇遇功能，增加概率带入活跃玩家的情况',
       '下调洞府研修的功法残页消耗',

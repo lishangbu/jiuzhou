@@ -23,6 +23,7 @@ import { describe, expect, it } from 'vitest';
 import type { PartnerDetailDto, PartnerOverviewDto } from '../../../../services/api/partner';
 import {
   PARTNER_REBONE_ELIXIR_ITEM_DEF_ID,
+  groupPartnersByListQuality,
   resolvePartnerReboneElixirItem,
   resolvePartnerActionLabel,
   resolvePartnerNextSelectedId,
@@ -34,6 +35,7 @@ const createPartner = (params: {
   isActive: boolean;
   name: string;
   isGenerated?: boolean;
+  quality?: PartnerDetailDto['quality'];
   tradeStatus?: PartnerDetailDto['tradeStatus'];
   fusionStatus?: PartnerDetailDto['fusionStatus'];
 }): PartnerDetailDto => ({
@@ -50,7 +52,7 @@ const createPartner = (params: {
   avatar: null,
   element: 'mu',
   role: '剑修',
-  quality: '黄',
+  quality: params.quality ?? '黄',
   level: 1,
   currentEffectiveLevel: 1,
   progressExp: 0,
@@ -225,6 +227,57 @@ describe('resolvePartnerNextSelectedId', () => {
     });
 
     expect(resolvePartnerNextSelectedId(overview, null)).toBe(22);
+  });
+});
+
+describe('groupPartnersByListQuality', () => {
+  it('伙伴列表应按天到黄分组，并裁剪空分组', () => {
+    expect(groupPartnersByListQuality([
+      createPartner({ id: 1, isActive: false, name: '青萝', quality: '玄' }),
+      createPartner({ id: 2, isActive: false, name: '玄槐', quality: '天' }),
+      createPartner({ id: 3, isActive: false, name: '墨麟', quality: '黄' }),
+      createPartner({ id: 4, isActive: false, name: '赤霄', quality: '天' }),
+    ])).toEqual([
+      {
+        quality: '天',
+        partners: [
+          createPartner({ id: 2, isActive: false, name: '玄槐', quality: '天' }),
+          createPartner({ id: 4, isActive: false, name: '赤霄', quality: '天' }),
+        ],
+      },
+      {
+        quality: '玄',
+        partners: [createPartner({ id: 1, isActive: false, name: '青萝', quality: '玄' })],
+      },
+      {
+        quality: '黄',
+        partners: [createPartner({ id: 3, isActive: false, name: '墨麟', quality: '黄' })],
+      },
+    ]);
+  });
+
+  it('同品质分组内应保持伙伴原始顺序', () => {
+    expect(groupPartnersByListQuality([
+      createPartner({ id: 10, isActive: false, name: '甲', quality: '地' }),
+      createPartner({ id: 11, isActive: false, name: '乙', quality: '玄' }),
+      createPartner({ id: 12, isActive: false, name: '丙', quality: '地' }),
+      createPartner({ id: 13, isActive: false, name: '丁', quality: '玄' }),
+    ])).toEqual([
+      {
+        quality: '地',
+        partners: [
+          createPartner({ id: 10, isActive: false, name: '甲', quality: '地' }),
+          createPartner({ id: 12, isActive: false, name: '丙', quality: '地' }),
+        ],
+      },
+      {
+        quality: '玄',
+        partners: [
+          createPartner({ id: 11, isActive: false, name: '乙', quality: '玄' }),
+          createPartner({ id: 13, isActive: false, name: '丁', quality: '玄' }),
+        ],
+      },
+    ]);
   });
 });
 

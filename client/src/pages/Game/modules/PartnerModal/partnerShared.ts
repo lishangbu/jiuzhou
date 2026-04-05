@@ -2,8 +2,8 @@
  * 伙伴弹窗共享常量与纯函数。
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：集中维护伙伴面板枚举、状态标签规则、属性展示顺序、技能结果文案与技能策略重排规则，供总览/升级/功法/技能策略面板复用。
- * 2. 做什么：把高频变化的展示规则从组件 JSX 中抽离，减少重复 map/label 判断。
+ * 1. 做什么：集中维护伙伴面板枚举、状态标签规则、列表品质分组、属性展示顺序、技能结果文案与技能策略重排规则，供总览/升级/功法/技能策略面板复用。
+ * 2. 做什么：把高频变化的展示规则从组件 JSX 中抽离，减少重复 map/label 判断与列表分组遍历。
  * 3. 不做什么：不发请求、不持有状态，也不处理弹窗生命周期。
  *
  * 输入/输出：
@@ -15,8 +15,9 @@
  *
  * 关键边界条件与坑点：
  * 1. 伙伴状态标签必须按统一优先级输出，否则“坊市中/待命中/归契中”会在列表卡片和详情卡片里出现顺序漂移。
- * 2. 百分比属性与数值属性的格式化规则必须集中，否则总览和功法面板容易出现显示不一致。
- * 3. 技能策略的“顺序即优先级”必须只在这里重排一次，避免前端多个入口各自改 priority 导致提交口径漂移。
+ * 2. 品质分组必须保持组内原始顺序，不能在分组时顺手重排，否则玩家熟悉的伙伴顺序会突然跳动。
+ * 3. 百分比属性与数值属性的格式化规则必须集中，否则总览和功法面板容易出现显示不一致。
+ * 4. 技能策略的“顺序即优先级”必须只在这里重排一次，避免前端多个入口各自改 priority 导致提交口径漂移。
  */
 
 import type {
@@ -30,6 +31,7 @@ import type {
   PartnerTechniqueDto,
   PartnerTechniqueUpgradeCostDto,
 } from '../../../../services/api';
+import { ITEM_QUALITY_DESC_ORDER, type ItemQualityName } from '../../shared/itemQuality';
 import { formatTechniquePassiveAmount } from '../../shared/techniquePassiveDisplay';
 import { getPartnerAttrLabel } from '../../shared/partnerDisplay';
 import { PARTNER_REBONE_ELIXIR_ITEM_DEF_ID } from '../../shared/partnerReboneElixir';
@@ -79,6 +81,11 @@ export type PartnerStatusTagDescriptor = {
   key: PartnerStatusTagKey;
   color: 'default' | 'green' | 'orange' | 'magenta';
   label: string;
+};
+
+export type PartnerListQualityGroup = {
+  quality: ItemQualityName;
+  partners: PartnerDetailDto[];
 };
 
 const PARTNER_STATUS_TAG_META: Record<PartnerStatusTagKey, {
@@ -162,6 +169,31 @@ export const resolvePartnerNextSelectedId = (
     return selectedPartnerId;
   }
   return overview.activePartnerId ?? overview.partners[0]?.id ?? null;
+};
+
+export const groupPartnersByListQuality = (
+  partners: readonly PartnerDetailDto[],
+): PartnerListQualityGroup[] => {
+  const qualityBuckets: Record<ItemQualityName, PartnerDetailDto[]> = {
+    黄: [],
+    玄: [],
+    地: [],
+    天: [],
+  };
+
+  for (const partner of partners) {
+    if (partner.quality !== '黄' && partner.quality !== '玄' && partner.quality !== '地' && partner.quality !== '天') {
+      continue;
+    }
+    qualityBuckets[partner.quality].push(partner);
+  }
+
+  return ITEM_QUALITY_DESC_ORDER
+    .map((quality) => ({
+      quality,
+      partners: qualityBuckets[quality],
+    }))
+    .filter((group) => group.partners.length > 0);
 };
 
 export const resolvePartnerReboneElixirItem = (
