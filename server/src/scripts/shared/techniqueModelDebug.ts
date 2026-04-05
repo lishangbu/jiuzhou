@@ -2,7 +2,7 @@
  * 功法模型联调共享模块
  *
  * 作用（做什么 / 不做什么）：
- * 1. 做什么：集中封装功法文本模型联调所需的参数解析辅助、模型请求、结果清洗、可选技能图标挂载、测试专用底模注入与摘要提取。
+ * 1. 做什么：集中封装功法文本模型联调所需的参数解析辅助、主模型生成、第二模型平衡复评、按复评意见二次生成、可选技能图标挂载与摘要提取。
  * 2. 做什么：让单次联调脚本与批量功法书测试脚本共用同一套生成核心，避免 prompt、JSON 解析、校验与汇总逻辑再次分叉。
  * 3. 不做什么：不写数据库、不创建生成任务、不发放道具，也不决定批量文件如何命名与落盘。
  *
@@ -14,7 +14,9 @@
  * CLI 参数
  * -> 本模块解析质量/类型/seed
  * -> 功法文本模型请求构造
- * -> 文本模型返回 JSON
+ * -> 主模型生成 candidate
+ * -> 第二模型复评数值平衡
+ * -> 必要时按修正规则再次生成
  * -> 共享清洗与校验
  * -> 调用方决定打印或落盘。
  *
@@ -27,10 +29,14 @@
  * 2. 批量测试默认不生成图片；是否挂技能图标必须由调用方显式声明，避免脚本因环境变量存在而偷偷扩大测试范围。
  */
 
-import { callConfiguredTextModel } from '../../services/ai/openAITextClient.js';
 import { readTextModelConfig } from '../../services/ai/modelConfig.js';
 import type { TechniqueGenerationCandidate, TechniqueQuality } from '../../services/techniqueGenerationService.js';
 import { validatePartnerRecruitRequestedBaseModel } from '../../services/shared/partnerRecruitBaseModel.js';
+import {
+  reviewTechniqueBalanceCandidate,
+  type TechniqueBalanceReviewResponse,
+  type TechniqueBalanceReviewResult,
+} from '../../services/shared/techniqueBalanceReview.js';
 import {
   buildTechniqueGenerationTextModelRequest,
   sanitizeTechniqueGenerationCandidateFromModelDetailed,
@@ -41,6 +47,7 @@ import {
   type GeneratedTechniqueType,
 } from '../../services/shared/techniqueGenerationConstraints.js';
 import { generateTechniqueSkillIconMap } from '../../services/shared/techniqueSkillImageGenerator.js';
+import { callConfiguredTextModel } from '../../services/ai/openAITextClient.js';
 import { parseTechniqueTextModelJsonObject } from '../../services/shared/techniqueTextModelShared.js';
 
 export type TechniqueModelDebugArgMap = Record<string, string | undefined>;
@@ -52,12 +59,57 @@ export type TechniqueModelDebugSummary = {
   layerCount: number;
 };
 
+export type TechniqueModelDebugBalanceReviewSummary = {
+  modelName: string;
+  adjusted: boolean;
+  reason: string;
+  riskTags: TechniqueBalanceReviewResult['riskTags'];
+  adjustmentGuidance: string[];
+};
+
+export type TechniqueModelDebugGenerationTrace = {
+  modelName: string;
+  seed: number;
+  attemptCount: number;
+  elapsedMs: number;
+  promptBytes: number;
+  promptSnapshotBytes: number;
+  techniqueName: string;
+  skillCount: number;
+  layerCount: number;
+};
+
+export type TechniqueModelDebugReviewTrace = {
+  modelName: string;
+  elapsedMs: number;
+  promptSnapshotBytes: number;
+  adjusted: boolean;
+  reason: string;
+  riskTags: TechniqueBalanceReviewResult['riskTags'];
+  adjustmentGuidance: string[];
+};
+
+export type TechniqueModelDebugSkillIconTrace = {
+  enabled: boolean;
+  elapsedMs: number;
+  attachedCount: number;
+};
+
+export type TechniqueModelDebugTrace = {
+  initialGeneration: TechniqueModelDebugGenerationTrace;
+  balanceReview: TechniqueModelDebugReviewTrace;
+  finalGeneration: TechniqueModelDebugGenerationTrace;
+  skillIcons: TechniqueModelDebugSkillIconTrace;
+  totalElapsedMs: number;
+};
+
 export type TechniqueModelDebugGenerateParams = {
   quality: TechniqueQuality;
   techniqueType: GeneratedTechniqueType;
   seed?: number;
   baseModel?: string;
   includeSkillIcons: boolean;
+  reviewModelName?: string;
 };
 
 export type TechniqueModelDebugGenerateResult = {
@@ -69,18 +121,27 @@ export type TechniqueModelDebugGenerateResult = {
   baseModel: string | null;
   candidate: TechniqueGenerationCandidate;
   summary: TechniqueModelDebugSummary;
+  balanceReview: TechniqueModelDebugBalanceReviewSummary;
+  trace: TechniqueModelDebugTrace;
 };
 
 type TechniqueModelDebugPromptContext = {
   techniqueBaseModel: string;
   techniqueBaseModelScopeRules: string[];
+  techniqueRetryGuidance?: {
+    previousFailureReason: string;
+    correctionRules: string[];
+  };
 };
 
-type TechniqueModelRequestUserPayload = {
-  constraints?: {
-    generalRules?: string[];
-  };
-  extraContext?: Record<string, string | string[]>;
+type TechniqueModelDebugSinglePassResult = {
+  modelName: string;
+  promptSnapshot: string;
+  promptBytes: number;
+  elapsedMs: number;
+  seed: number;
+  attemptCount: number;
+  candidate: TechniqueGenerationCandidate;
 };
 
 const QUALITY_RANDOM_WEIGHT: Array<{ quality: TechniqueQuality; weight: number }> = [
@@ -185,6 +246,12 @@ export const overrideTechniqueModelName = (modelName: string | undefined): void 
   process.env.AI_TECHNIQUE_MODEL_NAME = normalized;
 };
 
+export const overrideTechniqueReviewModelName = (modelName: string | undefined): void => {
+  const normalized = asString(modelName);
+  if (!normalized) return;
+  process.env.AI_PARTNER_MODEL_NAME = normalized;
+};
+
 export const resolveTechniqueDebugBaseModelArg = (raw: string | undefined): string | null => {
   const validation = validatePartnerRecruitRequestedBaseModel(raw);
   if (!validation.success) {
@@ -220,8 +287,13 @@ const parseTechniqueModelJson = (
 
 const attachGeneratedSkillIcons = async (
   candidate: TechniqueGenerationCandidate,
-): Promise<TechniqueGenerationCandidate> => {
-  if (candidate.skills.length <= 0) return candidate;
+): Promise<{ candidate: TechniqueGenerationCandidate; attachedCount: number }> => {
+  if (candidate.skills.length <= 0) {
+    return {
+      candidate,
+      attachedCount: 0,
+    };
+  }
 
   const iconMap = await generateTechniqueSkillIconMap(candidate.skills.map((skill) => ({
     skillId: skill.id,
@@ -234,14 +306,22 @@ const attachGeneratedSkillIcons = async (
     skillEffects: skill.effects,
   })));
 
-  if (iconMap.size <= 0) return candidate;
+  if (iconMap.size <= 0) {
+    return {
+      candidate,
+      attachedCount: 0,
+    };
+  }
 
   return {
-    ...candidate,
-    skills: candidate.skills.map((skill) => {
-      const icon = iconMap.get(skill.id);
-      return icon ? { ...skill, icon } : skill;
-    }),
+    candidate: {
+      ...candidate,
+      skills: candidate.skills.map((skill) => {
+        const icon = iconMap.get(skill.id);
+        return icon ? { ...skill, icon } : skill;
+      }),
+    },
+    attachedCount: iconMap.size,
   };
 };
 
@@ -257,107 +337,284 @@ const buildTechniqueModelDebugPromptContext = (
   };
 };
 
-const applyTechniqueModelDebugPromptContext = (params: {
-  userMessage: string;
-  promptContext?: TechniqueModelDebugPromptContext;
-}): string => {
-  if (!params.promptContext) {
-    return params.userMessage;
+const buildTechniqueModelDebugRetryCorrectionRules = (params: {
+  review?: TechniqueBalanceReviewResult;
+  previousFailureReason?: string | null;
+}): string[] => {
+  const correctionRules = params.review
+    ? [...params.review.adjustmentGuidance]
+    : [];
+  const failureReason = params.previousFailureReason?.trim();
+  if (failureReason) {
+    correctionRules.push(`必须先修正本轮失败原因：${failureReason}`);
+  }
+  return correctionRules;
+};
+
+export const buildTechniqueModelDebugGenerationPromptContext = (params: {
+  basePromptContext?: TechniqueModelDebugPromptContext;
+  review?: TechniqueBalanceReviewResult;
+  previousFailureReason?: string | null;
+}): Record<string, unknown> | undefined => {
+  const { basePromptContext, review, previousFailureReason } = params;
+  if (!basePromptContext && !review && !previousFailureReason) {
+    return undefined;
   }
 
-  const payload = JSON.parse(params.userMessage) as TechniqueModelRequestUserPayload;
-  const nextGeneralRules = [
-    ...(payload.constraints?.generalRules ?? []),
-    TECHNIQUE_DEBUG_BASE_MODEL_GENERAL_RULE,
-    TECHNIQUE_DEBUG_BASE_MODEL_SCOPE_GENERAL_RULE,
-  ];
+  const promptGeneralRules = basePromptContext
+    ? [
+        TECHNIQUE_DEBUG_BASE_MODEL_GENERAL_RULE,
+        TECHNIQUE_DEBUG_BASE_MODEL_SCOPE_GENERAL_RULE,
+      ]
+    : [];
+  const nextPromptContext: Record<string, unknown> = {
+    ...(basePromptContext ?? {}),
+    ...(promptGeneralRules.length > 0
+      ? { techniquePromptGeneralRules: promptGeneralRules }
+      : {}),
+  };
 
-  return JSON.stringify({
-    ...payload,
-    constraints: {
-      ...(payload.constraints ?? {}),
-      generalRules: nextGeneralRules,
-    },
-    extraContext: {
-      ...(payload.extraContext ?? {}),
-      ...params.promptContext,
-    },
+  const correctionRules = buildTechniqueModelDebugRetryCorrectionRules({
+    review,
+    previousFailureReason,
   });
+  if (correctionRules.length <= 0) {
+    return nextPromptContext;
+  }
+
+  return {
+    ...nextPromptContext,
+    techniqueRetryGuidance: {
+      previousFailureReason: previousFailureReason?.trim()
+        || (review ? `功法平衡复评结论：${review.reason}` : ''),
+      correctionRules,
+    },
+  };
+};
+
+const generateTechniqueCandidateForDebug = async (params: {
+  quality: TechniqueQuality;
+  techniqueType: GeneratedTechniqueType;
+  seed?: number;
+  basePromptContext?: TechniqueModelDebugPromptContext;
+  review?: TechniqueBalanceReviewResult;
+}): Promise<TechniqueModelDebugSinglePassResult> => {
+  const startedAt = Date.now();
+  const maxAttempts = 3;
+  let previousFailureReason: string | null = null;
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const request = buildTechniqueGenerationTextModelRequest({
+      techniqueType: params.techniqueType,
+      quality: params.quality,
+      maxLayer: QUALITY_MAX_LAYER[params.quality],
+      seed: params.seed,
+      promptContext: buildTechniqueModelDebugGenerationPromptContext({
+        basePromptContext: params.basePromptContext,
+        review: params.review,
+        previousFailureReason,
+      }),
+    });
+
+    const response = await callConfiguredTextModel({
+      modelScope: 'technique',
+      responseFormat: request.responseFormat,
+      systemMessage: request.systemMessage,
+      userMessage: request.userMessage,
+      seed: request.seed,
+      temperature: request.temperature,
+      timeoutMs: request.timeoutMs,
+    });
+    if (!response) {
+      throw new Error('功法文本模型调用失败：未读取到可用模型配置');
+    }
+
+    try {
+      const parsedResult = parseTechniqueModelJson(response.content);
+      if (!parsedResult.success) {
+        if (parsedResult.reason === 'empty_content') {
+          throw new Error('模型返回内容为空');
+        }
+        throw new Error('模型返回不是合法 JSON 对象');
+      }
+
+      const sanitizedResult = sanitizeTechniqueGenerationCandidateFromModelDetailed(
+        parsedResult.data,
+        params.techniqueType,
+        params.quality,
+        QUALITY_MAX_LAYER[params.quality],
+      );
+      if (!sanitizedResult.success) {
+        throw new Error(`AI结果清洗失败：${sanitizedResult.reason}`);
+      }
+
+      const validation = validateTechniqueGenerationCandidate({
+        candidate: sanitizedResult.candidate,
+        expectedTechniqueType: params.techniqueType,
+        expectedQuality: params.quality,
+        expectedMaxLayer: QUALITY_MAX_LAYER[params.quality],
+      });
+      if (!validation.success) {
+        throw new Error(`AI结果校验失败：${validation.message}`);
+      }
+
+      return {
+        modelName: response.modelName,
+        promptSnapshot: response.promptSnapshot,
+        promptBytes: request.userMessage.length,
+        elapsedMs: Date.now() - startedAt,
+        seed: request.seed,
+        attemptCount: attempt,
+        candidate: sanitizedResult.candidate,
+      };
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      previousFailureReason = lastError.message;
+      if (attempt >= maxAttempts) {
+        break;
+      }
+    }
+  }
+
+  throw lastError ?? new Error('功法文本模型调试生成失败');
+};
+
+const buildTechniqueModelDebugGenerationTrace = (
+  generation: TechniqueModelDebugSinglePassResult,
+): TechniqueModelDebugGenerationTrace => {
+  return {
+    modelName: generation.modelName,
+    seed: generation.seed,
+    attemptCount: generation.attemptCount,
+    elapsedMs: generation.elapsedMs,
+    promptBytes: generation.promptBytes,
+    promptSnapshotBytes: generation.promptSnapshot.length,
+    techniqueName: generation.candidate.technique.name,
+    skillCount: generation.candidate.skills.length,
+    layerCount: generation.candidate.layers.length,
+  };
+};
+
+const buildTechniqueModelDebugBalanceReviewSummary = (
+  reviewResponse: TechniqueBalanceReviewResponse,
+): TechniqueModelDebugBalanceReviewSummary => {
+  return {
+    modelName: reviewResponse.modelName,
+    adjusted: reviewResponse.review.needsAdjustment,
+    reason: reviewResponse.review.reason,
+    riskTags: [...reviewResponse.review.riskTags],
+    adjustmentGuidance: [...reviewResponse.review.adjustmentGuidance],
+  };
+};
+
+const buildTechniqueModelDebugReviewTrace = (params: {
+  reviewResponse: TechniqueBalanceReviewResponse;
+  elapsedMs: number;
+}): TechniqueModelDebugReviewTrace => {
+  return {
+    modelName: params.reviewResponse.modelName,
+    elapsedMs: params.elapsedMs,
+    promptSnapshotBytes: params.reviewResponse.promptSnapshot.length,
+    adjusted: params.reviewResponse.review.needsAdjustment,
+    reason: params.reviewResponse.review.reason,
+    riskTags: [...params.reviewResponse.review.riskTags],
+    adjustmentGuidance: [...params.reviewResponse.review.adjustmentGuidance],
+  };
 };
 
 export const generateTechniqueModelDebugResult = async (
   params: TechniqueModelDebugGenerateParams,
 ): Promise<TechniqueModelDebugGenerateResult> => {
-  const modelConfig = readTextModelConfig('technique');
-  if (!modelConfig) {
+  const startedAt = Date.now();
+  const resolvedTechniqueModelConfig = readTextModelConfig('technique');
+  if (!resolvedTechniqueModelConfig) {
     throw new Error('缺少功法文本模型配置，请检查 AI_TECHNIQUE_MODEL_PROVIDER/URL/KEY/NAME');
   }
-
-  const debugPromptContext = buildTechniqueModelDebugPromptContext(params.baseModel);
-  const request = buildTechniqueGenerationTextModelRequest({
-    techniqueType: params.techniqueType,
-    quality: params.quality,
-    maxLayer: QUALITY_MAX_LAYER[params.quality],
-    seed: params.seed,
-  });
-  const userMessage = applyTechniqueModelDebugPromptContext({
-    userMessage: request.userMessage,
-    promptContext: debugPromptContext,
-  });
-
-  const response = await callConfiguredTextModel({
-    modelScope: 'technique',
-    responseFormat: request.responseFormat,
-    systemMessage: request.systemMessage,
-    userMessage,
-    seed: request.seed,
-    temperature: request.temperature,
-    timeoutMs: request.timeoutMs,
-  });
-  if (!response) {
-    throw new Error('功法文本模型调用失败：未读取到可用模型配置');
+  const resolvedReviewModelConfig = readTextModelConfig('partner');
+  if (!resolvedReviewModelConfig) {
+    throw new Error('缺少功法平衡复评模型配置，请检查 AI_PARTNER_MODEL_PROVIDER/URL/KEY/NAME');
   }
 
-  const parsedResult = parseTechniqueModelJson(response.content);
-  if (!parsedResult.success) {
-    if (parsedResult.reason === 'empty_content') {
-      throw new Error('模型返回内容为空');
+  const originalTechniqueModelName = process.env.AI_TECHNIQUE_MODEL_NAME;
+  const originalReviewModelName = process.env.AI_PARTNER_MODEL_NAME;
+  process.env.AI_TECHNIQUE_MODEL_NAME = resolvedTechniqueModelConfig.modelName;
+  process.env.AI_PARTNER_MODEL_NAME = params.reviewModelName?.trim() || resolvedReviewModelConfig.modelName;
+
+  try {
+    const debugPromptContext = buildTechniqueModelDebugPromptContext(params.baseModel);
+    const initialGeneration = await generateTechniqueCandidateForDebug({
+      quality: params.quality,
+      techniqueType: params.techniqueType,
+      seed: params.seed,
+      basePromptContext: debugPromptContext,
+    });
+    const reviewStartedAt = Date.now();
+    const reviewResponse = await reviewTechniqueBalanceCandidate({
+      candidate: initialGeneration.candidate,
+      quality: params.quality,
+      techniqueType: params.techniqueType,
+      maxLayer: QUALITY_MAX_LAYER[params.quality],
+      baseModel: debugPromptContext?.techniqueBaseModel ?? null,
+    });
+    const reviewElapsedMs = Date.now() - reviewStartedAt;
+
+    const finalGeneration = reviewResponse.review.needsAdjustment
+      ? await generateTechniqueCandidateForDebug({
+          quality: params.quality,
+          techniqueType: params.techniqueType,
+          seed: initialGeneration.seed,
+          basePromptContext: debugPromptContext,
+          review: reviewResponse.review,
+        })
+      : initialGeneration;
+
+    const skillIconStartedAt = Date.now();
+    const skillIconResult = params.includeSkillIcons
+      ? await attachGeneratedSkillIcons(finalGeneration.candidate)
+      : {
+          candidate: finalGeneration.candidate,
+          attachedCount: 0,
+        };
+    const skillIconElapsedMs = Date.now() - skillIconStartedAt;
+    const candidate = skillIconResult.candidate;
+
+    return {
+      modelName: finalGeneration.modelName,
+      promptSnapshot: finalGeneration.promptSnapshot,
+      seed: finalGeneration.seed,
+      quality: params.quality,
+      requestedTechniqueType: params.techniqueType,
+      baseModel: debugPromptContext?.techniqueBaseModel ?? null,
+      candidate,
+      summary: buildTechniqueModelDebugSummary(candidate),
+      balanceReview: buildTechniqueModelDebugBalanceReviewSummary(reviewResponse),
+      trace: {
+        initialGeneration: buildTechniqueModelDebugGenerationTrace(initialGeneration),
+        balanceReview: buildTechniqueModelDebugReviewTrace({
+          reviewResponse,
+          elapsedMs: reviewElapsedMs,
+        }),
+        finalGeneration: buildTechniqueModelDebugGenerationTrace(finalGeneration),
+        skillIcons: {
+          enabled: params.includeSkillIcons,
+          elapsedMs: skillIconElapsedMs,
+          attachedCount: skillIconResult.attachedCount,
+        },
+        totalElapsedMs: Date.now() - startedAt,
+      },
+    };
+  } finally {
+    if (originalTechniqueModelName === undefined) {
+      delete process.env.AI_TECHNIQUE_MODEL_NAME;
+    } else {
+      process.env.AI_TECHNIQUE_MODEL_NAME = originalTechniqueModelName;
     }
-    throw new Error('模型返回不是合法 JSON 对象');
+
+    if (originalReviewModelName === undefined) {
+      delete process.env.AI_PARTNER_MODEL_NAME;
+    } else {
+      process.env.AI_PARTNER_MODEL_NAME = originalReviewModelName;
+    }
   }
-
-  const sanitizedResult = sanitizeTechniqueGenerationCandidateFromModelDetailed(
-    parsedResult.data,
-    params.techniqueType,
-    params.quality,
-    QUALITY_MAX_LAYER[params.quality],
-  );
-  if (!sanitizedResult.success) {
-    throw new Error(`AI结果清洗失败：${sanitizedResult.reason}`);
-  }
-
-  const validation = validateTechniqueGenerationCandidate({
-    candidate: sanitizedResult.candidate,
-    expectedTechniqueType: params.techniqueType,
-    expectedQuality: params.quality,
-    expectedMaxLayer: QUALITY_MAX_LAYER[params.quality],
-  });
-  if (!validation.success) {
-    throw new Error(`AI结果校验失败：${validation.message}`);
-  }
-
-  const candidate = params.includeSkillIcons
-    ? await attachGeneratedSkillIcons(sanitizedResult.candidate)
-    : sanitizedResult.candidate;
-
-  return {
-    modelName: response.modelName,
-    promptSnapshot: response.promptSnapshot,
-    seed: request.seed,
-    quality: params.quality,
-    requestedTechniqueType: params.techniqueType,
-    baseModel: debugPromptContext?.techniqueBaseModel ?? null,
-    candidate,
-    summary: buildTechniqueModelDebugSummary(candidate),
-  };
 };

@@ -76,6 +76,7 @@ const SUPPORTED_BUFF_KIND_SET: ReadonlySet<string> = new Set<string>(STRUCTURED_
 const BUILT_IN_AURA_EXTRA_ATTR_KEY_LIST = [
   'max_qixue',
   'kangbao',
+  'kongzhi_kangxing',
   'lengque',
 ] as const;
 const BUILT_IN_AURA_ATTR_KEY_LIST = Object.freeze(

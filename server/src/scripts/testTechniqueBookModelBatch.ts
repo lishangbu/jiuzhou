@@ -9,7 +9,7 @@
  * 3. 不做什么：不写数据库、不生成图片、不发放道具，也不改静态 seed。
  *
  * 输入 / 输出：
- * - 输入：`--count <正整数>`，可选 `--quality <黄|玄|地|天>`、`--type <功法类型>`、`--seed-start <正整数>`、`--base-model <底模>`、`--model-name <模型名>`、`--output <目录>`。
+ * - 输入：`--count <正整数>`，可选 `--quality <黄|玄|地|天>`、`--type <功法类型>`、`--seed-start <正整数>`、`--base-model <底模>`、`--model-name <模型名>`、`--review-model-name <复评模型名>`、`--output <目录>`。
  * - 输出：默认写入 `server/tmp/technique-book-model-check/<时间戳>/` 下的多个 JSON 文件与 `summary.json`。
  *
  * 数据流 / 状态流：
@@ -38,6 +38,7 @@ import type { GeneratedTechniqueType } from '../services/shared/techniqueGenerat
 import {
   generateTechniqueModelDebugResult,
   overrideTechniqueModelName,
+  overrideTechniqueReviewModelName,
   parseCliArgMap,
   resolveOptionalPositiveIntegerArg,
   resolveTechniqueDebugBaseModelArg,
@@ -55,6 +56,7 @@ type BatchScriptOptions = {
   baseModel?: string;
   outputDir: string;
   modelName?: string;
+  reviewModelName?: string;
 };
 
 type BatchSummaryEntry = {
@@ -69,6 +71,10 @@ type BatchSummaryEntry = {
   techniqueType: GeneratedTechniqueType;
   skillCount: number;
   layerCount: number;
+  balanceReviewModelName: string;
+  balanceAdjusted: boolean;
+  balanceReason: string;
+  balanceRiskTags: string[];
 };
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
@@ -115,6 +121,10 @@ const parseBatchScriptOptions = (argv: string[]): BatchScriptOptions => {
       const modelName = args['model-name']?.trim();
       return modelName && modelName.length > 0 ? modelName : undefined;
     })(),
+    reviewModelName: (() => {
+      const modelName = args['review-model-name']?.trim();
+      return modelName && modelName.length > 0 ? modelName : undefined;
+    })(),
   };
 };
 
@@ -126,6 +136,7 @@ async function main(): Promise<void> {
   dotenv.config({ path: resolve(SERVER_ROOT, '.env') });
   const options = parseBatchScriptOptions(process.argv.slice(2));
   overrideTechniqueModelName(options.modelName);
+  overrideTechniqueReviewModelName(options.reviewModelName);
 
   await mkdir(options.outputDir, { recursive: true });
 
@@ -143,6 +154,7 @@ async function main(): Promise<void> {
       seed,
       baseModel: options.baseModel,
       includeSkillIcons: false,
+      reviewModelName: options.reviewModelName,
     });
 
     const fileName = `technique-book-${String(index + 1).padStart(3, '0')}.json`;
@@ -156,6 +168,7 @@ async function main(): Promise<void> {
       requestedTechniqueType,
       baseModel: result.baseModel,
       summary: result.summary,
+      balanceReview: result.balanceReview,
       candidate: result.candidate,
     });
 
@@ -171,11 +184,16 @@ async function main(): Promise<void> {
       techniqueType: result.summary.techniqueType,
       skillCount: result.summary.skillCount,
       layerCount: result.summary.layerCount,
+      balanceReviewModelName: result.balanceReview.modelName,
+      balanceAdjusted: result.balanceReview.adjusted,
+      balanceReason: result.balanceReview.reason,
+      balanceRiskTags: [...result.balanceReview.riskTags],
     });
 
     console.log(
       `[${index + 1}/${options.count}] ${result.summary.techniqueName} ` +
       `(${requestedQuality}/${result.summary.techniqueType}${result.baseModel ? `/${result.baseModel}` : ''}) ` +
+      `${result.balanceReview.adjusted ? ' [已按复评调整]' : ' [复评通过]'} ` +
       `seed=${result.seed} -> ${fileName}`,
     );
   }
@@ -188,6 +206,7 @@ async function main(): Promise<void> {
     seedStart: options.seedStart ?? null,
     baseModel: options.baseModel ?? null,
     modelNameOverride: options.modelName ?? null,
+    reviewModelNameOverride: options.reviewModelName ?? null,
     files: summary,
   });
 

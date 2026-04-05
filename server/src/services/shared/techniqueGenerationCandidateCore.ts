@@ -519,6 +519,19 @@ const readTechniqueGenerationRetryGuidance = (
   };
 };
 
+const readTechniquePromptGeneralRules = (
+  promptContext?: Record<string, unknown>,
+): string[] => {
+  const raw = promptContext?.techniquePromptGeneralRules;
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw
+    .filter((entry): entry is string => typeof entry === 'string')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+};
+
 /**
  * 统一清洗 AI 返回的功法 candidate。
  *
@@ -1069,6 +1082,7 @@ export const buildTechniqueGenerationTextModelRequest = (params: {
   const promptNoiseHash = buildTextModelPromptNoiseHash('technique-generation', seed);
   const timeoutMs = 300_000;
   const retryGuidance = readTechniqueGenerationRetryGuidance(params.promptContext);
+  const extraGeneralRules = readTechniquePromptGeneralRules(params.promptContext);
   const promptInput = buildTechniqueGeneratorPromptInput({
     techniqueType: params.techniqueType,
     quality: params.quality,
@@ -1077,9 +1091,18 @@ export const buildTechniqueGenerationTextModelRequest = (params: {
     promptNoiseHash,
     retryGuidance,
   });
-  const userMessagePayload = params.promptContext
-    ? { ...promptInput, extraContext: params.promptContext }
+  const promptInputWithExtraRules = extraGeneralRules.length > 0
+    ? {
+        ...promptInput,
+        constraints: {
+          ...promptInput.constraints,
+          generalRules: [...promptInput.constraints.generalRules, ...extraGeneralRules],
+        },
+      }
     : promptInput;
+  const userMessagePayload = params.promptContext
+    ? { ...promptInputWithExtraRules, extraContext: params.promptContext }
+    : promptInputWithExtraRules;
 
   return {
     responseFormat: buildTechniqueGenerationResponseFormat({

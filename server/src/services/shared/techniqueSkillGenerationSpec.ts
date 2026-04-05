@@ -396,6 +396,13 @@ const validateAuraEffect = (
     if ((subType === 'buff' || subType === 'debuff') && typeof subEffect.buffKind === 'string' && subEffect.buffKind.trim() === 'aura') {
       return { success: false, reason: 'auraEffects 子效果不允许嵌套光环（buffKind=aura）' };
     }
+    if (
+      (subType === 'buff' || subType === 'debuff')
+      && typeof subEffect.buffKind === 'string'
+      && subEffect.buffKind.trim() === 'next_skill_bonus'
+    ) {
+      return { success: false, reason: 'auraEffects 子效果不允许使用 buffKind=next_skill_bonus' };
+    }
     if (subEffect.duration !== undefined) {
       return { success: false, reason: 'auraEffects 子效果不允许声明 duration，光环效果持续时间由宿主光环统一决定' };
     }

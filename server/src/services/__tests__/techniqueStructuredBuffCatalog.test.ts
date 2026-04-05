@@ -48,11 +48,13 @@ test('结构化 Buff 目录应包含新增的内置光环属性白名单', () =>
   assert.equal(catalog.attrKeyEnum.includes('baoji'), true);
   assert.equal(catalog.attrKeyEnum.includes('baoshang'), true);
   assert.equal(catalog.attrKeyEnum.includes('kangbao'), true);
+  assert.equal(catalog.attrKeyEnum.includes('kongzhi_kangxing'), true);
   assert.equal(catalog.attrKeyEnum.includes('lengque'), true);
   assert.equal(catalog.buffKeyEnumByType.buff.includes('buff-max-qixue-up'), true);
   assert.equal(catalog.buffKeyEnumByType.buff.includes('buff-baoji-up'), true);
   assert.equal(catalog.buffKeyEnumByType.buff.includes('buff-baoshang-up'), true);
   assert.equal(catalog.buffKeyEnumByType.debuff.includes('debuff-kangbao-down'), true);
+  assert.equal(catalog.buffKeyEnumByType.debuff.includes('debuff-kongzhi-kangxing-down'), true);
   assert.equal(catalog.buffKeyEnumByType.debuff.includes('debuff-lengque-down'), true);
 });
 
@@ -89,6 +91,14 @@ test('新增内置光环属性应通过结构化 Buff 校验', () => {
       attrKey: 'kangbao',
       applyType: 'flat' as const,
       value: 0.15,
+    },
+    {
+      type: 'debuff' as const,
+      buffKind: 'attr',
+      buffKey: 'debuff-kongzhi-kangxing-down',
+      attrKey: 'kongzhi_kangxing',
+      applyType: 'flat' as const,
+      value: 0.12,
     },
     {
       type: 'buff' as const,

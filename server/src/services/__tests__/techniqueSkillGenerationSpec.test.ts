@@ -291,6 +291,29 @@ test('光环子效果不应再声明 duration', () => {
   });
 });
 
+test('光环子效果不应允许 next_skill_bonus', () => {
+  const validation = validateTechniqueSkillEffect({
+    type: 'buff',
+    buffKind: 'aura',
+    buffKey: 'buff-aura',
+    auraTarget: 'self',
+    auraEffects: [
+      {
+        type: 'buff',
+        buffKind: 'next_skill_bonus',
+        buffKey: 'buff-next-skill-chaos',
+        value: 0.5,
+        bonusType: 'damage',
+      },
+    ],
+  });
+
+  assert.deepEqual(validation, {
+    success: false,
+    reason: 'auraEffects 子效果不允许使用 buffKind=next_skill_bonus',
+  });
+});
+
 test('升级项中的旧式 effectChanges 字段应被拒绝', () => {
   const validation = validateTechniqueSkillUpgrade(
     {
