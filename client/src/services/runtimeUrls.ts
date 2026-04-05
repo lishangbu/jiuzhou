@@ -1,23 +1,23 @@
 /**
  * 作用：
  * 1. 集中管理前端运行时的 API / 服务器 / CDN URL 解析，避免请求层、静态资源层各自复制一套基址判断。
- * 2. 为静态资源、头像、keepalive 请求等入口提供同一数据源，确保 `VITE_CDN_BASE` 只在这里生效一次。
+ * 2. 为静态资源、头像、版本清单等入口提供同一数据源，确保 `VITE_CDN_BASE` 与源站保留规则只在这里生效一次。
  * 不做什么：
  * 1. 不创建 axios 实例，不处理请求拦截与响应错误。
  * 2. 不负责业务资源兜底，不对空路径追加默认图片。
  *
  * 输入/输出：
  * - 输入：浏览器运行时 location、`VITE_API_BASE`、`VITE_CDN_BASE` 与资源路径字符串。
- * - 输出：统一的 `API_BASE` / `SERVER_BASE` / `CDN_BASE` 常量，以及拼接后的资源 URL。
+ * - 输出：统一的 `API_BASE` / `SERVER_BASE` / `CDN_BASE` 常量，以及按 CDN 或源站拼接后的资源 URL。
  *
  * 数据流/状态流：
  * - env + window.location -> 基础地址解析
- * - 基础地址 -> `buildAssetUrl` / `resolveAssetUrl`
+ * - 基础地址 -> `buildAssetUrl` / `buildServerUrl` / `resolveAssetUrl` / `resolveServerUrl`
  * - 业务模块与入口模块复用同一条 URL 解析链
  *
  * 关键边界条件与坑点：
  * 1. `/uploads/*` 必须始终走 `SERVER_BASE`，不能误切到静态资源域，否则玩家上传头像会 404。
- * 2. 其它以 `/` 开头的静态资源默认走当前页面静态源；若配置 `VITE_CDN_BASE`，再统一走 CDN，避免前端 public 资源被误拼到 API 源站。
+ * 2. `version.json` 这类只部署在前端源站容器中的清单文件不能走 CDN，否则资源域未同步时会直接 404。
  */
 
 const normalizeBaseUrl = (raw: string): string => {
@@ -79,10 +79,20 @@ export interface AssetUrlHostConfig {
   cdnBase: string;
 }
 
+const joinBaseWithPath = (base: string, path: string): string =>
+  path.startsWith('/') ? `${base}${path}` : `${base}/${path}`;
+
 export const API_BASE = resolveApiBase();
 export const SERVER_BASE = API_BASE.replace(/\/api\/?$/, '');
 export const CDN_BASE = resolveCdnBase();
 export const CDN_ENABLED = CDN_BASE !== SERVER_BASE;
+
+export const buildServerUrl = (path: string, serverBase: string): string => {
+  const raw = (path ?? '').trim();
+  if (!raw) return '';
+  if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+  return joinBaseWithPath(serverBase, raw);
+};
 
 export const buildAssetUrl = (
   path: string,
@@ -91,9 +101,8 @@ export const buildAssetUrl = (
   const raw = (path ?? '').trim();
   if (!raw) return '';
   if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
-  if (raw.startsWith('/uploads/')) return `${hostConfig.serverBase}${raw}`;
-  if (raw.startsWith('/')) return `${hostConfig.cdnBase}${raw}`;
-  return `${hostConfig.cdnBase}/${raw}`;
+  if (raw.startsWith('/uploads/')) return buildServerUrl(raw, hostConfig.serverBase);
+  return joinBaseWithPath(hostConfig.cdnBase, raw);
 };
 
 export const resolveAssetUrl = (path: string): string => {
@@ -101,6 +110,10 @@ export const resolveAssetUrl = (path: string): string => {
     serverBase: SERVER_BASE,
     cdnBase: CDN_BASE,
   });
+};
+
+export const resolveServerUrl = (path: string): string => {
+  return buildServerUrl(path, SERVER_BASE);
 };
 
 export const resolveAvatarUrl = (
