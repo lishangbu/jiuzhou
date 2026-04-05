@@ -32,6 +32,10 @@ export const CHANGE_LOG_ENTRIES: readonly ChangeLogEntrySource[] = [
   {
     releasedAt: '2026-04-05',
     sections: [
+      '修复部分任务无法完成的异常问题',
+      '升级云游奇遇功能，增加概率带入活跃玩家的情况',
+      '下调洞府研修的功法残页消耗',
+      '<div class="my-4 border-t border-gray-200 dark:border-gray-700"></div>',
       '开放证道期相关内容',
       '洞府研修模型调整，停用 GPT 5.4、Claude Opus 4.6、GLM 5 Turbo',
       '所有装备基础物攻、法攻数值翻倍',
