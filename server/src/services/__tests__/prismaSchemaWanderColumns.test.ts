@@ -46,11 +46,16 @@ test('character_wander_story_episode: Prisma schema 应声明 AI 生成称号颜
   );
 });
 
-test('character_wander_story: Prisma schema 应声明故事级伙伴快照列', () => {
+test('character_wander_story: Prisma schema 应声明故事级伙伴与其他玩家快照列', () => {
   const block = getModelBlock('character_wander_story');
   assert.match(
     block,
     /\bstory_partner_snapshot\s+Json\?/,
     'character_wander_story 缺少 story_partner_snapshot 列定义',
+  );
+  assert.match(
+    block,
+    /\bstory_other_player_snapshot\s+Json\?/,
+    'character_wander_story 缺少 story_other_player_snapshot 列定义',
   );
 });

@@ -32,6 +32,14 @@ export interface WanderStoryPartnerSnapshot {
   quality: string;
 }
 
+export interface WanderStoryOtherPlayerSnapshot {
+  characterId: number;
+  nickname: string;
+  title: string | null;
+  realm: string;
+  subRealm: string | null;
+}
+
 export interface WanderGenerationJobDto {
   generationId: string;
   status: WanderGenerationJobStatus;

@@ -42,6 +42,7 @@ import type {
   WanderAiEpisodeResolutionDraft,
   WanderAiEpisodeSetupDraft,
   WanderEndingType,
+  WanderStoryOtherPlayerSnapshot,
   WanderStoryPartnerSnapshot,
 } from './types.js';
 import type { WanderStoryLocation } from './location.js';
@@ -69,6 +70,7 @@ export interface WanderAiEpisodeSetupInput {
   realm: string;
   hasTeam: boolean;
   storyPartner: WanderStoryPartnerSnapshot | null;
+  storyOtherPlayer: WanderStoryOtherPlayerSnapshot | null;
   storyLocation: WanderStoryLocation;
   activeTheme: string | null;
   activePremise: string | null;
@@ -84,6 +86,7 @@ export interface WanderAiEpisodeResolutionInput {
   realm: string;
   hasTeam: boolean;
   storyPartner: WanderStoryPartnerSnapshot | null;
+  storyOtherPlayer: WanderStoryOtherPlayerSnapshot | null;
   storyLocation: WanderStoryLocation;
   activeTheme: string | null;
   activePremise: string | null;
@@ -323,6 +326,7 @@ export const buildWanderAiEpisodeSetupPromptRuleSet = (isEndingEpisode: boolean)
       '剧情必须是东方修仙语境，禁止现代梗、科幻设定、英文名、阿拉伯数字名。',
       '本阶段只负责生成待玩家选择的幕次，不负责结算结果。',
       'player.storyPartner 为 null 表示这条故事不带入伙伴；不为 null 时，说明该伙伴会卷入这条故事。你应自然写出其同行、反应、插话或协助，但不要喧宾夺主，也不要替玩家做选择。',
+      'player.storyOtherPlayer 为 null 表示这条故事不带入其他玩家；不为 null 时，说明有一名近期活跃的其他修士会卷入这条故事。你应自然写出其同行、路遇、竞争或援手，但不能让其压过玩家主导地位，也不要替该玩家擅自决定立场。',
       'previousEpisodes 会按幕次顺序提供已经发生的完整前文，每一幕都包含标题、正文、玩家已选选项和选择后的结果；续写时必须严格承接这些既成事实，不得遗忘、改写或跳过已经发生的因果。',
       WANDER_STORY_THEME_STYLE_RULE,
       `storyTheme 示例：${WANDER_STORY_THEME_EXAMPLE}`,
@@ -450,6 +454,7 @@ export const buildWanderAiEpisodeSetupUserPayload = (
     realm: string;
     hasTeam: boolean;
     storyPartner: WanderStoryPartnerSnapshot | null;
+    storyOtherPlayer: WanderStoryOtherPlayerSnapshot | null;
   };
   storyLocation: WanderStoryLocation;
   story: {
@@ -470,6 +475,7 @@ export const buildWanderAiEpisodeSetupUserPayload = (
       realm: input.realm,
       hasTeam: input.hasTeam,
       storyPartner: input.storyPartner,
+      storyOtherPlayer: input.storyOtherPlayer,
     },
     storyLocation: input.storyLocation,
     story: {
@@ -520,6 +526,7 @@ export const buildWanderAiEpisodeResolutionPromptRuleSet = (
       '剧情必须是东方修仙语境，禁止现代梗、科幻设定、英文名、阿拉伯数字名。',
       '本阶段只负责根据玩家已经选定的选项，生成这一幕真正发生的结果与收束。',
       'player.storyPartner 为 null 表示这条故事不带入伙伴；不为 null 时，说明该伙伴已卷入这条故事。你应让这一幕的结果继续自然体现其存在，但不要压过玩家主导地位。',
+      'player.storyOtherPlayer 为 null 表示这条故事不带入其他玩家；不为 null 时，说明这名近期活跃的修士已卷入当前因果。你应让这一幕继续自然体现其反应、取舍或动作，但不能让其盖过玩家，也不要替其凭空改写既有立场。',
       'previousEpisodes 会按幕次顺序提供已经发生的完整前文，每一幕都包含标题、正文、玩家已选选项和选择后的结果；你必须把当前这一幕放在这些既有经历之后承接，不能忽略已发生的因果。',
       WANDER_SUMMARY_STYLE_RULE,
       `summary 示例：${WANDER_SUMMARY_EXAMPLE}`,
@@ -726,6 +733,7 @@ export const buildWanderAiEpisodeResolutionUserPayload = (
     realm: string;
     hasTeam: boolean;
     storyPartner: WanderStoryPartnerSnapshot | null;
+    storyOtherPlayer: WanderStoryOtherPlayerSnapshot | null;
   };
   storyLocation: WanderStoryLocation;
   story: {
@@ -751,6 +759,7 @@ export const buildWanderAiEpisodeResolutionUserPayload = (
       realm: input.realm,
       hasTeam: input.hasTeam,
       storyPartner: input.storyPartner,
+      storyOtherPlayer: input.storyOtherPlayer,
     },
     storyLocation: input.storyLocation,
     story: {
