@@ -676,6 +676,70 @@ test('周天衍光应在法术结算后对未命中敌人触发分光', () => {
   assert.ok((projectionLog.targets[0]?.damage ?? 0) > 0);
 });
 
+test('after_skill 投射效果不应依赖单个 context.target 才能触发', () => {
+  const projectionEffect: BattleSetBonusEffect = {
+    setId: 'set-tianyan',
+    setName: '天衍套装',
+    pieceCount: 4,
+    trigger: 'after_skill',
+    target: 'enemy',
+    effectType: 'spell_projection',
+    params: {
+      projection_name: '周天衍光',
+      single_split_rate: 0.42,
+      multi_focus_rate: 0.78,
+    },
+  };
+  const owner = createUnit('player-31', '测试法修', [projectionEffect]);
+  owner.currentAttrs.fagong = 500;
+  owner.baseAttrs.fagong = 500;
+  owner.currentAttrs.mingzhong = 1;
+  owner.baseAttrs.mingzhong = 1;
+  const target = createUnit('monster-311', '主目标', []);
+  const sideTarget = createUnit('monster-312', '侧目标', []);
+  target.currentAttrs.fafang = 0;
+  target.baseAttrs.fafang = 0;
+  sideTarget.currentAttrs.fafang = 0;
+  sideTarget.baseAttrs.fafang = 0;
+  const state = createTeamState([owner], [target, sideTarget]);
+  const logs = triggerSetBonusEffects(state, 'after_skill', owner, {
+    skill: {
+      id: 'skill-tianyan-after-skill',
+      name: '太衍流火',
+      source: 'innate',
+      cost: {},
+      cooldown: 0,
+      targetType: 'single_enemy',
+      targetCount: 1,
+      damageType: 'magic',
+      element: 'huo',
+      effects: [
+        {
+          type: 'damage',
+          value: 100,
+          valueType: 'flat',
+        },
+      ],
+      triggerType: 'active',
+      aiPriority: 50,
+    },
+    magicSkillSnapshot: {
+      skillId: 'skill-tianyan-after-skill',
+      element: 'huo',
+      hitTargetIds: [target.id],
+      primaryTargetId: target.id,
+      averageFinalDamage: 200,
+      hitCount: 1,
+    },
+  });
+
+  assert.equal(logs.length, 1);
+  const actionLog = assertActionLog(logs[0]);
+  assert.equal(actionLog.skillId, 'proc-set-tianyan-zhouyan');
+  assert.equal(actionLog.targets[0]?.targetName, '侧目标');
+  assert.ok((actionLog.targets[0]?.damage ?? 0) > 0);
+});
+
 test('承劫应在受击前将部分伤害转为劫痕', () => {
   const deferEffect: BattleSetBonusEffect = {
     setId: 'set-xuanheng',

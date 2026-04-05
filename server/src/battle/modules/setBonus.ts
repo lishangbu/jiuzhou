@@ -124,8 +124,6 @@ export function triggerSetBonusEffects(
   const preparedEffects = buildPreparedTriggerEffects(effects, trigger);
   for (const prepared of preparedEffects) {
     const { effect, params, chance } = prepared;
-    const target = effect.target === 'enemy' ? context.target : owner;
-    if (!target || !target.isAlive) continue;
     const roundLimit = normalizeRoundLimit(params.round_limit);
     const affixGroupKey = buildAffixGroupKey(effect, params);
     const quotaKey = affixGroupKey ?? `set:${effect.setId}`;
@@ -134,6 +132,23 @@ export function triggerSetBonusEffects(
     if (!passChance(state, scaledChance)) continue;
 
     let applyResult: SetBonusApplyResult | null = null;
+    if (effect.effectType === 'spell_projection') {
+      applyResult = applySetSpellProjection(state, effect, owner, context.skill, context.magicSkillSnapshot);
+      if (!applyResult) continue;
+      consumeRoundLimit(owner, state.roundCount, quotaKey, roundLimit);
+      consumeAffixTriggerSuccessState(owner, affixGroupKey, context.affixTriggerRuntimeState);
+      if (!applyResult.skipDefaultActionLog) {
+        logs.push(buildSetBonusActionLog(state, owner, effect, applyResult.targetResult));
+      }
+      if (Array.isArray(applyResult.extraLogs) && applyResult.extraLogs.length > 0) {
+        logs.push(...applyResult.extraLogs);
+      }
+      continue;
+    }
+
+    const target = effect.target === 'enemy' ? context.target : owner;
+    if (!target || !target.isAlive) continue;
+
     switch (effect.effectType) {
       case 'buff':
       case 'debuff':
@@ -156,9 +171,6 @@ export function triggerSetBonusEffects(
         break;
       case 'pursuit':
         applyResult = applySetPursuit(state, owner, target, params);
-        break;
-      case 'spell_projection':
-        applyResult = applySetSpellProjection(state, effect, owner, context.skill, context.magicSkillSnapshot);
         break;
       case 'defer_damage':
         applyResult = applySetDeferredShield(effect, owner, params);
