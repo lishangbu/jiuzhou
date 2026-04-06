@@ -32,6 +32,7 @@ export const CHANGE_LOG_ENTRIES: readonly ChangeLogEntrySource[] = [
   {
     releasedAt: '2026-04-06',
     sections: [
+      '现在伙伴普通招募也可以输入自定底模了',
       '修复伙伴学习功法可通过刷新页面取消并且不会消耗功法书的问题',
     ],
   },
