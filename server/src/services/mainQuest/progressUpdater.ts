@@ -43,6 +43,17 @@ type LockedProgressSnapshot = {
   objectives: ObjectiveRecord[];
 };
 
+type MainQuestProgressBatchInput = {
+  characterId: number;
+  events: MainQuestProgressEvent[];
+};
+
+type MainQuestProgressMutationRow = {
+  characterId: number;
+  currentProgress: Record<string, number>;
+  nextSectionStatus: 'turnin' | null;
+};
+
 const resolveTechniqueQuality = (techniqueId: string): string => {
   const techniqueDef = getTechniqueDefinitions().find(
     (entry) => entry.id === techniqueId && entry.enabled !== false,
@@ -176,76 +187,229 @@ const loadLockedProgressSnapshot = async (
   };
 };
 
+const normalizeMainQuestProgressBatchInputs = (
+  inputs: MainQuestProgressBatchInput[],
+): MainQuestProgressBatchInput[] => {
+  const eventsByCharacterId = new Map<number, MainQuestProgressEvent[]>();
+
+  for (const input of inputs) {
+    const characterId = Math.floor(Number(input.characterId));
+    if (!Number.isFinite(characterId) || characterId <= 0) continue;
+    if (input.events.length <= 0) continue;
+
+    const existingEvents = eventsByCharacterId.get(characterId);
+    if (existingEvents) {
+      existingEvents.push(...input.events);
+      continue;
+    }
+    eventsByCharacterId.set(characterId, [...input.events]);
+  }
+
+  return [...eventsByCharacterId.entries()].map(([characterId, events]) => ({
+    characterId,
+    events,
+  }));
+};
+
+const loadLockedProgressSnapshotsBatch = async (
+  characterIds: readonly number[],
+): Promise<Map<number, LockedProgressSnapshot | null>> => {
+  const normalizedCharacterIds = [...new Set(
+    characterIds
+      .map((characterId) => Math.floor(Number(characterId)))
+      .filter((characterId) => Number.isFinite(characterId) && characterId > 0),
+  )];
+  if (normalizedCharacterIds.length <= 0) {
+    return new Map<number, LockedProgressSnapshot | null>();
+  }
+
+  const progressRes = await query(
+    `SELECT character_id, current_section_id, section_status, objectives_progress
+     FROM character_main_quest_progress
+     WHERE character_id = ANY($1::int[])
+     FOR UPDATE`,
+    [normalizedCharacterIds],
+  );
+
+  const snapshotByCharacterId = new Map<number, LockedProgressSnapshot | null>();
+  for (const characterId of normalizedCharacterIds) {
+    snapshotByCharacterId.set(characterId, null);
+  }
+
+  for (const row of progressRes.rows as Array<Record<string, unknown>>) {
+    const characterId = Math.floor(asNumber(row.character_id, 0));
+    if (!Number.isFinite(characterId) || characterId <= 0) continue;
+
+    if (asString(row.section_status) !== 'objectives') {
+      snapshotByCharacterId.set(characterId, { currentProgress: {}, objectives: [] });
+      continue;
+    }
+
+    const sectionId = asString(row.current_section_id).trim();
+    if (!sectionId) {
+      throw new Error('当前任务节不存在');
+    }
+
+    const sectionDef = getMainQuestSectionById(sectionId);
+    if (!sectionDef) {
+      throw new Error('任务节配置不存在');
+    }
+
+    snapshotByCharacterId.set(characterId, {
+      currentProgress: asObject(row.objectives_progress) as Record<string, number>,
+      objectives: asArray<ObjectiveRecord>(sectionDef.objectives),
+    });
+  }
+
+  return snapshotByCharacterId;
+};
+
+/**
+ * 主线任务目标批量更新器。
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1. 做什么：把多角色主线目标推进收敛成“一次批量行锁读取 + 一次批量写回”，避免多人掉落/击杀链路为每个角色重复锁表。
+ * 2. 做什么：保持单角色入口完全复用同一份事件匹配语义，避免 collect/kill 等热点入口和主线推进规则漂移。
+ * 3. 不做什么：不负责章节切换与奖励发放，也不负责开启事务。
+ *
+ * 输入/输出：
+ * - 输入：多角色事件数组，每个角色可以带一批主线事件。
+ * - 输出：`Map<characterId, ProgressUpdateResult>`，供上层按角色判断是否真的命中主线目标。
+ *
+ * 数据流/状态流：
+ * 多角色事件 -> 一次性锁定 `character_main_quest_progress`
+ * -> 内存态匹配并累计 objectives_progress
+ * -> 一次批量 UPDATE 写回 `objectives_progress/section_status`。
+ *
+ * 复用设计说明：
+ * 1. 单角色 `updateSectionProgressByEvents` 直接委托给这里，确保单人和多人热点入口永远共用同一份批量协议。
+ * 2. 收集事件与击杀事件都能复用该入口，避免在 taskService 里继续维护两套“主线推进循环”。
+ *
+ * 关键边界条件与坑点：
+ * 1. 只有 `section_status='objectives'` 的角色会参与推进；其他状态必须保留原样，不能误写为 `turnin`。
+ * 2. 同一角色一批事件共享同一份内存快照，必须在单次写回前把目标上限截断，避免重复事件把进度写穿。
+ */
+export const updateSectionProgressByEventsBatch = async (
+  inputs: MainQuestProgressBatchInput[],
+): Promise<Map<number, ProgressUpdateResult>> => {
+  const normalizedInputs = normalizeMainQuestProgressBatchInputs(inputs);
+  const resultByCharacterId = new Map<number, ProgressUpdateResult>();
+  if (normalizedInputs.length <= 0) {
+    return resultByCharacterId;
+  }
+
+  const snapshotByCharacterId = await loadLockedProgressSnapshotsBatch(
+    normalizedInputs.map((input) => input.characterId),
+  );
+  const mutationRows: MainQuestProgressMutationRow[] = [];
+
+  for (const input of normalizedInputs) {
+    const snapshot = snapshotByCharacterId.get(input.characterId) ?? null;
+    if (!snapshot) {
+      resultByCharacterId.set(input.characterId, {
+        success: false,
+        message: '主线进度不存在',
+        updated: false,
+        completed: false,
+      });
+      continue;
+    }
+    if (snapshot.objectives.length <= 0) {
+      resultByCharacterId.set(input.characterId, {
+        success: true,
+        message: '当前不在目标阶段',
+        updated: false,
+        completed: false,
+      });
+      continue;
+    }
+
+    const currentProgress = { ...snapshot.currentProgress };
+    let updated = false;
+
+    for (const event of input.events) {
+      for (const objective of snapshot.objectives) {
+        const objectiveId = asString(objective.id).trim();
+        const target = Math.max(1, Math.floor(asNumber(objective.target, 1)));
+        if (!objectiveId) continue;
+
+        const current = asNumber(currentProgress[objectiveId], 0);
+        if (current >= target) continue;
+
+        const increment = getIncrementByEvent(objective, event);
+        if (increment <= 0) continue;
+
+        currentProgress[objectiveId] = Math.min(target, current + increment);
+        updated = true;
+      }
+    }
+
+    if (!updated) {
+      resultByCharacterId.set(input.characterId, {
+        success: true,
+        message: '无匹配目标',
+        updated: false,
+        completed: false,
+      });
+      continue;
+    }
+
+    const completed = snapshot.objectives.every((objective) => {
+      const objectiveId = asString(objective.id).trim();
+      const target = Math.max(1, Math.floor(asNumber(objective.target, 1)));
+      return objectiveId.length === 0 || asNumber(currentProgress[objectiveId], 0) >= target;
+    });
+
+    mutationRows.push({
+      characterId: input.characterId,
+      currentProgress,
+      nextSectionStatus: completed ? 'turnin' : null,
+    });
+    resultByCharacterId.set(input.characterId, {
+      success: true,
+      message: completed ? '目标已全部完成' : '进度已更新',
+      updated: true,
+      completed,
+    });
+  }
+
+  if (mutationRows.length > 0) {
+    await query(
+      `
+        WITH next_rows AS (
+          SELECT *
+          FROM jsonb_to_recordset($1::jsonb)
+            AS x(character_id int, objectives_progress jsonb, next_section_status varchar(16))
+        )
+        UPDATE character_main_quest_progress AS progress_row
+        SET objectives_progress = next_rows.objectives_progress,
+            section_status = COALESCE(next_rows.next_section_status, progress_row.section_status),
+            updated_at = NOW()
+        FROM next_rows
+        WHERE progress_row.character_id = next_rows.character_id
+      `,
+      [JSON.stringify(mutationRows.map((row) => ({
+        character_id: row.characterId,
+        objectives_progress: row.currentProgress,
+        next_section_status: row.nextSectionStatus,
+      })))],
+    );
+  }
+
+  return resultByCharacterId;
+};
+
 export const updateSectionProgressByEvents = async (
   characterId: number,
   events: MainQuestProgressEvent[],
 ): Promise<ProgressUpdateResult> => {
-  const cid = Number(characterId);
-  if (!Number.isFinite(cid) || cid <= 0) {
-    return { success: false, message: '角色不存在', updated: false, completed: false };
-  }
-  if (events.length === 0) {
-    return { success: true, message: '无事件', updated: false, completed: false };
-  }
-
-  const snapshot = await loadLockedProgressSnapshot(cid);
-  if (!snapshot) {
-    return { success: false, message: '主线进度不存在', updated: false, completed: false };
-  }
-  if (snapshot.objectives.length === 0) {
-    return { success: true, message: '当前不在目标阶段', updated: false, completed: false };
-  }
-
-  const { currentProgress, objectives } = snapshot;
-  let updated = false;
-
-  for (const event of events) {
-    for (const objective of objectives) {
-      const objectiveId = asString(objective.id).trim();
-      const target = Math.max(1, Math.floor(asNumber(objective.target, 1)));
-      if (!objectiveId) continue;
-
-      const current = asNumber(currentProgress[objectiveId], 0);
-      if (current >= target) continue;
-
-      const increment = getIncrementByEvent(objective, event);
-      if (increment <= 0) continue;
-
-      currentProgress[objectiveId] = Math.min(target, current + increment);
-      updated = true;
-    }
-  }
-
-  if (!updated) {
-    return { success: true, message: '无匹配目标', updated: false, completed: false };
-  }
-
-  const allCompleted = objectives.every((objective) => {
-    const objectiveId = asString(objective.id).trim();
-    const target = Math.max(1, Math.floor(asNumber(objective.target, 1)));
-    return objectiveId.length === 0 || asNumber(currentProgress[objectiveId], 0) >= target;
-  });
-
-  if (allCompleted) {
-    await query(
-      `UPDATE character_main_quest_progress
-       SET section_status = 'turnin',
-           objectives_progress = $2::jsonb,
-           updated_at = NOW()
-       WHERE character_id = $1`,
-      [cid, JSON.stringify(currentProgress)],
-    );
-    return { success: true, message: '目标已全部完成', updated: true, completed: true };
-  }
-
-  await query(
-    `UPDATE character_main_quest_progress
-     SET objectives_progress = $2::jsonb,
-         updated_at = NOW()
-     WHERE character_id = $1`,
-    [cid, JSON.stringify(currentProgress)],
-  );
-  return { success: true, message: '进度已更新', updated: true, completed: false };
+  const resultByCharacterId = await updateSectionProgressByEventsBatch([{ characterId, events }]);
+  return resultByCharacterId.get(Number(characterId)) ?? {
+    success: false,
+    message: '主线进度不存在',
+    updated: false,
+    completed: false,
+  };
 };
 
 export const updateSectionProgressByEvent = async (

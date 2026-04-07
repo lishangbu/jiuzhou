@@ -66,6 +66,7 @@ import type {
   PlainAutoStackLookupOptions,
   PlainAutoStackLookupRow,
 } from "../shared/characterInventoryMutationContext.js";
+import { loadCharacterPendingItemGrants } from "../shared/characterItemGrantDeltaService.js";
 
 // ============================================
 // 获取背包信息（容量与使用情况）
@@ -75,7 +76,7 @@ import type {
  * 查询角色背包/仓库容量与已使用格数
  * 若背包记录不存在则自动初始化
  */
-export const getInventoryInfo = async (
+const loadBaseInventoryInfo = async (
   characterId: number,
 ): Promise<InventoryInfo> => {
   const sql = `
@@ -115,6 +116,152 @@ export const getInventoryInfo = async (
   return info;
 };
 
+const sortInventoryItemsForDisplay = (items: InventoryItem[]): InventoryItem[] => {
+  return [...items].sort((left, right) => {
+    const leftSlot = left.location_slot;
+    const rightSlot = right.location_slot;
+    if (leftSlot === null && rightSlot !== null) return 1;
+    if (leftSlot !== null && rightSlot === null) return -1;
+    if (leftSlot !== null && rightSlot !== null && leftSlot !== rightSlot) {
+      return leftSlot - rightSlot;
+    }
+    return new Date(String(right.created_at)).getTime() - new Date(String(left.created_at)).getTime();
+  });
+};
+
+const loadAllInventoryItemsByLocation = async (
+  characterId: number,
+  location: InventoryLocation,
+): Promise<InventoryItem[]> => {
+  const result = await query(
+    `
+      SELECT
+        ii.id, ii.item_def_id, ii.qty, ii.location, ii.location_slot,
+        ii.quality, ii.quality_rank,
+        ii.metadata,
+        ii.equipped_slot, ii.strengthen_level, ii.refine_level,
+        ii.socketed_gems,
+        ii.affixes, ii.identified, ii.locked, ii.bind_type, ii.created_at
+      FROM item_instance ii
+      WHERE ii.owner_character_id = $1 AND ii.location = $2
+      ORDER BY ii.location_slot NULLS LAST, ii.created_at DESC
+    `,
+    [characterId, location],
+  );
+  return result.rows.map((row) => row as InventoryItem);
+};
+
+const applyPendingBagGrantOverlay = async (
+  baseItems: InventoryItem[],
+  characterId: number,
+  bagCapacity: number,
+): Promise<InventoryItem[]> => {
+  const pendingGrants = await loadCharacterPendingItemGrants(characterId);
+  if (pendingGrants.length <= 0) {
+    return baseItems;
+  }
+
+  const itemDefIds = [
+    ...new Set(
+      pendingGrants
+        .map((grant) => grant.itemDefId)
+        .filter((itemDefId) => itemDefId.length > 0),
+    ),
+  ];
+  const itemDefMap = getItemDefinitionsByIds(itemDefIds);
+  const overlayItems = sortInventoryItemsForDisplay(baseItems);
+  const usedSlots = new Set(
+    overlayItems
+      .map((item) => item.location_slot)
+      .filter((slot): slot is number => slot !== null && slot >= 0),
+  );
+  let nextSyntheticId = -1;
+
+  const allocateSlot = (): number | null => {
+    for (let slot = 0; slot < bagCapacity; slot += 1) {
+      if (usedSlots.has(slot)) continue;
+      usedSlots.add(slot);
+      return slot;
+    }
+    return null;
+  };
+
+  for (const grant of pendingGrants) {
+    let remainingQty = Math.max(0, Math.floor(Number(grant.qty) || 0));
+    if (remainingQty <= 0) continue;
+
+    const itemDef = itemDefMap.get(grant.itemDefId);
+    const stackMax = Math.max(1, Math.floor(Number(itemDef?.stack_max) || 1));
+    const canAutoStack =
+      stackMax > 1 &&
+      grant.metadata === null &&
+      grant.quality === null &&
+      grant.qualityRank === null;
+
+    if (canAutoStack) {
+      for (const item of overlayItems) {
+        if (remainingQty <= 0) break;
+        if (item.item_def_id !== grant.itemDefId) continue;
+        if (normalizeItemBindType(item.bind_type) !== grant.bindType) continue;
+        if (item.metadata !== null) continue;
+        if (item.quality !== null || item.quality_rank !== null) continue;
+        const available = Math.max(0, stackMax - Math.max(0, Number(item.qty) || 0));
+        if (available <= 0) continue;
+        const mergedQty = Math.min(available, remainingQty);
+        item.qty += mergedQty;
+        remainingQty -= mergedQty;
+      }
+    }
+
+    while (remainingQty > 0) {
+      const locationSlot = allocateSlot();
+      if (locationSlot === null) {
+        break;
+      }
+      const chunkQty = Math.min(remainingQty, stackMax);
+      overlayItems.push({
+        id: nextSyntheticId,
+        item_def_id: grant.itemDefId,
+        qty: chunkQty,
+        quality: grant.quality,
+        quality_rank: grant.qualityRank,
+        metadata: grant.metadata,
+        location: "bag",
+        location_slot: locationSlot,
+        equipped_slot: null,
+        strengthen_level: 0,
+        refine_level: 0,
+        socketed_gems: null,
+        affixes: [],
+        identified: false,
+        locked: false,
+        bind_type: grant.bindType,
+        created_at: new Date(),
+      });
+      nextSyntheticId -= 1;
+      remainingQty -= chunkQty;
+    }
+  }
+
+  return sortInventoryItemsForDisplay(overlayItems);
+};
+
+export const getInventoryInfo = async (
+  characterId: number,
+): Promise<InventoryInfo> => {
+  const info = await loadBaseInventoryInfo(characterId);
+  const pendingGrants = await loadCharacterPendingItemGrants(characterId);
+  if (pendingGrants.length <= 0) {
+    return info;
+  }
+  const bagItems = await loadAllInventoryItemsByLocation(characterId, "bag");
+  const overlayBagItems = await applyPendingBagGrantOverlay(bagItems, characterId, Number(info.bag_capacity) || 0);
+  return {
+    ...info,
+    bag_used: overlayBagItems.filter((item) => item.location_slot !== null && item.location_slot >= 0).length,
+  };
+};
+
 // ============================================
 // 获取背包物品列表（分页优化）
 // ============================================
@@ -125,7 +272,16 @@ export const getInventoryItems = async (
   page: number = 1,
   pageSize: number = 100,
 ): Promise<{ items: InventoryItem[]; total: number }> => {
-  await getInventoryInfo(characterId);
+  const info = await loadBaseInventoryInfo(characterId);
+  if (location === "bag") {
+    const rawItems = await loadAllInventoryItemsByLocation(characterId, location);
+    const overlayItems = await applyPendingBagGrantOverlay(rawItems, characterId, Number(info.bag_capacity) || 0);
+    const offset = (page - 1) * pageSize;
+    return {
+      items: overlayItems.slice(offset, offset + pageSize),
+      total: overlayItems.length,
+    };
+  }
   const offset = (page - 1) * pageSize;
 
   const sql = `

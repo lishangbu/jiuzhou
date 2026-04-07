@@ -1,13 +1,13 @@
 import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
 import { randomInt } from 'crypto';
-import { addItemToInventory } from './inventory/index.js';
 import { consumeCharacterCurrencies } from './inventory/shared/consume.js';
 import { lockCharacterInventoryMutex } from './inventoryMutex.js';
 import {
   getCharacterComputedByCharacterId,
   type CharacterComputedRow,
 } from './characterComputedService.js';
+import { bufferSimpleCharacterItemGrants } from './shared/characterItemGrantDeltaService.js';
 import {
   getEnabledItemDefinitions,
   getItemDefinitionsByIds,
@@ -1203,6 +1203,7 @@ class GemSynthesisService {
     const rolledOutputCounts = rollRandomGemOutputCounts(candidateOutputItemDefIds, requestedTimes);
     const producedItemDefIds = [...rolledOutputCounts.keys()].sort((a, b) => a.localeCompare(b));
     const outputDefMap = await getItemDefMap(producedItemDefIds);
+    const pendingItemGrants: Array<{ itemDefId: string; qty: number; obtainedFrom: string }> = [];
     const producedItems: Array<{
       itemDefId: string;
       name: string;
@@ -1214,14 +1215,11 @@ class GemSynthesisService {
     for (const itemDefId of producedItemDefIds) {
       const produceQty = rolledOutputCounts.get(itemDefId) ?? 0;
       if (produceQty <= 0) continue;
-
-      const addRes = await addItemToInventory(characterId, userId, itemDefId, produceQty, {
-        location: 'bag',
+      pendingItemGrants.push({
+        itemDefId,
+        qty: produceQty,
         obtainedFrom: GEM_CONVERT_OBTAINED_FROM,
       });
-      if (!addRes.success) {
-        return { success: false, message: addRes.message };
-      }
 
       const def = outputDefMap.get(itemDefId);
       producedItems.push({
@@ -1229,9 +1227,10 @@ class GemSynthesisService {
         name: def?.name || itemDefId,
         icon: def?.icon || null,
         qty: produceQty,
-        itemIds: addRes.itemIds ?? [],
+        itemIds: [],
       });
     }
+    await bufferSimpleCharacterItemGrants(characterId, userId, pendingItemGrants);
 
     const character = await getCharacterComputedByCharacterId(characterId, { bypassStaticCache: true });
     return {
@@ -1325,17 +1324,15 @@ class GemSynthesisService {
     const produceQty = recipe.outputQty * successCount;
     let produced: { itemDefId: string; qty: number; itemIds: number[] } | null = null;
     if (produceQty > 0) {
-      const addRes = await addItemToInventory(characterId, userId, recipe.outputItemDefId, produceQty, {
-        location: 'bag',
+      await bufferSimpleCharacterItemGrants(characterId, userId, [{
+        itemDefId: recipe.outputItemDefId,
+        qty: produceQty,
         obtainedFrom: 'gem-synthesis',
-      });
-      if (!addRes.success) {
-        return { success: false, message: addRes.message };
-      }
+      }]);
       produced = {
         itemDefId: recipe.outputItemDefId,
         qty: produceQty,
-        itemIds: addRes.itemIds ?? [],
+        itemIds: [],
       };
     }
 
@@ -1448,6 +1445,7 @@ class GemSynthesisService {
 
     let spentSilver = 0;
     let spentSpiritStones = 0;
+    const pendingItemGrants: Array<{ itemDefId: string; qty: number; obtainedFrom: string }> = [];
 
     for (let level = sourceLevel; level < targetLevel; level += 1) {
       const recipe = recipeByFromLevel.get(level);
@@ -1493,16 +1491,12 @@ class GemSynthesisService {
       const failCount = maxTimes - successCount;
 
       const produceQty = recipe.outputQty * successCount;
-      let itemIds: number[] = [];
       if (produceQty > 0) {
-        const addRes = await addItemToInventory(characterId, userId, recipe.outputItemDefId, produceQty, {
-          location: 'bag',
+        pendingItemGrants.push({
+          itemDefId: recipe.outputItemDefId,
+          qty: produceQty,
           obtainedFrom: 'gem-synthesis',
         });
-        if (!addRes.success) {
-          return { success: false, message: addRes.message };
-        }
-        itemIds = addRes.itemIds ?? [];
       }
 
       steps.push({
@@ -1525,7 +1519,7 @@ class GemSynthesisService {
         produced: {
           itemDefId: recipe.outputItemDefId,
           qty: produceQty,
-          itemIds,
+          itemIds: [],
         },
       });
     }
@@ -1533,6 +1527,7 @@ class GemSynthesisService {
     if (steps.length === 0) {
       return { success: false, message: '材料或货币不足，无法批量合成' };
     }
+    await bufferSimpleCharacterItemGrants(characterId, userId, pendingItemGrants);
 
     const character = await getCharacterComputedByCharacterId(characterId, { bypassStaticCache: true });
     const totalSuccess = steps.reduce((sum, step) => sum + step.successCount, 0);

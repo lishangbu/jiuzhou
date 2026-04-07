@@ -18,10 +18,9 @@
 import { afterTransactionCommit, query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
 import type { GenerateOptions } from './equipmentService.js';
-import { itemService } from './itemService.js';
-import { getInventoryInfo, moveItemInstanceToBagWithStacking } from './inventory/index.js';
+import { moveItemInstanceToBagWithStacking } from './inventory/index.js';
 import { lockCharacterInventoryMutex } from './inventoryMutex.js';
-import { recordCollectItemEvent } from './taskService.js';
+import { recordCollectItemEventsBatch } from './taskService.js';
 import { createCacheLayer } from './shared/cacheLayer.js';
 import { getGameServerIfInitialized } from '../game/gameServer.js';
 import { grantSectionRewards } from './mainQuest/grantRewards.js';
@@ -34,6 +33,7 @@ import {
   type GrantedRewardPayload,
   type GrantedRewardPreviewResult,
 } from './shared/rewardPayload.js';
+import { applyCharacterRewardDeltas, createCharacterRewardDelta } from './shared/characterRewardSettlement.js';
 import { getItemDefinitionsByIds } from './staticConfigLoader.js';
 import {
   grantRewardItemWithAutoDisassemble,
@@ -52,6 +52,7 @@ import {
   type MailCounterDeltaInput,
   type MailCounterStateRow,
 } from './shared/mailCounterStore.js';
+import { enqueueCharacterItemGrant } from './shared/characterItemGrantDeltaService.js';
 
 // ============================================
 // 类型定义
@@ -909,46 +910,6 @@ class MailService {
   }
 
   /**
-   * 估算邮件附件所需背包格子数
-   * - 装备类：每个占一格
-   * - 消耗品/材料：按堆叠上限计算
-   */
-  private async estimateRequiredSlots(items: MailAttachItem[]): Promise<number> {
-    if (!items || items.length === 0) return 0;
-
-    const ids = Array.from(new Set(items.map((i) => i.item_def_id)));
-    const defs = getItemDefinitionsByIds(ids);
-
-    const defMap = new Map<string, { category: string; stack_max: number }>();
-    for (const id of ids) {
-      const def = defs.get(id);
-      if (!def) continue;
-      defMap.set(id, {
-        category: String(def.category || ''),
-        stack_max: Math.max(1, Math.floor(Number(def.stack_max) || 1)),
-      });
-    }
-
-    let slots = 0;
-    for (const item of items) {
-      const def = defMap.get(item.item_def_id);
-      if (!def) {
-        slots += Math.max(1, item.qty);
-        continue;
-      }
-
-      if (def.category === 'equipment') {
-        slots += Math.max(1, item.qty);
-      } else {
-        const stackMax = Math.max(1, def.stack_max || 1);
-        slots += Math.ceil(Math.max(1, item.qty) / stackMax);
-      }
-    }
-
-    return slots;
-  }
-
-  /**
    * 估算“实例附件”领取时实际新增占用的背包格子数。
    *
    * 作用：
@@ -1758,10 +1719,7 @@ class MailService {
   ): Promise<{ success: boolean; message: string; rewards?: RewardResult[] }> {
     const collectCounts = new Map<string, number>();
 
-    // 1. 先获取角色背包互斥锁，统一“背包锁 → 邮件行锁”的顺序，避免并发领取形成锁等待链。
-    await lockCharacterInventoryMutex(characterId);
-
-    // 2. 获取邮件并锁定（NOWAIT 避免锁等待拖到 statement_timeout）。
+    // 1. 获取邮件并锁定（NOWAIT 避免锁等待拖到 statement_timeout）。
     let mailResult: { rows: ClaimMailRow[] };
     try {
       const lockedMailResult = await query<ClaimMailRow>(`
@@ -1797,17 +1755,17 @@ class MailService {
 
     const mail = mailResult.rows[0];
 
-    // 3. 检查是否已领取
+    // 2. 检查是否已领取
     if (mail.claimed_at) {
       return { success: false, message: '附件已领取' };
     }
 
-    // 4. 检查是否过期
+    // 3. 检查是否过期
     if (mail.expire_at && new Date(mail.expire_at) < new Date()) {
       return { success: false, message: '邮件已过期' };
     }
 
-    // 5. 检查是否有附件
+    // 4. 检查是否有附件
     const attachRewards = normalizeGrantedRewardPayload(mail.attach_rewards);
     const hasAttachRewards = hasGrantedRewardPayload(attachRewards);
     const hasCurrency = mail.attach_silver > 0 || mail.attach_spirit_stones > 0;
@@ -1820,79 +1778,83 @@ class MailService {
     }
 
     let lockedInstanceRows: ClaimInstanceRow[] = [];
-    let requiredSlots = 0;
-    let freeSlots = 0;
+    if (attachInstanceIds.length > 0) {
+      // 只有“保留原实例属性”的附件仍需要同步入包，因此只为这一类领取持有背包互斥锁并做容量校验。
+      await lockCharacterInventoryMutex(characterId);
+      const lockedInstanceResult = await query<ClaimInstanceRow>(
+        `
+          SELECT id, item_def_id, qty, bind_type
+          FROM item_instance
+          WHERE id = ANY($1::bigint[])
+            AND owner_user_id = $2
+            AND owner_character_id = $3
+            AND location = 'mail'
+          FOR UPDATE
+        `,
+        [attachInstanceIds, userId, characterId],
+      );
+      lockedInstanceRows = lockedInstanceResult.rows;
 
-    // 6. 检查背包空间（如果有物品附件）
-    if (hasAttachRewards) {
-      const rewardAttachItems: MailAttachItem[] = (attachRewards.items ?? []).map((item) => ({
-        item_def_id: item.itemDefId,
-        qty: item.quantity,
-      }));
-      if (rewardAttachItems.length > 0) {
-        requiredSlots = await this.estimateRequiredSlots(rewardAttachItems);
-        const inventoryInfo = await getInventoryInfo(characterId);
-        freeSlots = inventoryInfo.bag_capacity - inventoryInfo.bag_used;
-        if (freeSlots < requiredSlots) {
-          return { success: false, message: `背包空间不足，需要${requiredSlots}格，当前剩余${freeSlots}格` };
+      const lockedIds = new Set(lockedInstanceRows.map((row) => Number(row.id)));
+      for (const attachInstanceId of attachInstanceIds) {
+        if (!lockedIds.has(attachInstanceId)) {
+          return { success: false, message: '邮件附件状态异常' };
         }
       }
-    } else if (hasItems) {
-      if (attachInstanceIds.length > 0) {
-        const lockedInstanceResult = await query<ClaimInstanceRow>(
-          `
-            SELECT id, item_def_id, qty, bind_type
+
+      if (
+        lockedInstanceRows.some(
+          (row) => String(row.item_def_id || '').trim().length === 0,
+        )
+      ) {
+        return { success: false, message: '邮件附件状态异常' };
+      }
+
+      const uniqueItemDefIds = Array.from(
+        new Set(
+          lockedInstanceRows
+            .map((row) => String(row.item_def_id || '').trim())
+            .filter((itemDefId) => itemDefId.length > 0),
+        ),
+      );
+      if (uniqueItemDefIds.length === 0) {
+        return { success: false, message: '邮件附件状态异常' };
+      }
+      const defs = getItemDefinitionsByIds(uniqueItemDefIds);
+      if (defs.size !== uniqueItemDefIds.length) {
+        return { success: false, message: '物品配置不存在' };
+      }
+
+      const requiredSlots = await this.estimateRequiredSlotsForInstanceAttachments(
+        characterId,
+        lockedInstanceRows,
+      );
+      const inventoryInfo = await query<{
+        bag_capacity: number;
+        bag_used: number;
+      }>(
+        `
+          SELECT
+            i.bag_capacity,
+            COALESCE(usage.bag_used, 0)::int AS bag_used
+          FROM inventory i
+          LEFT JOIN (
+            SELECT owner_character_id, COUNT(DISTINCT location_slot) AS bag_used
             FROM item_instance
-            WHERE id = ANY($1::bigint[])
-              AND owner_user_id = $2
-              AND owner_character_id = $3
-              AND location = 'mail'
-            FOR UPDATE
-          `,
-          [attachInstanceIds, userId, characterId],
-        );
-        lockedInstanceRows = lockedInstanceResult.rows;
-
-        const lockedIds = new Set(lockedInstanceRows.map((row) => Number(row.id)));
-        for (const attachInstanceId of attachInstanceIds) {
-          if (!lockedIds.has(attachInstanceId)) {
-            return { success: false, message: '邮件附件状态异常' };
-          }
-        }
-
-        if (
-          lockedInstanceRows.some(
-            (row) => String(row.item_def_id || '').trim().length === 0,
-          )
-        ) {
-          return { success: false, message: '邮件附件状态异常' };
-        }
-
-        const uniqueItemDefIds = Array.from(
-          new Set(
-            lockedInstanceRows
-              .map((row) => String(row.item_def_id || '').trim())
-              .filter((itemDefId) => itemDefId.length > 0),
-          ),
-        );
-        if (uniqueItemDefIds.length === 0) {
-          return { success: false, message: '邮件附件状态异常' };
-        }
-        const defs = getItemDefinitionsByIds(uniqueItemDefIds);
-        if (defs.size !== uniqueItemDefIds.length) {
-          return { success: false, message: '物品配置不存在' };
-        }
-
-        requiredSlots = await this.estimateRequiredSlotsForInstanceAttachments(
-          characterId,
-          lockedInstanceRows,
-        );
-      } else {
-        requiredSlots = await this.estimateRequiredSlots(attachItems);
-      }
-
-      const inventoryInfo = await getInventoryInfo(characterId);
-      freeSlots = inventoryInfo.bag_capacity - inventoryInfo.bag_used;
+            WHERE owner_character_id = $1
+              AND location = 'bag'
+              AND location_slot IS NOT NULL
+              AND location_slot >= 0
+            GROUP BY owner_character_id
+          ) AS usage
+            ON usage.owner_character_id = i.character_id
+          WHERE i.character_id = $1
+        `,
+        [characterId],
+      );
+      const bagCapacity = Number(inventoryInfo.rows[0]?.bag_capacity) || 0;
+      const bagUsed = Number(inventoryInfo.rows[0]?.bag_used) || 0;
+      const freeSlots = Math.max(0, bagCapacity - bagUsed);
       if (freeSlots < requiredSlots) {
         return { success: false, message: `背包空间不足，需要${requiredSlots}格，当前剩余${freeSlots}格` };
       }
@@ -1904,6 +1866,7 @@ class MailService {
       characterId,
       autoDisassemble,
     );
+    const rewardDelta = createCharacterRewardDelta();
 
     // 7. 发放奖励
     if (hasAttachRewards) {
@@ -1919,11 +1882,8 @@ class MailService {
       );
     } else if (hasItems || hasCurrency) {
       if (hasCurrency) {
-        await query(`
-          UPDATE characters
-          SET silver = silver + $1, spirit_stones = spirit_stones + $2, updated_at = NOW()
-          WHERE id = $3
-        `, [mail.attach_silver, mail.attach_spirit_stones, characterId]);
+        rewardDelta.silver += Math.max(0, Math.floor(Number(mail.attach_silver) || 0));
+        rewardDelta.spiritStones += Math.max(0, Math.floor(Number(mail.attach_spirit_stones) || 0));
 
         if (mail.attach_silver > 0) rewards.push({ type: 'silver', amount: mail.attach_silver });
         if (mail.attach_spirit_stones > 0) rewards.push({ type: 'spirit_stones', amount: mail.attach_spirit_stones });
@@ -1988,30 +1948,23 @@ class MailService {
               autoDisassembleSetting,
               sourceObtainedFrom: 'mail',
               createItem: async (params) => {
-                return itemService.createItem(
-                  userId,
+                return enqueueCharacterItemGrant({
                   characterId,
-                  params.itemDefId,
-                  params.qty,
-                  {
-                    location: 'bag',
-                    bindType: params.bindType,
-                    obtainedFrom: params.obtainedFrom,
-                    ...(params.equipOptions !== undefined
-                      ? { equipOptions: params.equipOptions as GenerateOptions }
-                      : {}),
-                  },
-                );
+                  userId,
+                  itemDefId: params.itemDefId,
+                  qty: params.qty,
+                  obtainedFrom: params.obtainedFrom,
+                  ...(params.bindType ? { bindType: params.bindType } : {}),
+                  ...(params.equipOptions !== undefined
+                    ? { equipOptions: params.equipOptions as GenerateOptions }
+                    : {}),
+                });
               },
               addSilver: async (targetCharacterId, silverAmount) => {
-                await query(
-                  `
-                    UPDATE characters
-                    SET silver = silver + $1, updated_at = NOW()
-                    WHERE id = $2
-                  `,
-                  [silverAmount, targetCharacterId],
-                );
+                if (targetCharacterId !== characterId) {
+                  return { success: false, message: '邮件领取资源目标不一致' };
+                }
+                rewardDelta.silver += silverAmount;
                 return { success: true, message: 'ok' };
               },
               sourceEquipOptions: attachItem.options?.equipOptions,
@@ -2041,18 +1994,17 @@ class MailService {
             continue;
           }
 
-          const createResult = await itemService.createItem(
-            userId,
+          const createResult = await enqueueCharacterItemGrant({
             characterId,
-            attachItem.item_def_id,
-            attachItem.qty,
-            {
-              location: 'bag',
-              bindType: attachItem.options?.bindType,
-              obtainedFrom: 'mail',
-              equipOptions: attachItem.options?.equipOptions
-            }
-          );
+            userId,
+            itemDefId: attachItem.item_def_id,
+            qty: attachItem.qty,
+            obtainedFrom: 'mail',
+            ...(attachItem.options?.bindType ? { bindType: attachItem.options.bindType } : {}),
+            ...(attachItem.options?.equipOptions
+              ? { equipOptions: attachItem.options.equipOptions as GenerateOptions }
+              : {}),
+          });
 
           if (!createResult.success) {
             return { success: false, message: `物品创建失败: ${createResult.message}` };
@@ -2074,6 +2026,10 @@ class MailService {
       }
     }
 
+    if (rewardDelta.exp !== 0 || rewardDelta.silver !== 0 || rewardDelta.spiritStones !== 0) {
+      await applyCharacterRewardDeltas(new Map([[characterId, rewardDelta]]));
+    }
+
     // 8. 更新邮件状态
     await query(`
       UPDATE mail
@@ -2082,8 +2038,14 @@ class MailService {
       WHERE id = $2
     `, [JSON.stringify(claimedInstanceIds), mailId]);
 
-    for (const [itemDefId, qty] of collectCounts.entries()) {
-      await recordCollectItemEvent(characterId, itemDefId, qty);
+    if (collectCounts.size > 0) {
+      await recordCollectItemEventsBatch([{
+        characterId,
+        events: [...collectCounts.entries()].map(([itemId, count]) => ({
+          itemId,
+          count,
+        })),
+      }]);
     }
 
     const claimState = buildMailCounterStateFromRow(mail);

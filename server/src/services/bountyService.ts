@@ -4,6 +4,8 @@ import { getBountyDefinitions, getItemDefinitions, getItemDefinitionsByIds } fro
 import { getTaskDefinitionById } from './taskDefinitionService.js';
 import { resolveQualityRankFromName } from './shared/itemQuality.js';
 import { Transactional } from '../decorators/transactional.js';
+import { loadCharacterSettlementResourceSnapshot } from './shared/characterSettlementResourceDeltaService.js';
+import { applyCharacterRewardDeltas } from './shared/characterRewardSettlement.js';
 
 export type BountySourceType = 'daily' | 'player';
 export type BountyClaimPolicy = 'unique' | 'limited' | 'unlimited';
@@ -78,7 +80,6 @@ type BountyInstanceRow = {
 
 type TaskStatusRow = { status: string | null };
 type InsertIdRow = { id: number | string | null };
-type CharacterCurrencyRow = { spirit_stones: number | string | null; silver: number | string | null };
 type ClaimLookupRow = {
   claim_id: number | string | null;
   claim_status: string | null;
@@ -591,26 +592,28 @@ class BountyService {
       }
     }
 
-    const charRes = await query<CharacterCurrencyRow>(
-      `SELECT spirit_stones, silver FROM characters WHERE id = $1 LIMIT 1 FOR UPDATE`,
-      [cid],
-    );
-    if (charRes.rows.length === 0) {
+    const resourceSnapshot = await loadCharacterSettlementResourceSnapshot(cid, {
+      forUpdate: true,
+    });
+    if (!resourceSnapshot) {
       return { success: false, message: '角色不存在' };
     }
-    const curSpirit = asFiniteNonNegativeInt(charRes.rows[0]?.spirit_stones, 0);
-    const curSilver = asFiniteNonNegativeInt(charRes.rows[0]?.silver, 0);
+    const curSpirit = asFiniteNonNegativeInt(resourceSnapshot.spiritStones, 0);
+    const curSilver = asFiniteNonNegativeInt(resourceSnapshot.silver, 0);
     if (curSpirit < spiritCost) {
       return { success: false, message: '灵石不足' };
     }
     if (curSilver < silverCost) {
       return { success: false, message: '银两不足' };
     }
-
-    await query(
-      `UPDATE characters SET spirit_stones = spirit_stones - $1, silver = silver - $2, updated_at = NOW() WHERE id = $3`,
-      [spiritCost, silverCost, cid],
-    );
+    await applyCharacterRewardDeltas(new Map([[
+      cid,
+      {
+        exp: 0,
+        spiritStones: -spiritCost,
+        silver: -silverCost,
+      },
+    ]]));
 
     const res = await query<InsertIdRow>(
       `

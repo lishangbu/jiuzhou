@@ -23,24 +23,19 @@
 import { query, withTransaction } from '../config/database.js';
 import { battleDropService } from './battleDropService.js';
 import { settleTowerBattle } from './tower/service.js';
-import { itemService } from './itemService.js';
-import { sendSystemMail, type MailAttachItem } from './mailService.js';
 import { recordDungeonClearEvent, recordKillMonsterEvents } from './taskService.js';
 import { normalizeAutoDisassembleSetting } from './autoDisassembleRules.js';
 import {
   grantRewardItemWithAutoDisassemble,
   type AutoDisassembleSetting,
-  type PendingMailItem,
 } from './autoDisassembleRewardService.js';
 import {
   addCharacterRewardDelta,
   applyCharacterRewardDeltas,
   type CharacterRewardDelta,
 } from './shared/characterRewardSettlement.js';
-import { createCharacterBagSlotAllocator } from './shared/characterBagSlotAllocator.js';
-import { createCharacterInventoryMutationContext } from './shared/characterInventoryMutationContext.js';
+import { bufferCharacterItemGrantDeltas } from './shared/characterItemGrantDeltaService.js';
 import { resolveQualityRankFromName } from './shared/itemQuality.js';
-import { lockCharacterRewardSettlementTargets } from './shared/characterRewardTargetLock.js';
 import { getDungeonDifficultyById, getItemDefinitionById } from './staticConfigLoader.js';
 import { rollDungeonRewardBundle, mergeDungeonRewardBundle } from './dungeon/shared/rewards.js';
 import { resolveDungeonRewardMultiplier } from './dungeon/shared/difficulty.js';
@@ -561,13 +556,13 @@ const settleArenaBattleInDb = async (
  * 数据流/状态流：
  * - runner 取到 dungeon-clear 任务；
  * - 外层事务包裹本函数；
- * - 本函数先统一加锁，再执行奖励入包、补发邮件、记录 dungeon_record；
+ * - 本函数先读取通关奖励与自动分解配置，再把物品奖励写入资产 Delta、记录 dungeon_record；
  * - 若实例已不存在则直接返回丢弃信号，不再把事务异常冒泡给 runner；
  * - 事务提交后由 runner 删除任务。
  *
  * 关键边界条件与坑点：
- * 1. `lockCharacterRewardSettlementTargets` 依赖事务上下文，不能从非事务函数直接调用。
- * 2. 奖励物品创建和角色资源写回必须与 dungeon_record 落库保持同一事务，避免出现“记录已写但奖励没入包”的分裂状态。
+ * 1. 资产 Delta 必须挂在事务提交后写入 Redis，避免 dungeon_record 回滚后仍把奖励推进到异步入库队列。
+ * 2. `dungeon_record.rewards` 里记录的数量必须与写入 Delta 的数量一致，不能因为异步落库就漏记通关奖励明细。
  */
 const settleDungeonClearInDbInTransaction = async (
   task: DeferredSettlementTask,
@@ -585,9 +580,6 @@ const settleDungeonClearInDbInTransaction = async (
   const clearCountMap = new Map<number, number>();
   const autoDisassembleSettings = new Map<number, AutoDisassembleSetting>();
   const pendingCharacterRewardDeltas = new Map<number, CharacterRewardDelta>();
-  const pendingMailByCharacter = new Map<number, { userId: number; items: MailAttachItem[] }>();
-  let bagSlotAllocator: Awaited<ReturnType<typeof createCharacterBagSlotAllocator>> | null = null;
-  let inventoryMutationContext: Awaited<ReturnType<typeof createCharacterInventoryMutationContext>> | null = null;
   const itemMetaCache = new Map<
     string,
     {
@@ -614,8 +606,6 @@ const settleDungeonClearInDbInTransaction = async (
   }
 
   if (participantCharacterIds.length > 0) {
-    await lockCharacterRewardSettlementTargets(participantCharacterIds);
-
     const clearCountRes = await query(
       `
         SELECT character_id, COUNT(1)::int AS cnt
@@ -655,8 +645,6 @@ const settleDungeonClearInDbInTransaction = async (
         }),
       );
     }
-    bagSlotAllocator = await createCharacterBagSlotAllocator(participantCharacterIds);
-    inventoryMutationContext = await createCharacterInventoryMutationContext(participantCharacterIds);
   }
 
   const appendGrantedItem = (
@@ -679,36 +667,6 @@ const settleDungeonClearInDbInTransaction = async (
       qty: normalizedQty,
       item_ids: safeItemIds,
     });
-  };
-
-  const appendPendingMailItems = (
-    characterId: number,
-    userId: number,
-    items: PendingMailItem[],
-  ): void => {
-    if (items.length <= 0) return;
-    const pending = pendingMailByCharacter.get(characterId) ?? { userId, items: [] as MailAttachItem[] };
-    for (const item of items) {
-      const targetBindType = item.options?.bindType ?? 'none';
-      const targetEquipOptionsKey = JSON.stringify(item.options?.equipOptions ?? null);
-      const existing = pending.items.find((entry) => {
-        const bindType = entry.options?.bindType ?? 'none';
-        const equipOptionsKey = JSON.stringify(entry.options?.equipOptions ?? null);
-        return entry.item_def_id === item.item_def_id
-          && bindType === targetBindType
-          && equipOptionsKey === targetEquipOptionsKey;
-      });
-      if (existing) {
-        existing.qty += item.qty;
-        continue;
-      }
-      pending.items.push({
-        item_def_id: item.item_def_id,
-        qty: item.qty,
-        ...(item.options ? { options: { ...item.options } } : {}),
-      });
-    }
-    pendingMailByCharacter.set(characterId, pending);
   };
 
   const getItemMeta = async (itemDefId: string): Promise<{
@@ -776,15 +734,16 @@ const settleDungeonClearInDbInTransaction = async (
         autoDisassembleSetting,
         sourceObtainedFrom: 'dungeon_clear_reward',
         createItem: async ({ itemDefId, qty, bindType, obtainedFrom, equipOptions }) => {
-          return itemService.createItem(participant.userId, characterId, itemDefId, qty, {
-            location: 'bag',
+          await bufferCharacterItemGrantDeltas([{
+            characterId,
+            userId: participant.userId,
+            itemDefId,
+            qty,
             obtainedFrom,
             ...(bindType ? { bindType } : {}),
             ...(equipOptions ? { equipOptions } : {}),
-            ...(bagSlotAllocator ? { bagSlotAllocator } : {}),
-            ...(inventoryMutationContext ? { inventoryMutationContext } : {}),
-            ...(bagSlotAllocator ? { skipInventoryMutexLock: true } : {}),
-          });
+          }]);
+          return { success: true, message: '秘境奖励物品已写入异步资产 Delta', itemIds: [] };
         },
         addSilver: async (ownerCharacterId, silverGain) => {
           const safeSilver = Math.max(0, Math.floor(Number(silverGain) || 0));
@@ -806,7 +765,6 @@ const settleDungeonClearInDbInTransaction = async (
       for (const grantedItem of grantResult.grantedItems) {
         appendGrantedItem(grantedItems, grantedItem.itemDefId, grantedItem.qty, grantedItem.itemIds);
       }
-      appendPendingMailItems(characterId, participant.userId, grantResult.pendingMailItems);
       if (grantResult.gainedSilver > 0) {
         autoDisassembleSilverGained += grantResult.gainedSilver;
       }
@@ -845,28 +803,6 @@ const settleDungeonClearInDbInTransaction = async (
         isFirstClear,
       ],
     );
-  }
-
-  for (const [receiverCharacterId, entry] of pendingMailByCharacter.entries()) {
-    const chunkSize = 10;
-    for (let index = 0; index < entry.items.length; index += chunkSize) {
-      const chunk = entry.items.slice(index, index + chunkSize);
-      const mailRes = await sendSystemMail(
-        entry.userId,
-        receiverCharacterId,
-        '秘境通关奖励补发',
-        '由于背包已满，部分秘境通关奖励已通过邮件补发，请及时领取。',
-        { items: chunk },
-        30,
-      );
-      if (!mailRes.success) {
-        settlementRunnerLogger.warn({
-          instanceId: dungeonSettlement.instanceId,
-          receiverCharacterId,
-          message: mailRes.message,
-        }, '秘境奖励补发邮件发送失败');
-      }
-    }
   }
 
   for (const participant of rewardParticipants) {

@@ -17,8 +17,9 @@ import {
   type AutoDisassembleSetting,
 } from '../autoDisassembleRewardService.js';
 import type { GenerateOptions } from '../equipmentService.js';
-import { itemService } from '../itemService.js';
 import { grantFeatureUnlocksWithSideEffects } from '../featureUnlockService.js';
+import { enqueueCharacterItemGrant } from '../shared/characterItemGrantDeltaService.js';
+import { applyCharacterRewardDeltas, createCharacterRewardDelta } from '../shared/characterRewardSettlement.js';
 import {
   getItemDefinitionsByIds,
   getTechniqueDefinitions,
@@ -44,25 +45,23 @@ export const grantSectionRewards = async (
   const obtainedFrom = asString(options?.obtainedFrom) || 'main_quest';
   const obtainedRefId = asString(options?.obtainedRefId) || undefined;
   const autoDisassembleSetting = options?.autoDisassembleSetting;
+  const rewardDelta = createCharacterRewardDelta();
 
   const exp = asNumber((rewards as { exp?: unknown }).exp, 0);
   if (exp > 0) {
-    await query(`UPDATE characters SET exp = exp + $1, updated_at = NOW() WHERE id = $2`, [exp, characterId]);
+    rewardDelta.exp += exp;
     results.push({ type: 'exp', amount: exp });
   }
 
   const silver = asNumber((rewards as { silver?: unknown }).silver, 0);
   if (silver > 0) {
-    await query(`UPDATE characters SET silver = silver + $1, updated_at = NOW() WHERE id = $2`, [silver, characterId]);
+    rewardDelta.silver += silver;
     results.push({ type: 'silver', amount: silver });
   }
 
   const spiritStones = asNumber((rewards as { spirit_stones?: unknown }).spirit_stones, 0);
   if (spiritStones > 0) {
-    await query(`UPDATE characters SET spirit_stones = spirit_stones + $1, updated_at = NOW() WHERE id = $2`, [
-      spiritStones,
-      characterId,
-    ]);
+    rewardDelta.spiritStones += spiritStones;
     results.push({ type: 'spirit_stones', amount: spiritStones });
   }
 
@@ -95,20 +94,23 @@ export const grantSectionRewards = async (
         autoDisassembleSetting,
         sourceObtainedFrom: obtainedFrom,
         createItem: async (params) => {
-          return itemService.createItem(userId, characterId, params.itemDefId, params.qty, {
-            location: 'bag',
-            bindType: params.bindType,
+          return enqueueCharacterItemGrant({
+            characterId,
+            userId,
+            itemDefId: params.itemDefId,
+            qty: params.qty,
             obtainedFrom: params.obtainedFrom,
+            ...(params.bindType ? { bindType: params.bindType } : {}),
             ...(params.equipOptions !== undefined
               ? { equipOptions: params.equipOptions as GenerateOptions }
               : {}),
           });
         },
         addSilver: async (targetCharacterId, silverAmount) => {
-          await query(
-            `UPDATE characters SET silver = silver + $1, updated_at = NOW() WHERE id = $2`,
-            [silverAmount, targetCharacterId],
-          );
+          if (targetCharacterId !== characterId) {
+            return { success: false, message: '主线奖励资源目标不一致' };
+          }
+          rewardDelta.silver += silverAmount;
           return { success: true, message: 'ok' };
         },
       });
@@ -129,8 +131,11 @@ export const grantSectionRewards = async (
       continue;
     }
 
-    const result = await itemService.createItem(userId, characterId, itemDefId, quantity, {
-      location: 'bag',
+    const result = await enqueueCharacterItemGrant({
+      characterId,
+      userId,
+      itemDefId,
+      qty: quantity,
       obtainedFrom,
     });
     assertServiceSuccess(result);
@@ -178,6 +183,10 @@ export const grantSectionRewards = async (
     for (const t of normalizedTitles) {
       results.push({ type: 'title', title: t });
     }
+  }
+
+  if (rewardDelta.exp > 0 || rewardDelta.silver > 0 || rewardDelta.spiritStones > 0) {
+    await applyCharacterRewardDeltas(new Map([[characterId, rewardDelta]]));
   }
 
   const unlockFeatures = asArray<string>((rewards as { unlock_features?: unknown }).unlock_features)

@@ -33,12 +33,12 @@ import { resolveQualityRankFromName } from "../shared/itemQuality.js";
 import { resolveItemCanDisassemble } from "../shared/itemDisassembleRule.js";
 import { consumeSpecificItemInstance, addCharacterCurrencies } from "./shared/consume.js";
 import { getStaticItemDef } from "./shared/helpers.js";
+import { bufferSimpleCharacterItemGrants } from "../shared/characterItemGrantDeltaService.js";
 import type {
   InventoryLocation,
   DisassembleGrantedItemReward,
   DisassembleRewardsPayload,
 } from "./shared/types.js";
-import { addItemToInventory } from "./bag.js";
 
 type SingleDisassembleItemRow = {
   id: number;
@@ -261,29 +261,23 @@ export const disassembleEquipment = async (
   }
 
   const grantedItemRewards: DisassembleGrantedItemReward[] = [];
+  const pendingItemGrants: Array<{ itemDefId: string; qty: number; obtainedFrom: string }> = [];
   for (let index = 0; index < rewardPlanResult.rewards.items.length; index += 1) {
     const itemReward = rewardPlanResult.rewards.items[index];
     const resolvedReward = resolvedRewardItems.items[index];
-    const addResult = await addItemToInventory(
-      characterId,
-      userId,
-      itemReward.itemDefId,
-      itemReward.qty,
-      {
-        location: "bag",
-        obtainedFrom: "disassemble",
-      },
-    );
-    if (!addResult.success) {
-      return addResult as { success: false; message: string };
-    }
+    pendingItemGrants.push({
+      itemDefId: itemReward.itemDefId,
+      qty: itemReward.qty,
+      obtainedFrom: "disassemble",
+    });
     grantedItemRewards.push({
       itemDefId: itemReward.itemDefId,
       name: resolvedReward.name,
       qty: itemReward.qty,
-      itemIds: addResult.itemIds,
+      itemIds: [],
     });
   }
+  await bufferSimpleCharacterItemGrants(characterId, userId, pendingItemGrants);
 
   if (rewardPlanResult.rewards.silver > 0) {
     const addCurrencyRes = await addCharacterCurrencies(
@@ -495,28 +489,22 @@ export const disassembleEquipmentBatch = async (
   }
 
   const grantedItemRewards: DisassembleGrantedItemReward[] = [];
+  const pendingItemGrants: Array<{ itemDefId: string; qty: number; obtainedFrom: string }> = [];
   for (const rewardItem of rewardItemsByDefId.values()) {
     if (rewardItem.qty <= 0) continue;
-    const addRes = await addItemToInventory(
-      characterId,
-      userId,
-      rewardItem.itemDefId,
-      rewardItem.qty,
-      {
-        location: "bag",
-        obtainedFrom: "disassemble",
-      },
-    );
-    if (!addRes.success) {
-      return addRes as { success: false; message: string };
-    }
+    pendingItemGrants.push({
+      itemDefId: rewardItem.itemDefId,
+      qty: rewardItem.qty,
+      obtainedFrom: "disassemble",
+    });
     grantedItemRewards.push({
       itemDefId: rewardItem.itemDefId,
       name: rewardItem.name,
       qty: rewardItem.qty,
-      itemIds: addRes.itemIds,
+      itemIds: [],
     });
   }
+  await bufferSimpleCharacterItemGrants(characterId, userId, pendingItemGrants);
 
   if (totalSilver > 0) {
     const addCurrencyRes = await addCharacterCurrencies(

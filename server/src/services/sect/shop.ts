@@ -15,7 +15,7 @@
 import { query } from '../../config/database.js';
 import { Transactional } from '../../decorators/transactional.js';
 import { BusinessError } from '../../middleware/BusinessError.js';
-import { itemService } from '../itemService.js';
+import { enqueueCharacterItemGrant } from '../shared/characterItemGrantDeltaService.js';
 import { assertMember, getCharacterUserId, toNumber } from './db.js';
 import { recordSectShopBuyEventTx } from './quests.js';
 import { BAG_EXPAND_SHOP_ITEM_ID, SECT_SHOP_ITEMS } from './shopCatalog.js';
@@ -154,8 +154,11 @@ class SectShopService {
     await query(`UPDATE sect_member SET contribution = contribution - $2 WHERE character_id = $1`, [characterId, cost]);
 
     const giveQty = shopItemUnitQty * q;
-    const createRes = await itemService.createItem(userId, characterId, shopItem.itemDefId, giveQty, {
-      location: 'bag',
+    const createRes = await enqueueCharacterItemGrant({
+      characterId,
+      userId,
+      itemDefId: shopItem.itemDefId,
+      qty: giveQty,
       obtainedFrom: 'sect_shop',
     });
     if (!createRes.success) throw new BusinessError(createRes.message);

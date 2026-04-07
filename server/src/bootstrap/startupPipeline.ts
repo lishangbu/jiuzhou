@@ -74,6 +74,18 @@ import {
   initializeRankSnapshotNightlyRefreshScheduler,
   stopRankSnapshotNightlyRefreshScheduler,
 } from "../services/rankSnapshotNightlyRefreshScheduler.js";
+import {
+  initializeCharacterSettlementResourceDeltaService,
+  shutdownCharacterSettlementResourceDeltaService,
+} from "../services/shared/characterSettlementResourceDeltaService.js";
+import {
+  initializeCharacterItemGrantDeltaService,
+  shutdownCharacterItemGrantDeltaService,
+} from "../services/shared/characterItemGrantDeltaService.js";
+import {
+  initializeTaskProgressDeltaFlushService,
+  shutdownTaskProgressDeltaFlushService,
+} from "../services/taskService.js";
 
 export interface StartServerOptions {
   httpServer: HttpServer;
@@ -121,6 +133,9 @@ export const startServerWithPipeline = async (
   await runStartupStep("动态伙伴快照失效", refreshGeneratedPartnerSnapshots);
   await runStartupStep("数据准备", initTables);
   await runStartupStep("性能索引同步", ensurePerformanceIndexes);
+  await runStartupStep("角色资源 Delta 聚合器初始化", initializeCharacterSettlementResourceDeltaService);
+  await runStartupStep("角色物品授予 Delta 聚合器初始化", initializeCharacterItemGrantDeltaService);
+  await runStartupStep("角色软进度 Delta 聚合器初始化", initializeTaskProgressDeltaFlushService);
   await runStartupStep("头像清理检查", clearAllAvatarsOnce);
   await runStartupStep("异常物品数据清理", () => itemDataCleanupService.cleanupUndefinedItemDataOnStartup());
 
@@ -285,6 +300,15 @@ export const registerGracefulShutdown = (httpServer: HttpServer): void => {
       // 5. 刷新所有缓冲区
       await flushAllBuffers();
       console.log("✓ 挂机缓冲区已刷写");
+
+      await shutdownCharacterSettlementResourceDeltaService();
+      console.log("✓ 角色资源 Delta 聚合器已停止");
+
+      await shutdownCharacterItemGrantDeltaService();
+      console.log("✓ 角色物品授予 Delta 聚合器已停止");
+
+      await shutdownTaskProgressDeltaFlushService();
+      console.log("✓ 角色软进度 Delta 聚合器已停止");
 
       // 6. 关闭外部连接
       await closeRedis();

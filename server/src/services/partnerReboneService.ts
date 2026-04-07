@@ -25,8 +25,8 @@ import { randomUUID } from 'crypto';
 import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
 import { PARTNER_SYSTEM_FEATURE_CODE } from './featureUnlockService.js';
-import { addItemToInventory } from './inventory/index.js';
 import { getCharacterUserId } from './sect/db.js';
+import { enqueueCharacterItemGrant } from './shared/characterItemGrantDeltaService.js';
 import {
   buildPartnerReboneJobState,
   type PartnerReboneJobStateInput,
@@ -136,8 +136,11 @@ class PartnerReboneService {
     if (!userId) {
       throw new Error('角色归属用户不存在，无法退回归元洗髓露');
     }
-    const addResult = await addItemToInventory(characterId, userId, row.itemDefId, row.itemQty, {
-      location: 'bag',
+    const addResult = await enqueueCharacterItemGrant({
+      characterId,
+      userId,
+      itemDefId: row.itemDefId,
+      qty: row.itemQty,
       obtainedFrom: `partner_rebone_refund:${row.reboneId}`,
     });
     if (!addResult.success) {

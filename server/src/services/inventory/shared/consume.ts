@@ -18,14 +18,21 @@
  *
  * 数据流：
  * - 物品扣除：查询 item_instance 表并锁定目标行 → 校验数量 → 执行扣除
- * - 资源变更：对 characters 执行条件 UPDATE/RETURNING → 仅在失败时补查只读快照区分“不存在”和“余额不足”
+ * - 资源变更：锁定角色资源基线 → 叠加 Redis pending Delta → 校验余额 → 事务提交后写入 signed Delta
  *
  * 边界条件：
  * 1. consumeMaterialByDefId 优先消耗未锁定、数量最多的堆叠行，全部锁定时报"材料已锁定"
- * 2. consumeCharacterStoredResources / consumeCharacterCurrencies / addCharacterCurrencies 不再先 `FOR UPDATE characters`，避免在已持有背包锁的事务里额外拉长角色行锁等待
+ * 2. number 版资源增减必须走统一 Delta 口径；否则 flush 窗口内继续直写 `characters` 会和缓存账本出现裂缝
  */
 import { query } from "../../../config/database.js";
 import { clampInt } from "./helpers.js";
+import {
+  bufferCharacterSettlementCurrencyExactDeltas,
+  loadCharacterSettlementCurrencyExactSnapshot,
+  loadCharacterSettlementResourceSnapshot,
+} from "../../shared/characterSettlementResourceDeltaService.js";
+import { applyCharacterRewardDeltas } from "../../shared/characterRewardSettlement.js";
+import { afterTransactionCommit } from "../../../config/database.js";
 
 type CharacterStoredResourceSnapshot = {
   silver: number;
@@ -211,55 +218,41 @@ export const consumeCharacterStoredResources = async (
   if (silverCost <= 0 && spiritCost <= 0 && expCost <= 0)
     return { success: true, message: "无需扣除资源" };
 
-  const updatedResult = await query(
-    `
-      UPDATE characters
-      SET silver = silver - $2,
-          spirit_stones = spirit_stones - $3,
-          exp = exp - $4,
-          updated_at = NOW()
-      WHERE id = $1
-        AND silver >= $2
-        AND spirit_stones >= $3
-        AND exp >= $4
-      RETURNING silver, spirit_stones, exp
-    `,
-    [characterId, silverCost, spiritCost, expCost],
-  );
-  if (updatedResult.rows.length > 0) {
-    return {
-      success: true,
-      message: "扣除成功",
-      remaining: {
-        silver: Number(updatedResult.rows[0].silver ?? 0) || 0,
-        spiritStones: Number(updatedResult.rows[0].spirit_stones ?? 0) || 0,
-        exp: Number(updatedResult.rows[0].exp ?? 0) || 0,
-      },
-    };
-  }
-
-  const charResult = await query(
-    `SELECT silver, spirit_stones, exp FROM characters WHERE id = $1 LIMIT 1`,
-    [characterId],
-  );
-  if (charResult.rows.length === 0) {
+  const resourceSnapshot = await loadCharacterSettlementResourceSnapshot(characterId, {
+    forUpdate: true,
+  });
+  if (!resourceSnapshot) {
     return { success: false, message: "角色不存在" };
   }
 
-  const curSilver = Number(charResult.rows[0].silver ?? 0) || 0;
-  const curSpirit = Number(charResult.rows[0].spirit_stones ?? 0) || 0;
-  const curExp = Number(charResult.rows[0].exp ?? 0) || 0;
-  if (curSilver < silverCost) {
+  if (resourceSnapshot.silver < silverCost) {
     return { success: false, message: `银两不足，需要${silverCost}` };
   }
-  if (curSpirit < spiritCost) {
+  if (resourceSnapshot.spiritStones < spiritCost) {
     return { success: false, message: `灵石不足，需要${spiritCost}` };
   }
-  if (curExp < expCost) {
+  if (resourceSnapshot.exp < expCost) {
     return { success: false, message: `经验不足，需要${expCost}` };
   }
 
-  return { success: false, message: "角色资源已变化，请重试" };
+  await applyCharacterRewardDeltas(new Map([[
+    characterId,
+    {
+      silver: -silverCost,
+      spiritStones: -spiritCost,
+      exp: -expCost,
+    },
+  ]]));
+
+  return {
+    success: true,
+    message: "扣除成功",
+    remaining: {
+      silver: resourceSnapshot.silver - silverCost,
+      spiritStones: resourceSnapshot.spiritStones - spiritCost,
+      exp: resourceSnapshot.exp - expCost,
+    },
+  };
 };
 
 /**
@@ -287,48 +280,38 @@ export const consumeCharacterCurrenciesExact = async (
     return { success: true, message: "无需扣除货币" };
   }
 
-  const updatedResult = await query(
-    `
-      UPDATE characters
-      SET silver = silver - $2,
-          spirit_stones = spirit_stones - $3,
-          updated_at = NOW()
-      WHERE id = $1
-        AND silver >= $2
-        AND spirit_stones >= $3
-      RETURNING silver, spirit_stones
-    `,
-    [characterId, silverCost.toString(), spiritCost.toString()],
-  );
-  if (updatedResult.rows.length > 0) {
-    return {
-      success: true,
-      message: "扣除成功",
-      remaining: {
-        silver: BigInt(updatedResult.rows[0].silver ?? 0),
-        spiritStones: BigInt(updatedResult.rows[0].spirit_stones ?? 0),
-      },
-    };
-  }
-
-  const charResult = await query(
-    `SELECT silver, spirit_stones FROM characters WHERE id = $1 LIMIT 1`,
-    [characterId],
-  );
-  if (charResult.rows.length === 0) {
+  const currencySnapshot = await loadCharacterSettlementCurrencyExactSnapshot(characterId, {
+    forUpdate: true,
+  });
+  if (!currencySnapshot) {
     return { success: false, message: "角色不存在" };
   }
 
-  const curSilver = BigInt(charResult.rows[0].silver ?? 0);
-  const curSpirit = BigInt(charResult.rows[0].spirit_stones ?? 0);
-  if (curSilver < silverCost) {
+  if (currencySnapshot.silver < silverCost) {
     return { success: false, message: `银两不足，需要${silverCost.toString()}` };
   }
-  if (curSpirit < spiritCost) {
+  if (currencySnapshot.spiritStones < spiritCost) {
     return { success: false, message: `灵石不足，需要${spiritCost.toString()}` };
   }
 
-  return { success: false, message: "角色货币已变化，请重试" };
+  await afterTransactionCommit(async () => {
+    await bufferCharacterSettlementCurrencyExactDeltas(new Map([[
+      characterId,
+      {
+        silver: -silverCost,
+        spiritStones: -spiritCost,
+      },
+    ]]));
+  });
+
+  return {
+    success: true,
+    message: "扣除成功",
+    remaining: {
+      silver: currencySnapshot.silver - silverCost,
+      spiritStones: currencySnapshot.spiritStones - spiritCost,
+    },
+  };
 };
 
 /**
@@ -344,20 +327,18 @@ export const addCharacterCurrencies = async (
   if (silverGain <= 0 && spiritGain <= 0)
     return { success: true, message: "无需增加货币" };
 
-  const updatedResult = await query(
-    `
-      UPDATE characters
-      SET silver = silver + $2,
-          spirit_stones = spirit_stones + $3,
-          updated_at = NOW()
-      WHERE id = $1
-      RETURNING id
-    `,
-    [characterId, silverGain, spiritGain],
-  );
-  if (updatedResult.rows.length === 0) {
+  const resourceSnapshot = await loadCharacterSettlementResourceSnapshot(characterId);
+  if (!resourceSnapshot) {
     return { success: false, message: "角色不存在" };
   }
+  await applyCharacterRewardDeltas(new Map([[
+    characterId,
+    {
+      exp: 0,
+      silver: silverGain,
+      spiritStones: spiritGain,
+    },
+  ]]));
   return { success: true, message: "增加成功" };
 };
 
@@ -376,28 +357,27 @@ export const addCharacterCurrenciesExact = async (
     return { success: true, message: "无需增加货币" };
   }
 
-  const updatedResult = await query(
-    `
-      UPDATE characters
-      SET silver = silver + $2,
-          spirit_stones = spirit_stones + $3,
-          updated_at = NOW()
-      WHERE id = $1
-      RETURNING id, silver, spirit_stones
-    `,
-    [characterId, silverGain.toString(), spiritGain.toString()],
-  );
-  if (updatedResult.rows.length === 0) {
+  const currencySnapshot = await loadCharacterSettlementCurrencyExactSnapshot(characterId);
+  if (!currencySnapshot) {
     return { success: false, message: "角色不存在" };
   }
+  await afterTransactionCommit(async () => {
+    await bufferCharacterSettlementCurrencyExactDeltas(new Map([[
+      characterId,
+      {
+        silver: silverGain,
+        spiritStones: spiritGain,
+      },
+    ]]));
+  });
   return {
     success: true,
     message: "增加成功",
     ...(options.includeRemaining
       ? {
           remaining: {
-            silver: BigInt(updatedResult.rows[0].silver ?? 0),
-            spiritStones: BigInt(updatedResult.rows[0].spirit_stones ?? 0),
+            silver: currencySnapshot.silver + silverGain,
+            spiritStones: currencySnapshot.spiritStones + spiritGain,
           },
         }
       : {}),

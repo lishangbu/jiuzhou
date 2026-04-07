@@ -1,6 +1,7 @@
 import { query } from '../../config/database.js';
 import { Transactional } from '../../decorators/transactional.js';
-import { itemService } from '../itemService.js';
+import { enqueueCharacterItemGrant } from '../shared/characterItemGrantDeltaService.js';
+import { applyCharacterRewardDeltas, createCharacterRewardDelta } from '../shared/characterRewardSettlement.js';
 import {
   asFiniteNonNegativeInt,
   asNonEmptyString,
@@ -111,6 +112,7 @@ class AchievementClaimService {
   ): Promise<AchievementRewardView[]> {
     const itemMeta = await this.loadItemMetaMap(this.collectItemRewardIds(rewards));
     const out: AchievementRewardView[] = [];
+    const rewardDelta = createCharacterRewardDelta();
 
     for (const reward of rewards) {
       if (!reward || typeof reward !== 'object') continue;
@@ -122,11 +124,9 @@ class AchievementClaimService {
         const amount = asFiniteNonNegativeInt(row.amount, 0);
         if (amount <= 0) continue;
 
-        const field = type === 'silver' ? 'silver' : type === 'spirit_stones' ? 'spirit_stones' : 'exp';
-        await query(
-          `UPDATE characters SET ${field} = ${field} + $1, updated_at = NOW() WHERE id = $2`,
-          [amount, characterId],
-        );
+        if (type === 'silver') rewardDelta.silver += amount;
+        if (type === 'spirit_stones') rewardDelta.spiritStones += amount;
+        if (type === 'exp') rewardDelta.exp += amount;
         out.push({ type, amount });
         continue;
       }
@@ -136,7 +136,11 @@ class AchievementClaimService {
         if (!itemDefId) continue;
         const qty = Math.max(1, asFiniteNonNegativeInt(row.qty, 1));
 
-        const created = await itemService.createItem(userId, characterId, itemDefId, qty, {
+        const created = await enqueueCharacterItemGrant({
+          characterId,
+          userId,
+          itemDefId,
+          qty,
           obtainedFrom,
         });
         if (!created.success) {
@@ -152,6 +156,10 @@ class AchievementClaimService {
           itemIcon: meta?.icon ?? null,
         });
       }
+    }
+
+    if (rewardDelta.exp > 0 || rewardDelta.silver > 0 || rewardDelta.spiritStones > 0) {
+      await applyCharacterRewardDeltas(new Map([[characterId, rewardDelta]]));
     }
 
     return out;

@@ -3,9 +3,9 @@ import { Transactional } from '../decorators/transactional.js';
 import type { MapRoom } from './mapService.js';
 import { getRoomInMap } from './mapService.js';
 import { getGameServer } from '../game/gameServer.js';
-import { addItemToInventory } from './inventory/index.js';
 import { lockCharacterInventoryMutex } from './inventoryMutex.js';
 import { recordGatherResourceEvent } from './taskService.js';
+import { enqueueCharacterItemGrant } from './shared/characterItemGrantDeltaService.js';
 import {
   getItemDefinitionsByIds,
   getMainQuestSectionById,
@@ -1034,8 +1034,11 @@ const gatherRoomResourceImpl = async (params: {
     );
   }
 
-  const addResult = await addItemToInventory(characterId, userId, resourceId, 1, {
-    location: 'bag',
+  const addResult = await enqueueCharacterItemGrant({
+    characterId,
+    userId,
+    itemDefId: resourceId,
+    qty: 1,
     obtainedFrom: 'gather',
   });
   if (!addResult.success) {
@@ -1158,8 +1161,11 @@ const pickupRoomItemImpl = async (params: {
   }
 
   // 添加物品到背包
-  const addResult = await addItemToInventory(characterId, userId, itemDefId, 1, {
-    location: 'bag',
+  const addResult = await enqueueCharacterItemGrant({
+    characterId,
+    userId,
+    itemDefId,
+    qty: 1,
     obtainedFrom: 'pickup',
   });
   if (!addResult.success) {

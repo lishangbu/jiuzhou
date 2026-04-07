@@ -78,6 +78,7 @@ import {
 } from './shared/partnerView.js';
 import { ensurePartnerInnateTechniquesVisible } from './shared/partnerInnateTechniqueVisibility.js';
 import { loadPartnerMarketTradeStateMap, loadActivePartnerMarketListing } from './shared/partnerMarketState.js';
+import { consumeCharacterStoredResources } from './inventory/shared/consume.js';
 import {
   loadActivePartnerFusionMaterial,
   loadPartnerFusionLockStateMap,
@@ -2085,21 +2086,12 @@ class PartnerService {
         }
       }
 
-      const characterResourceUpdate = await query(
-        `
-          UPDATE characters
-          SET spirit_stones = spirit_stones - $2,
-              exp = exp - $3,
-              updated_at = NOW()
-          WHERE id = $1
-            AND spirit_stones >= $2
-            AND exp >= $3
-          RETURNING spirit_stones, exp
-        `,
-        [characterId, cost.spiritStones, cost.exp],
-      );
-      if (characterResourceUpdate.rows.length === 0) {
-        return { success: false, message: '角色资源已变化，请重试' };
+      const consumeResourceResult = await consumeCharacterStoredResources(characterId, {
+        spiritStones: cost.spiritStones,
+        exp: cost.exp,
+      });
+      if (!consumeResourceResult.success) {
+        return { success: false, message: consumeResourceResult.message };
       }
 
       for (const material of cost.materials) {

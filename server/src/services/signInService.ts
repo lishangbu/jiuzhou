@@ -2,6 +2,8 @@ import { HolidayUtil } from 'lunar-typescript';
 import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
 import { loadCharacterIdByUserIdDirect } from './shared/characterId.js';
+import { applyCharacterRewardDeltas, createCharacterRewardDelta } from './shared/characterRewardSettlement.js';
+import { getCharacterComputedByCharacterId } from './characterComputedService.js';
 
 export interface SignInRecordDto {
   date: string;
@@ -265,10 +267,10 @@ class SignInService {
       return { success: false, message: '今日已签到' };
     }
 
-    const updated = await query(
-      'UPDATE characters SET spirit_stones = spirit_stones + $1 WHERE id = $2 RETURNING spirit_stones',
-      [reward, characterId]
-    );
+    const rewardDelta = createCharacterRewardDelta();
+    rewardDelta.spiritStones += reward;
+    await applyCharacterRewardDeltas(new Map([[characterId, rewardDelta]]));
+    const computed = await getCharacterComputedByCharacterId(characterId);
 
     return {
       success: true,
@@ -278,7 +280,7 @@ class SignInService {
         reward,
         isHoliday: holidayInfo.isHoliday,
         holidayName: holidayInfo.holidayName,
-        spiritStones: Number(updated.rows[0]?.spirit_stones ?? 0),
+        spiritStones: Number(computed?.spirit_stones ?? 0),
       },
     };
   }

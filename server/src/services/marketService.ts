@@ -1,6 +1,5 @@
 import { query } from "../config/database.js";
 import { Transactional } from "../decorators/transactional.js";
-import { moveItemInstanceToBagWithStacking } from "./inventory/index.js";
 import {
   addCharacterCurrenciesExact,
   consumeCharacterCurrenciesExact,
@@ -747,8 +746,6 @@ class MarketService {
     if (listingId === null)
       return { success: false, message: "listingId参数错误" };
 
-    await lockCharacterInventoryMutex(params.characterId);
-
     const listingResult = await query(
       `
         SELECT
@@ -807,24 +804,17 @@ class MarketService {
       return { success: false, message: "物品不在坊市中，无法下架" };
     }
 
-    // 统一复用背包实例入包逻辑：先尝试堆叠已有同类堆，再决定是否占新格子。
-    const moveResult = await moveItemInstanceToBagWithStacking(
-      params.characterId,
-      itemInstanceId,
-      {
-        expectedSourceLocation: "auction",
-        expectedOwnerUserId: params.userId,
-      },
+    await query(
+      `
+        UPDATE item_instance
+        SET location = 'mail',
+            location_slot = NULL,
+            equipped_slot = NULL,
+            updated_at = NOW()
+        WHERE id = $1
+      `,
+      [itemInstanceId],
     );
-    if (!moveResult.success) {
-      return {
-        success: false,
-        message:
-          moveResult.message === "背包已满"
-            ? "背包已满，无法下架"
-            : moveResult.message,
-      };
-    }
 
     await query(
       `
@@ -844,10 +834,31 @@ class MarketService {
       }
     }
 
+    const mailResult = await mailService.sendMail({
+      recipientUserId: params.userId,
+      recipientCharacterId: params.characterId,
+      senderType: "system",
+      senderName: "坊市",
+      mailType: "trade",
+      title: "坊市下架返还通知",
+      content: "你下架的坊市物品已通过邮件返还，请及时领取附件。",
+      attachInstanceIds: [itemInstanceId],
+      expireDays: 30,
+      source: "market",
+      sourceRefId: String(listingId),
+      metadata: {
+        listingId,
+        action: "cancel",
+      },
+    });
+    if (!mailResult.success) {
+      throw new Error(`坊市下架邮件发送失败: ${mailResult.message}`);
+    }
+
     await invalidateMarketListingsCache();
     return {
       success: true,
-      message: `下架成功，已退还${refundFeeSilver.toString()}银两手续费`,
+      message: `下架成功，物品已通过邮件返还，并退还${refundFeeSilver.toString()}银两手续费`,
     };
   }
 

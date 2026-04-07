@@ -1,9 +1,9 @@
 import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
-import { addItemToInventory } from './inventory/index.js';
 import { lockCharacterInventoryMutex } from './inventoryMutex.js';
 import { consumeCharacterStoredResources } from './inventory/shared/consume.js';
 import { recordCraftItemEvent } from './taskService.js';
+import { bufferSimpleCharacterItemGrants } from './shared/characterItemGrantDeltaService.js';
 import { REALM_ORDER } from './shared/realmRules.js';
 import { normalizeRecipeRateToPercent, normalizeRecipeRateToRatio } from './shared/recipeRate.js';
 import { getItemDefinitionById, getItemDefinitionsByIds, getItemRecipeById, getItemRecipeDefinitionsByType } from './staticConfigLoader.js';
@@ -576,26 +576,22 @@ class CraftService {
       qty: number;
       itemIds: number[];
     } | null = null;
+    const pendingItemGrants: Array<{ itemDefId: string; qty: number; obtainedFrom: string }> = [];
 
     if (successCount > 0) {
       const totalProductQty = productQty * successCount;
-      const addResult = await addItemToInventory(
-        characterSnapshot.id,
-        user,
-        asString(recipe.product_item_def_id),
-        totalProductQty,
-        { location: 'bag', obtainedFrom: `craft:${recipe.id}` },
-      );
-      if (!addResult.success) {
-        return { success: false, message: addResult.message || '背包空间不足' };
-      }
+      pendingItemGrants.push({
+        itemDefId: asString(recipe.product_item_def_id),
+        qty: totalProductQty,
+        obtainedFrom: `craft:${recipe.id}`,
+      });
 
       produced = {
         itemDefId: asString(recipe.product_item_def_id),
         itemName: asString(recipe.product_name) || asString(recipe.product_item_def_id),
         itemIcon: asString(recipe.product_icon) || null,
         qty: totalProductQty,
-        itemIds: addResult.itemIds ?? [],
+        itemIds: [],
       };
     }
 
@@ -604,19 +600,15 @@ class CraftService {
       for (const itemCost of costItems) {
         const rollbackQty = Math.floor(itemCost.qty * failCount * failReturnRateRatio);
         if (rollbackQty <= 0) continue;
-        const addResult = await addItemToInventory(
-          characterSnapshot.id,
-          user,
-          itemCost.itemDefId,
-          rollbackQty,
-          { location: 'bag', obtainedFrom: `craft-refund:${recipe.id}` },
-        );
-        if (!addResult.success) {
-          return { success: false, message: addResult.message || '返还材料失败' };
-        }
+        pendingItemGrants.push({
+          itemDefId: itemCost.itemDefId,
+          qty: rollbackQty,
+          obtainedFrom: `craft-refund:${recipe.id}`,
+        });
         returnedItems.push({ itemDefId: itemCost.itemDefId, qty: rollbackQty });
       }
     }
+    await bufferSimpleCharacterItemGrants(characterSnapshot.id, user, pendingItemGrants);
 
     const characterRes = await query(
       `SELECT exp, silver, spirit_stones FROM characters WHERE id = $1 LIMIT 1`,

@@ -1,11 +1,10 @@
 import { query } from '../config/database.js';
-import { itemService } from './itemService.js';
 import type { PoolClient } from 'pg';
-import { ensureMainQuestProgressForNewChapters, updateSectionProgress, updateSectionProgressBatch } from './mainQuest/index.js';
-import { updateAchievementProgress } from './achievementService.js';
+import { ensureMainQuestProgressForNewChapters } from './mainQuest/index.js';
 import { updateAchievementProgressBatch } from './achievement/progress.js';
 import { Transactional } from '../decorators/transactional.js';
-import { updateSectionProgressByEvents } from './mainQuest/progressUpdater.js';
+import { updateSectionProgressByEventsBatch } from './mainQuest/progressUpdater.js';
+import type { MainQuestProgressEvent } from './mainQuest/types.js';
 import {
   getDungeonDefinitions,
   getDungeonDifficultyById,
@@ -45,6 +44,7 @@ import {
 } from './shared/taskStaticIndex.js';
 import { buildTaskRecurringUnlockState } from './shared/taskRecurringUnlock.js';
 import { notifyTaskOverviewUpdate } from './taskOverviewPush.js';
+import { createScopedLogger } from '../utils/logger.js';
 import {
   collectMatchedRecurringTaskIds,
   objectiveMatchesTaskEvent,
@@ -52,6 +52,16 @@ import {
   type TaskEvent,
   type TaskObjectiveLike,
 } from './shared/taskRecurringEventMatcher.js';
+import {
+  bufferCharacterProgressDeltaFields,
+  claimCharacterProgressDelta,
+  finalizeClaimedCharacterProgressDelta,
+  listDirtyCharacterIdsForProgressDelta,
+  loadClaimedCharacterProgressDeltaHash,
+  restoreClaimedCharacterProgressDelta,
+  type CharacterProgressDeltaField,
+} from './shared/characterProgressDeltaStore.js';
+import { enqueueCharacterItemGrant } from './shared/characterItemGrantDeltaService.js';
 
 export type TaskCategory = 'main' | 'side' | 'daily' | 'event';
 
@@ -172,6 +182,12 @@ type BountyTaskOverviewSourceRow = {
   progress: TaskProgressRecord | null;
   taskDef: TaskDefinition;
 };
+
+const taskProgressDeltaLogger = createScopedLogger('task.progressDelta');
+const TASK_PROGRESS_DELTA_FLUSH_INTERVAL_MS = 1_000;
+const TASK_PROGRESS_DELTA_FLUSH_BATCH_LIMIT = 200;
+let taskProgressDeltaFlushTimer: ReturnType<typeof setInterval> | null = null;
+let taskProgressDeltaFlushInFlight: Promise<void> | null = null;
 
 const asNonEmptyString = (v: unknown): string | null => {
   if (typeof v !== 'string') return null;
@@ -1231,150 +1247,513 @@ export const submitTask = async (
   return { success: true, message: 'ok', data: { taskId: tid } };
 };
 
-const applyTaskEvent = async (
-  characterId: number,
-  event: TaskEvent,
-  characterRealmState?: CharacterTaskRealmState,
-): Promise<boolean> => {
-  return applyTaskEvents(characterId, [event], characterRealmState);
+type CharacterTaskEventsBatchInput = {
+  characterId: number;
+  events: readonly TaskEvent[];
+  characterRealmState?: CharacterTaskRealmState;
 };
 
-type TaskProgressEventMutation = {
+type ResolvedCharacterTaskEventsBatchInput = {
+  characterId: number;
+  events: TaskEvent[];
+  characterRealmState: CharacterTaskRealmState;
+};
+
+type TaskProgressBatchMutation = {
+  characterId: number;
   taskId: string;
   progress: TaskProgressRecord;
   nextStatus: TaskProgressStatusDb;
 };
 
-/**
- * 批量推进任务事件，供同一角色的一组战斗/收集事件复用。
- *
- * 作用（做什么 / 不做什么）：
- * 1. 做什么：把同一角色的一组任务事件收敛为“一次境界读取、一次任务进度读取、一次批量写回”，避免热路径重复扫全量任务进度。
- * 2. 做什么：保留 recurring 任务自动补齐、目标命中、交付 NPC 直达 claimable 等既有语义。
- * 3. 不做什么：不处理主线批量推进，也不负责成就更新；这些仍由调用方在外层统一调度。
- *
- * 输入/输出：
- * - 输入：`characterId` 与一组已归一化的 `TaskEvent`。
- * - 输出：是否有任务概览相关数据发生变化。
- *
- * 数据流/状态流：
- * 事件数组 -> recurring 任务命中收敛 -> 补齐缺失进度行 -> 一次性读取角色任务进度
- * -> 内存合并所有事件命中 -> 批量 UPDATE 落库。
- *
- * 关键边界条件与坑点：
- * 1. `talk_npc` 必须允许与同批次里的“已完成目标”组合后直接进入 `claimable`，否则会把原本同链路可交付的任务错误卡在 `turnin`。
- * 2. 这里只对单角色做批量；多角色仍应由上层按角色拆分，避免把不同角色的任务锁和推送口径混在一起。
- */
-const applyTaskEvents = async (
-  characterId: number,
-  events: readonly TaskEvent[],
-  characterRealmState?: CharacterTaskRealmState,
-): Promise<boolean> => {
-  if (events.length <= 0) return false;
-  const cid = Number(characterId);
-  if (!Number.isFinite(cid) || cid <= 0) return false;
-  const resolvedCharacterRealmState = characterRealmState ?? await loadCharacterTaskRealmState(cid);
-  if (!resolvedCharacterRealmState) return false;
+type CharacterBatchAchievementInput = {
+  trackKey: string;
+  increment: number;
+};
 
-  const taskStaticIndex = getTaskStaticIndex();
-  const matchedRecurringTaskIdSet = new Set<string>();
-  for (const event of events) {
-    const matchedRecurringTaskIds = collectMatchedRecurringTaskIds(
-      taskStaticIndex.recurringTaskDefinitions,
-      resolvedCharacterRealmState,
-      event,
-    );
-    for (const taskId of matchedRecurringTaskIds) {
-      matchedRecurringTaskIdSet.add(taskId);
+type CharacterProgressEventBatchInput = {
+  characterId: number;
+  taskEvents: TaskEvent[];
+  mainQuestEvents: MainQuestProgressEvent[];
+  achievementInputs: CharacterBatchAchievementInput[];
+};
+
+type BufferedProgressDeltaBucket =
+  | 'talk_npc'
+  | 'kill_monster'
+  | 'collect'
+  | 'gather_resource'
+  | 'dungeon_clear'
+  | 'craft_item';
+
+type BufferedCraftItemPayload = {
+  recipeId?: string;
+  recipeType?: string;
+  craftKind?: string;
+  itemId?: string;
+};
+
+const encodeProgressDeltaField = (
+  bucket: BufferedProgressDeltaBucket,
+  payload: Record<string, string | number | undefined>,
+): string => `${bucket}:${JSON.stringify(payload)}`;
+
+const decodeProgressDeltaField = (
+  field: string,
+): {
+  bucket: BufferedProgressDeltaBucket;
+  payload: Record<string, unknown>;
+} | null => {
+  const delimiterIndex = field.indexOf(':');
+  if (delimiterIndex <= 0) return null;
+  const bucket = field.slice(0, delimiterIndex) as BufferedProgressDeltaBucket;
+  const rawPayload = field.slice(delimiterIndex + 1);
+  if (
+    bucket !== 'talk_npc'
+    && bucket !== 'kill_monster'
+    && bucket !== 'collect'
+    && bucket !== 'gather_resource'
+    && bucket !== 'dungeon_clear'
+    && bucket !== 'craft_item'
+  ) {
+    return null;
+  }
+  try {
+    const payload = JSON.parse(rawPayload) as Record<string, unknown>;
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return null;
+    }
+    return { bucket, payload };
+  } catch {
+    return null;
+  }
+};
+
+const normalizeCharacterTaskEventsBatchInputs = (
+  inputs: CharacterTaskEventsBatchInput[],
+): CharacterTaskEventsBatchInput[] => {
+  const eventsByCharacterId = new Map<number, TaskEvent[]>();
+  const stateByCharacterId = new Map<number, CharacterTaskRealmState>();
+
+  for (const input of inputs) {
+    const characterId = Math.floor(Number(input.characterId));
+    if (!Number.isFinite(characterId) || characterId <= 0) continue;
+    if (input.events.length <= 0) continue;
+
+    const existingEvents = eventsByCharacterId.get(characterId);
+    if (existingEvents) {
+      existingEvents.push(...input.events);
+    } else {
+      eventsByCharacterId.set(characterId, [...input.events]);
+    }
+
+    if (input.characterRealmState && !stateByCharacterId.has(characterId)) {
+      stateByCharacterId.set(characterId, input.characterRealmState);
     }
   }
-  const insertedRecurringTask = await insertMissingTaskProgressRows(
-    { query },
-    cid,
-    Array.from(matchedRecurringTaskIdSet),
-    false,
+
+  return [...eventsByCharacterId.entries()].map(([characterId, events]) => ({
+    characterId,
+    events,
+    characterRealmState: stateByCharacterId.get(characterId),
+  }));
+};
+
+const resolveCharacterTaskEventsBatchInputs = async (
+  inputs: CharacterTaskEventsBatchInput[],
+): Promise<ResolvedCharacterTaskEventsBatchInput[]> => {
+  const normalizedInputs = normalizeCharacterTaskEventsBatchInputs(inputs);
+  if (normalizedInputs.length <= 0) {
+    return [];
+  }
+
+  const unresolvedCharacterIds = normalizedInputs
+    .filter((input) => !input.characterRealmState)
+    .map((input) => input.characterId);
+  const loadedStateByCharacterId = unresolvedCharacterIds.length > 0
+    ? await loadCharacterTaskRealmStatesBatch(unresolvedCharacterIds)
+    : new Map<number, CharacterTaskRealmState>();
+
+  return normalizedInputs.flatMap((input) => {
+    const characterRealmState = input.characterRealmState ?? loadedStateByCharacterId.get(input.characterId);
+    if (!characterRealmState) {
+      return [];
+    }
+    const events = [...input.events];
+    return [{
+      characterId: input.characterId,
+      events,
+      characterRealmState,
+    }];
+  });
+};
+
+const insertMissingTaskProgressRowsBatch = async (
+  runner: Pick<PoolClient, 'query'>,
+  rows: Array<{
+    characterId: number;
+    taskIds: readonly string[];
+    tracked: boolean;
+  }>,
+): Promise<Set<number>> => {
+  const serializedRows: Array<{
+    character_id: number;
+    task_id: string;
+    tracked: boolean;
+  }> = [];
+  const dedupeKeySet = new Set<string>();
+
+  for (const row of rows) {
+    const characterId = Math.floor(Number(row.characterId));
+    if (!Number.isFinite(characterId) || characterId <= 0) continue;
+    for (const rawTaskId of row.taskIds) {
+      const taskId = rawTaskId.trim();
+      if (!taskId) continue;
+      const dedupeKey = `${characterId}:${taskId}`;
+      if (dedupeKeySet.has(dedupeKey)) continue;
+      dedupeKeySet.add(dedupeKey);
+      serializedRows.push({
+        character_id: characterId,
+        task_id: taskId,
+        tracked: row.tracked,
+      });
+    }
+  }
+
+  if (serializedRows.length <= 0) {
+    return new Set<number>();
+  }
+
+  const insertResult = await runner.query(
+    `
+      WITH target_rows AS (
+        SELECT *
+        FROM jsonb_to_recordset($1::jsonb)
+          AS x(character_id int, task_id varchar(64), tracked boolean)
+      ),
+      inserted_rows AS (
+        INSERT INTO character_task_progress
+          (character_id, task_id, status, progress, tracked, accepted_at, completed_at, claimed_at, updated_at)
+        SELECT
+          target_rows.character_id,
+          target_rows.task_id,
+          'ongoing',
+          '{}'::jsonb,
+          target_rows.tracked,
+          NOW(),
+          NULL,
+          NULL,
+          NOW()
+        FROM target_rows
+        ON CONFLICT (character_id, task_id) DO NOTHING
+        RETURNING character_id
+      )
+      SELECT DISTINCT character_id
+      FROM inserted_rows
+    `,
+    [JSON.stringify(serializedRows)],
   );
+
+  return new Set<number>(
+    (insertResult.rows as Array<Record<string, unknown>>)
+      .map((row) => asFiniteNonNegativeInt(row.character_id, 0))
+      .filter((characterId) => characterId > 0),
+  );
+};
+
+const buildRecurringTaskResetPlanByCharacterStateKey = (
+  characterRealmStates: Iterable<CharacterTaskRealmState>,
+): Map<string, RecurringTaskResetPlan> => {
+  const planByStateKey = new Map<string, RecurringTaskResetPlan>();
+
+  for (const characterRealmState of characterRealmStates) {
+    const stateKey = buildCharacterTaskRealmStateKey(characterRealmState);
+    if (!stateKey || planByStateKey.has(stateKey)) continue;
+    planByStateKey.set(stateKey, buildRecurringTaskResetPlan(characterRealmState));
+  }
+
+  return planByStateKey;
+};
+
+const resetRecurringTaskProgressIfNeededBatch = async (
+  inputs: Array<{
+    characterId: number;
+    characterRealmState: CharacterTaskRealmState;
+  }>,
+): Promise<void> => {
+  if (inputs.length <= 0) return;
+
+  const dedupedInputs = new Map<number, CharacterTaskRealmState>();
+  for (const input of inputs) {
+    const characterId = Math.floor(Number(input.characterId));
+    if (!Number.isFinite(characterId) || characterId <= 0) continue;
+    dedupedInputs.set(characterId, input.characterRealmState);
+  }
+  if (dedupedInputs.size <= 0) return;
+
+  const planByStateKey = buildRecurringTaskResetPlanByCharacterStateKey(dedupedInputs.values());
+  const autoAcceptRows: Array<{
+    characterId: number;
+    taskIds: readonly string[];
+    tracked: boolean;
+  }> = [];
+  const resetRows: Array<{
+    character_id: number;
+    daily_task_ids: string[];
+    event_task_ids: string[];
+  }> = [];
+
+  for (const [characterId, characterRealmState] of dedupedInputs.entries()) {
+    const stateKey = buildCharacterTaskRealmStateKey(characterRealmState);
+    const resetPlan = stateKey ? planByStateKey.get(stateKey) : buildRecurringTaskResetPlan(characterRealmState);
+    if (!resetPlan) continue;
+
+    if (resetPlan.autoAcceptTaskIds.length > 0) {
+      autoAcceptRows.push({
+        characterId,
+        taskIds: resetPlan.autoAcceptTaskIds,
+        tracked: false,
+      });
+    }
+    if (resetPlan.dailyTaskIds.length > 0 || resetPlan.eventTaskIds.length > 0) {
+      resetRows.push({
+        character_id: characterId,
+        daily_task_ids: resetPlan.dailyTaskIds,
+        event_task_ids: resetPlan.eventTaskIds,
+      });
+    }
+  }
+
+  if (autoAcceptRows.length > 0) {
+    await insertMissingTaskProgressRowsBatch({ query }, autoAcceptRows);
+  }
+
+  if (resetRows.length <= 0) return;
+
+  await query(
+    `
+      WITH reset_rows AS (
+        SELECT *
+        FROM jsonb_to_recordset($1::jsonb)
+          AS x(character_id int, daily_task_ids varchar[], event_task_ids varchar[])
+      )
+      UPDATE character_task_progress AS progress_row
+      SET status = 'ongoing',
+          progress = '{}'::jsonb,
+          accepted_at = NOW(),
+          completed_at = NULL,
+          claimed_at = NULL,
+          updated_at = NOW()
+      FROM reset_rows
+      WHERE progress_row.character_id = reset_rows.character_id
+        AND (
+          (
+            COALESCE(array_length(reset_rows.daily_task_ids, 1), 0) > 0
+            AND progress_row.task_id = ANY(reset_rows.daily_task_ids)
+            AND progress_row.accepted_at < date_trunc('day', NOW())
+          )
+          OR
+          (
+            COALESCE(array_length(reset_rows.event_task_ids, 1), 0) > 0
+            AND progress_row.task_id = ANY(reset_rows.event_task_ids)
+            AND progress_row.accepted_at < date_trunc('week', NOW())
+          )
+        )
+    `,
+    [JSON.stringify(resetRows)],
+  );
+};
+
+const loadActiveTaskProgressRowsBatch = async (
+  characterIds: readonly number[],
+): Promise<Map<number, Array<Record<string, unknown>>>> => {
+  const normalizedCharacterIds = [...new Set(
+    characterIds
+      .map((characterId) => Math.floor(Number(characterId)))
+      .filter((characterId) => Number.isFinite(characterId) && characterId > 0),
+  )];
+  const rowsByCharacterId = new Map<number, Array<Record<string, unknown>>>();
+  if (normalizedCharacterIds.length <= 0) {
+    return rowsByCharacterId;
+  }
 
   const res = await query(
     `
       SELECT
+        p.character_id,
         p.task_id,
         p.status,
         p.progress
       FROM character_task_progress p
-      WHERE p.character_id = $1
+      WHERE p.character_id = ANY($1::int[])
         AND COALESCE(p.status, 'ongoing') <> 'claimed'
     `,
-    [cid],
+    [normalizedCharacterIds],
   );
 
-  const taskDefMap = await getTaskDefinitionsByIds(
-    (res.rows as Array<Record<string, unknown>>)
-      .map((row) => asNonEmptyString(row.task_id))
-      .filter((taskId): taskId is string => Boolean(taskId)),
-  );
+  for (const row of res.rows as Array<Record<string, unknown>>) {
+    const characterId = asFiniteNonNegativeInt(row.character_id, 0);
+    if (!characterId) continue;
+    const existingRows = rowsByCharacterId.get(characterId);
+    if (existingRows) {
+      existingRows.push(row);
+      continue;
+    }
+    rowsByCharacterId.set(characterId, [row]);
+  }
 
-  const taskProgressMutations: TaskProgressEventMutation[] = [];
-  let changedAnyTask = insertedRecurringTask;
-  for (const row of res.rows ?? []) {
-    const taskId = asNonEmptyString(row?.task_id);
-    if (!taskId) continue;
-    const taskDef = taskDefMap.get(taskId);
-    if (!taskDef) continue;
-    if (!isTaskDefinitionUnlockedForCharacter(taskDef, resolvedCharacterRealmState)) continue;
-    const status = asTaskProgressStatusDb(row?.status);
-    if (status === 'claimed') continue;
+  return rowsByCharacterId;
+};
 
-    const objectives = taskDef.source === 'static'
-      ? (taskStaticIndex.objectivesByTaskId.get(taskId) ?? [])
-      : parseObjectives(taskDef.objectives);
-    const progressRecord = parseProgressRecord(row?.progress);
-    const category = normalizeTaskCategory(taskDef.category) ?? 'main';
-    const giverNpcId = asNonEmptyString(taskDef.giver_npc_id);
+/**
+ * 批量推进任务事件。
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1. 做什么：把多角色任务推进收敛成“一次角色境界解析、一次活跃进度读取、一次批量写回”，直接服务战斗多人结算热路径。
+ * 2. 做什么：保留 recurring 自动补齐、目标命中、交付 NPC 直达 claimable 等既有语义，不让收集/击杀两条链路分叉。
+ * 3. 不做什么：不负责主线和成就更新；这些由外层批量入口统一调度。
+ *
+ * 输入/输出：
+ * - 输入：多角色任务事件数组，每个角色可以携带一批已归一化事件。
+ * - 输出：发生任务概览变化的角色 ID 列表。
+ *
+ * 数据流/状态流：
+ * 多角色事件 -> recurring 命中补齐 -> 一次读取全部活跃任务进度
+ * -> 内存态匹配并计算所有角色的进度变更 -> 一次批量 UPDATE 落库。
+ *
+ * 复用设计说明：
+ * 1. 单角色 `applyTaskEvents` 直接委托给这里，避免单人/多人入口维护两份任务推进协议。
+ * 2. 收集事件、击杀事件与未来其他战斗事件都能复用同一条批量 SQL 链路，减少热点分支。
+ *
+ * 关键边界条件与坑点：
+ * 1. `talk_npc` 必须允许和同批次目标完成一起直达 `claimable`，否则会把原本一跳可交付的任务卡在 `turnin`。
+ * 2. 多角色输入只允许在内存里按角色拆分计算，不能跨角色共享进度快照，否则会污染任务状态。
+ */
+const applyTaskEventsBatch = async (
+  inputs: CharacterTaskEventsBatchInput[],
+): Promise<number[]> => {
+  const resolvedInputs = await resolveCharacterTaskEventsBatchInputs(inputs);
+  if (resolvedInputs.length <= 0) {
+    return [];
+  }
 
-    const normalizedObjectives = taskDef.source === 'static'
-      ? (taskStaticIndex.normalizedObjectivesByTaskId.get(taskId) ?? [])
-      : normalizeTaskObjectives(objectives);
+  const taskStaticIndex = getTaskStaticIndex();
+  const recurringInsertRows: Array<{
+    characterId: number;
+    taskIds: readonly string[];
+    tracked: boolean;
+  }> = [];
 
-    let changed = false;
-    let giverTalkMatched = false;
-    for (const event of events) {
-      if (event.type === 'talk_npc' && giverNpcId && giverNpcId === event.npcId) {
-        giverTalkMatched = true;
-      }
-      for (const objectiveEntry of normalizedObjectives) {
-        const match = objectiveMatchesTaskEvent(objectiveEntry.objective, event);
-        if (!match.matched) continue;
-        const current = asFiniteNonNegativeInt(progressRecord[objectiveEntry.objectiveId], 0);
-        const next = Math.min(objectiveEntry.target, current + match.delta);
-        if (next !== current) {
-          progressRecord[objectiveEntry.objectiveId] = next;
-          changed = true;
-        }
+  for (const input of resolvedInputs) {
+    const matchedRecurringTaskIdSet = new Set<string>();
+    for (const event of input.events) {
+      const matchedRecurringTaskIds = collectMatchedRecurringTaskIds(
+        taskStaticIndex.recurringTaskDefinitions,
+        input.characterRealmState,
+        event,
+      );
+      for (const taskId of matchedRecurringTaskIds) {
+        matchedRecurringTaskIdSet.add(taskId);
       }
     }
-
-    const allDone = computeAllObjectivesDone(objectives, progressRecord);
-
-    let nextStatus: TaskProgressStatusDb = status;
-    if (allDone) {
-      if (category === 'event') {
-        nextStatus = 'claimable';
-      } else {
-        if (status === 'ongoing') nextStatus = 'turnin';
-        if (giverTalkMatched && (status === 'turnin' || nextStatus === 'turnin' || status === 'claimable')) {
-          nextStatus = 'claimable';
-        }
-      }
-    }
-
-    if (!changed && nextStatus === status) continue;
-    taskProgressMutations.push({
-      taskId,
-      progress: progressRecord,
-      nextStatus,
+    if (matchedRecurringTaskIdSet.size <= 0) continue;
+    recurringInsertRows.push({
+      characterId: input.characterId,
+      taskIds: Array.from(matchedRecurringTaskIdSet),
+      tracked: false,
     });
-    changedAnyTask = true;
+  }
+
+  const insertedRecurringCharacterIds = recurringInsertRows.length > 0
+    ? await insertMissingTaskProgressRowsBatch({ query }, recurringInsertRows)
+    : new Set<number>();
+
+  const progressRowsByCharacterId = await loadActiveTaskProgressRowsBatch(
+    resolvedInputs.map((input) => input.characterId),
+  );
+
+  const taskIds = new Set<string>();
+  for (const rows of progressRowsByCharacterId.values()) {
+    for (const row of rows) {
+      const taskId = asNonEmptyString(row.task_id);
+      if (taskId) {
+        taskIds.add(taskId);
+      }
+    }
+  }
+  const taskDefMap = await getTaskDefinitionsByIds(Array.from(taskIds));
+
+  const changedCharacterIds = new Set<number>(insertedRecurringCharacterIds);
+  const taskProgressMutations: TaskProgressBatchMutation[] = [];
+
+  for (const input of resolvedInputs) {
+    const rows = progressRowsByCharacterId.get(input.characterId) ?? [];
+    let changedAnyTask = insertedRecurringCharacterIds.has(input.characterId);
+
+    for (const row of rows) {
+      const taskId = asNonEmptyString(row.task_id);
+      if (!taskId) continue;
+      const taskDef = taskDefMap.get(taskId);
+      if (!taskDef) continue;
+      if (!isTaskDefinitionUnlockedForCharacter(taskDef, input.characterRealmState)) continue;
+
+      const status = asTaskProgressStatusDb(row.status);
+      if (status === 'claimed') continue;
+
+      const objectives = taskDef.source === 'static'
+        ? (taskStaticIndex.objectivesByTaskId.get(taskId) ?? [])
+        : parseObjectives(taskDef.objectives);
+      const normalizedObjectives = taskDef.source === 'static'
+        ? (taskStaticIndex.normalizedObjectivesByTaskId.get(taskId) ?? [])
+        : normalizeTaskObjectives(objectives);
+      const progressRecord = parseProgressRecord(row.progress);
+      const category = normalizeTaskCategory(taskDef.category) ?? 'main';
+      const giverNpcId = asNonEmptyString(taskDef.giver_npc_id);
+
+      let changed = false;
+      let giverTalkMatched = false;
+      for (const event of input.events) {
+        if (event.type === 'talk_npc' && giverNpcId && giverNpcId === event.npcId) {
+          giverTalkMatched = true;
+        }
+        for (const objectiveEntry of normalizedObjectives) {
+          const match = objectiveMatchesTaskEvent(objectiveEntry.objective, event);
+          if (!match.matched) continue;
+          const current = asFiniteNonNegativeInt(progressRecord[objectiveEntry.objectiveId], 0);
+          const next = Math.min(objectiveEntry.target, current + match.delta);
+          if (next !== current) {
+            progressRecord[objectiveEntry.objectiveId] = next;
+            changed = true;
+          }
+        }
+      }
+
+      const allDone = computeAllObjectivesDone(objectives, progressRecord);
+      let nextStatus: TaskProgressStatusDb = status;
+      if (allDone) {
+        if (category === 'event') {
+          nextStatus = 'claimable';
+        } else {
+          if (status === 'ongoing') nextStatus = 'turnin';
+          if (giverTalkMatched && (status === 'turnin' || nextStatus === 'turnin' || status === 'claimable')) {
+            nextStatus = 'claimable';
+          }
+        }
+      }
+
+      if (!changed && nextStatus === status) continue;
+      taskProgressMutations.push({
+        characterId: input.characterId,
+        taskId,
+        progress: progressRecord,
+        nextStatus,
+      });
+      changedAnyTask = true;
+    }
+
+    if (changedAnyTask) {
+      changedCharacterIds.add(input.characterId);
+    }
   }
 
   if (taskProgressMutations.length > 0) {
@@ -1382,8 +1761,8 @@ const applyTaskEvents = async (
       `
         WITH next_rows AS (
           SELECT *
-          FROM jsonb_to_recordset($2::jsonb)
-            AS x(task_id varchar(64), progress jsonb, next_status varchar(16))
+          FROM jsonb_to_recordset($1::jsonb)
+            AS x(character_id int, task_id varchar(64), progress jsonb, next_status varchar(16))
         )
         UPDATE character_task_progress AS progress_row
         SET progress = next_rows.progress,
@@ -1395,21 +1774,19 @@ const applyTaskEvents = async (
             END,
             updated_at = NOW()
         FROM next_rows
-        WHERE progress_row.character_id = $1
+        WHERE progress_row.character_id = next_rows.character_id
           AND progress_row.task_id = next_rows.task_id
       `,
-      [
-        cid,
-        JSON.stringify(taskProgressMutations.map((mutation) => ({
-          task_id: mutation.taskId,
-          progress: mutation.progress,
-          next_status: mutation.nextStatus,
-        }))),
-      ],
+      [JSON.stringify(taskProgressMutations.map((mutation) => ({
+        character_id: mutation.characterId,
+        task_id: mutation.taskId,
+        progress: mutation.progress,
+        next_status: mutation.nextStatus,
+      })))],
     );
   }
 
-  return changedAnyTask;
+  return [...changedCharacterIds];
 };
 
 const normalizePositiveInt = (value: unknown, fallback = 1): number => {
@@ -1422,6 +1799,11 @@ const normalizePositiveInt = (value: unknown, fallback = 1): number => {
 type KillMonsterEventInput = {
   monsterId: string;
   count: number;
+};
+
+type KillMonsterEventsBatchInput = {
+  characterId: number;
+  events: KillMonsterEventInput[];
 };
 
 /**
@@ -1460,18 +1842,526 @@ const normalizeKillMonsterEvents = (
   }));
 };
 
+const buildKillMonsterTaskEvents = (
+  normalizedEvents: KillMonsterEventInput[],
+): TaskEvent[] => normalizedEvents.map((event) => ({
+  type: 'kill_monster',
+  monsterId: event.monsterId,
+  count: event.count,
+}));
+
+const buildKillMonsterMainQuestEvents = (
+  normalizedEvents: KillMonsterEventInput[],
+): MainQuestProgressEvent[] => normalizedEvents.map((event) => ({
+  type: 'kill_monster',
+  monsterId: event.monsterId,
+  count: event.count,
+}));
+
+const buildKillMonsterAchievementInputs = (
+  normalizedEvents: KillMonsterEventInput[],
+): CharacterBatchAchievementInput[] => normalizedEvents.map((event) => ({
+  trackKey: `kill:monster:${event.monsterId}`,
+  increment: event.count,
+}));
+
+const normalizeKillMonsterEventBatchInputs = (
+  inputs: KillMonsterEventsBatchInput[],
+): Array<{
+  characterId: number;
+  normalizedEvents: KillMonsterEventInput[];
+}> => {
+  const countByMonsterIdByCharacterId = new Map<number, Map<string, number>>();
+
+  for (const input of inputs) {
+    const characterId = asFiniteNonNegativeInt(input.characterId, 0);
+    if (!characterId) continue;
+
+    const normalizedEvents = normalizeKillMonsterEvents(input.events);
+    if (normalizedEvents.length <= 0) continue;
+
+    const countByMonsterId = countByMonsterIdByCharacterId.get(characterId) ?? new Map<string, number>();
+    for (const event of normalizedEvents) {
+      countByMonsterId.set(event.monsterId, (countByMonsterId.get(event.monsterId) ?? 0) + event.count);
+    }
+    countByMonsterIdByCharacterId.set(characterId, countByMonsterId);
+  }
+
+  return [...countByMonsterIdByCharacterId.entries()].map(([characterId, countByMonsterId]) => ({
+    characterId,
+    normalizedEvents: [...countByMonsterId.entries()].map(([monsterId, count]) => ({
+      monsterId,
+      count,
+    })),
+  }));
+};
+
+const normalizeCharacterProgressEventBatchInputs = (
+  inputs: CharacterProgressEventBatchInput[],
+): CharacterProgressEventBatchInput[] => {
+  const inputByCharacterId = new Map<number, CharacterProgressEventBatchInput>();
+
+  for (const input of inputs) {
+    const characterId = asFiniteNonNegativeInt(input.characterId, 0);
+    if (!characterId) continue;
+
+    const existing = inputByCharacterId.get(characterId);
+    if (existing) {
+      existing.taskEvents.push(...input.taskEvents);
+      existing.mainQuestEvents.push(...input.mainQuestEvents);
+      existing.achievementInputs.push(...input.achievementInputs);
+      continue;
+    }
+
+    inputByCharacterId.set(characterId, {
+      characterId,
+      taskEvents: [...input.taskEvents],
+      mainQuestEvents: [...input.mainQuestEvents],
+      achievementInputs: [...input.achievementInputs],
+    });
+  }
+
+  return [...inputByCharacterId.values()].filter((input) =>
+    input.taskEvents.length > 0 || input.mainQuestEvents.length > 0 || input.achievementInputs.length > 0,
+  );
+};
+
+const buildBufferedProgressDeltaFields = (
+  inputs: CharacterProgressEventBatchInput[],
+): CharacterProgressDeltaField[] => {
+  const incrementByCompositeKey = new Map<string, CharacterProgressDeltaField>();
+
+  for (const input of inputs) {
+    const characterId = asFiniteNonNegativeInt(input.characterId, 0);
+    if (!characterId) continue;
+
+    const pushBufferedField = (
+      field: string,
+      increment: number,
+    ): void => {
+      const normalizedIncrement = normalizePositiveInt(increment, 0);
+      if (normalizedIncrement <= 0) return;
+      const compositeKey = `${characterId}:${field}`;
+      const existing = incrementByCompositeKey.get(compositeKey);
+      if (existing) {
+        existing.increment += normalizedIncrement;
+        return;
+      }
+      incrementByCompositeKey.set(compositeKey, {
+        characterId,
+        field,
+        increment: normalizedIncrement,
+      });
+    };
+
+    for (const taskEvent of input.taskEvents) {
+      if (taskEvent.type === 'talk_npc') {
+        if (!taskEvent.npcId) continue;
+        pushBufferedField(
+          encodeProgressDeltaField('talk_npc', { npcId: taskEvent.npcId }),
+          1,
+        );
+        continue;
+      }
+      if (taskEvent.type === 'kill_monster') {
+        if (!taskEvent.monsterId) continue;
+        pushBufferedField(
+          encodeProgressDeltaField('kill_monster', { monsterId: taskEvent.monsterId }),
+          normalizePositiveInt(taskEvent.count ?? 1, 1),
+        );
+        continue;
+      }
+      if (taskEvent.type === 'collect') {
+        if (!taskEvent.itemId) continue;
+        pushBufferedField(
+          encodeProgressDeltaField('collect', { itemId: taskEvent.itemId }),
+          normalizePositiveInt(taskEvent.count ?? 1, 1),
+        );
+        continue;
+      }
+      if (taskEvent.type === 'gather_resource') {
+        if (!taskEvent.resourceId) continue;
+        pushBufferedField(
+          encodeProgressDeltaField('gather_resource', { resourceId: taskEvent.resourceId }),
+          normalizePositiveInt(taskEvent.count ?? 1, 1),
+        );
+        continue;
+      }
+      if (taskEvent.type === 'dungeon_clear') {
+        if (!taskEvent.dungeonId) continue;
+        const isTeamClear = input.achievementInputs.some(
+          (achievementInput) => achievementInput.trackKey === `team:dungeon:clear:${taskEvent.dungeonId}`,
+        );
+        pushBufferedField(
+          encodeProgressDeltaField('dungeon_clear', {
+            dungeonId: taskEvent.dungeonId,
+            difficultyId: taskEvent.difficultyId ?? '',
+            participantCount: isTeamClear ? 2 : 1,
+          }),
+          normalizePositiveInt(taskEvent.count ?? 1, 1),
+        );
+        continue;
+      }
+      if (taskEvent.type === 'craft_item') {
+        pushBufferedField(
+          encodeProgressDeltaField('craft_item', {
+            recipeId: taskEvent.recipeId ?? '',
+            recipeType: taskEvent.recipeType ?? '',
+            craftKind: taskEvent.craftKind ?? '',
+            itemId: taskEvent.itemId ?? '',
+          }),
+          normalizePositiveInt(taskEvent.count ?? 1, 1),
+        );
+      }
+    }
+  }
+
+  return [...incrementByCompositeKey.values()];
+};
+
+const parseBufferedProgressDeltaHash = (
+  characterId: number,
+  hash: Record<string, string>,
+): CharacterProgressEventBatchInput | null => {
+  const talkEvents: TaskEvent[] = [];
+  const taskEvents: TaskEvent[] = [];
+  const mainQuestEvents: MainQuestProgressEvent[] = [];
+  const achievementInputs: CharacterBatchAchievementInput[] = [];
+
+  for (const [field, rawIncrement] of Object.entries(hash)) {
+    const increment = normalizePositiveInt(Number(rawIncrement), 0);
+    if (increment <= 0) continue;
+
+    const decoded = decodeProgressDeltaField(field);
+    if (!decoded) continue;
+
+    if (decoded.bucket === 'talk_npc') {
+      const npcId = asNonEmptyString(decoded.payload.npcId);
+      if (!npcId) continue;
+      for (let index = 0; index < increment; index += 1) {
+        const talkEvent: TaskEvent = { type: 'talk_npc', npcId };
+        talkEvents.push(talkEvent);
+        mainQuestEvents.push({ type: 'talk_npc', npcId });
+      }
+      achievementInputs.push({
+        trackKey: `talk:npc:${npcId}`,
+        increment,
+      });
+      continue;
+    }
+
+    if (decoded.bucket === 'kill_monster') {
+      const monsterId = asNonEmptyString(decoded.payload.monsterId);
+      if (!monsterId) continue;
+      taskEvents.push({ type: 'kill_monster', monsterId, count: increment });
+      mainQuestEvents.push({ type: 'kill_monster', monsterId, count: increment });
+      achievementInputs.push({
+        trackKey: `kill:monster:${monsterId}`,
+        increment,
+      });
+      continue;
+    }
+
+    if (decoded.bucket === 'collect') {
+      const itemId = asNonEmptyString(decoded.payload.itemId);
+      if (!itemId) continue;
+      taskEvents.push({ type: 'collect', itemId, count: increment });
+      mainQuestEvents.push({ type: 'collect', itemId, count: increment });
+      achievementInputs.push({
+        trackKey: `item:obtain:${itemId}`,
+        increment,
+      });
+      continue;
+    }
+
+    if (decoded.bucket === 'gather_resource') {
+      const resourceId = asNonEmptyString(decoded.payload.resourceId);
+      if (!resourceId) continue;
+      taskEvents.push({ type: 'gather_resource', resourceId, count: increment });
+      mainQuestEvents.push({ type: 'gather_resource', resourceId, count: increment });
+      mainQuestEvents.push({ type: 'collect', itemId: resourceId, count: increment });
+      achievementInputs.push({
+        trackKey: `gather:resource:${resourceId}`,
+        increment,
+      });
+      achievementInputs.push({
+        trackKey: `item:obtain:${resourceId}`,
+        increment,
+      });
+      continue;
+    }
+
+    if (decoded.bucket === 'dungeon_clear') {
+      const dungeonId = asNonEmptyString(decoded.payload.dungeonId);
+      if (!dungeonId) continue;
+      const difficultyId = asNonEmptyString(decoded.payload.difficultyId) ?? undefined;
+      const participantCount = normalizePositiveInt(Number(decoded.payload.participantCount ?? 1), 1);
+      taskEvents.push({ type: 'dungeon_clear', dungeonId, difficultyId, count: increment });
+      mainQuestEvents.push({ type: 'dungeon_clear', dungeonId, difficultyId, count: increment });
+      achievementInputs.push({
+        trackKey: `dungeon:clear:${dungeonId}`,
+        increment,
+      });
+      if (difficultyId) {
+        const difficultyDef = getDungeonDifficultyById(difficultyId);
+        const difficultyName = typeof difficultyDef?.name === 'string' ? difficultyDef.name.trim() : '';
+        if (difficultyName === '噩梦') {
+          achievementInputs.push({
+            trackKey: 'dungeon:clear:difficulty:nightmare',
+            increment,
+          });
+        }
+      }
+      if (participantCount > 1) {
+        achievementInputs.push({
+          trackKey: `team:dungeon:clear:${dungeonId}`,
+          increment,
+        });
+      }
+      continue;
+    }
+
+    if (decoded.bucket === 'craft_item') {
+      const craftPayload: BufferedCraftItemPayload = {
+        recipeId: asNonEmptyString(decoded.payload.recipeId) ?? undefined,
+        recipeType: asNonEmptyString(decoded.payload.recipeType) ?? undefined,
+        craftKind: asNonEmptyString(decoded.payload.craftKind) ?? undefined,
+        itemId: asNonEmptyString(decoded.payload.itemId) ?? undefined,
+      };
+      taskEvents.push({
+        type: 'craft_item',
+        recipeId: craftPayload.recipeId,
+        recipeType: craftPayload.recipeType,
+        craftKind: craftPayload.craftKind,
+        itemId: craftPayload.itemId,
+        count: increment,
+      });
+      mainQuestEvents.push({
+        type: 'craft_item',
+        recipeId: craftPayload.recipeId,
+        recipeType: craftPayload.recipeType,
+        craftKind: craftPayload.craftKind,
+        itemId: craftPayload.itemId,
+        count: increment,
+      });
+      if (craftPayload.recipeId) {
+        achievementInputs.push({
+          trackKey: `craft:recipe:${craftPayload.recipeId}`,
+          increment,
+        });
+      }
+      if (craftPayload.craftKind) {
+        achievementInputs.push({
+          trackKey: `craft:kind:${craftPayload.craftKind}`,
+          increment,
+        });
+      }
+      if (craftPayload.itemId) {
+        achievementInputs.push({
+          trackKey: `craft:item:${craftPayload.itemId}`,
+          increment,
+        });
+      }
+    }
+  }
+
+  const mergedTaskEvents = [...talkEvents, ...taskEvents];
+  if (mergedTaskEvents.length <= 0 && mainQuestEvents.length <= 0 && achievementInputs.length <= 0) {
+    return null;
+  }
+
+  return {
+    characterId,
+    taskEvents: mergedTaskEvents,
+    mainQuestEvents,
+    achievementInputs,
+  };
+};
+
+const bufferCharacterProgressEventBatches = async (
+  inputs: CharacterProgressEventBatchInput[],
+): Promise<void> => {
+  const normalizedInputs = normalizeCharacterProgressEventBatchInputs(inputs);
+  if (normalizedInputs.length <= 0) return;
+
+  await bufferCharacterProgressDeltaFields(buildBufferedProgressDeltaFields(normalizedInputs));
+};
+
+/**
+ * 多角色任务/主线/成就批量推进管线。
+ *
+ * 作用（做什么 / 不做什么）：
+ * 1. 做什么：把多角色事件统一收敛成“一次角色境界读取、一次 recurring 重置、一次任务批量推进、一次主线批量推进、一次成就批量推进”。
+ * 2. 做什么：为收集、击杀等高频战斗事件提供单一批处理入口，减少同一场结算里三张进度表的重复读写。
+ * 3. 不做什么：不构造事件本身，也不决定奖励结算策略；调用方只负责把已归一化事件喂进来。
+ *
+ * 输入/输出：
+ * - 输入：多角色事件批次，包含任务事件、主线事件和成就增量。
+ * - 输出：无；副作用是推进任务/主线/成就并按需推送任务总览。
+ *
+ * 数据流/状态流：
+ * 多角色事件 -> 批量读取角色境界 -> recurring 周期任务批量重置
+ * -> `applyTaskEventsBatch` 批量推进任务
+ * -> `updateSectionProgressByEventsBatch` 批量推进主线
+ * -> `updateAchievementProgressBatch` 批量推进成就 -> 按角色推送任务概览。
+ *
+ * 复用设计说明：
+ * 1. 收集事件和击杀事件都复用这里，避免继续各自维护一套“任务 + 主线 + 成就”推进顺序。
+ * 2. 高频变化点只剩事件归一化规则；真正的批量 SQL 协议集中在这一处，后续扩展新事件种类只加构造器。
+ *
+ * 关键边界条件与坑点：
+ * 1. 不存在的角色必须在境界批量加载后被整体剔除，避免对任务/主线/成就表写出孤儿数据。
+ * 2. 同一角色可能在同一批次里重复出现，必须先合并事件数组，否则会重复推进并增加锁持有时间。
+ */
+const recordCharacterProgressEventBatchesInternal = async (
+  inputs: CharacterProgressEventBatchInput[],
+): Promise<void> => {
+  const normalizedInputs = normalizeCharacterProgressEventBatchInputs(inputs);
+  if (normalizedInputs.length <= 0) return;
+
+  const resolvedTaskInputs = await resolveCharacterTaskEventsBatchInputs(
+    normalizedInputs.map((input) => ({
+      characterId: input.characterId,
+      events: input.taskEvents,
+    })),
+  );
+  if (resolvedTaskInputs.length <= 0) return;
+
+  const resolvedCharacterIdSet = new Set<number>(resolvedTaskInputs.map((input) => input.characterId));
+  const resolvedInputs = normalizedInputs.filter((input) => resolvedCharacterIdSet.has(input.characterId));
+  if (resolvedInputs.length <= 0) return;
+
+  await resetRecurringTaskProgressIfNeededBatch(
+    resolvedTaskInputs.map((input) => ({
+      characterId: input.characterId,
+      characterRealmState: input.characterRealmState,
+    })),
+  );
+
+  const changedCharacterIds = await applyTaskEventsBatch(resolvedTaskInputs);
+
+  const mainQuestInputs = resolvedInputs
+    .filter((input) => input.mainQuestEvents.length > 0)
+    .map((input) => ({
+      characterId: input.characterId,
+      events: input.mainQuestEvents,
+    }));
+  if (mainQuestInputs.length > 0) {
+    await updateSectionProgressByEventsBatch(mainQuestInputs);
+  }
+
+  const achievementProgressInputs = resolvedInputs.flatMap((input) =>
+    input.achievementInputs.map((achievementInput) => ({
+      characterId: input.characterId,
+      trackKey: achievementInput.trackKey,
+      increment: achievementInput.increment,
+    })),
+  );
+  if (achievementProgressInputs.length > 0) {
+    await updateAchievementProgressBatch(achievementProgressInputs);
+  }
+
+  await Promise.all(
+    changedCharacterIds.map((characterId) => notifyTaskOverviewUpdate(characterId, ['task'])),
+  );
+};
+
+const flushBufferedCharacterProgressDeltas = async (
+  options: { drainAll?: boolean; limit?: number } = {},
+): Promise<void> => {
+  const drainAll = options.drainAll === true;
+  const limit = Math.max(1, Math.floor(options.limit ?? TASK_PROGRESS_DELTA_FLUSH_BATCH_LIMIT));
+
+  do {
+    const dirtyCharacterIds = await listDirtyCharacterIdsForProgressDelta(limit);
+    if (dirtyCharacterIds.length <= 0) {
+      return;
+    }
+
+    const claimedInputs: CharacterProgressEventBatchInput[] = [];
+    const claimedCharacterIds: number[] = [];
+    for (const characterId of dirtyCharacterIds) {
+      const claimed = await claimCharacterProgressDelta(characterId);
+      if (!claimed) continue;
+      claimedCharacterIds.push(characterId);
+      const hash = await loadClaimedCharacterProgressDeltaHash(characterId);
+      const parsed = parseBufferedProgressDeltaHash(characterId, hash);
+      if (parsed) {
+        claimedInputs.push(parsed);
+      }
+    }
+
+    if (claimedCharacterIds.length <= 0) {
+      if (!drainAll) return;
+      continue;
+    }
+
+    try {
+      if (claimedInputs.length > 0) {
+        await recordCharacterProgressEventBatchesInternal(claimedInputs);
+      }
+      for (const characterId of claimedCharacterIds) {
+        await finalizeClaimedCharacterProgressDelta(characterId);
+      }
+    } catch (error) {
+      for (const characterId of claimedCharacterIds) {
+        await restoreClaimedCharacterProgressDelta(characterId);
+      }
+      throw error;
+    }
+  } while (drainAll);
+};
+
+const runTaskProgressDeltaFlushLoopOnce = async (): Promise<void> => {
+  if (taskProgressDeltaFlushInFlight) {
+    await taskProgressDeltaFlushInFlight;
+    return;
+  }
+
+  const currentFlush = flushBufferedCharacterProgressDeltas().catch((error: Error) => {
+    taskProgressDeltaLogger.error(error, '角色软进度 Delta flush 失败');
+  });
+  taskProgressDeltaFlushInFlight = currentFlush;
+  try {
+    await currentFlush;
+  } finally {
+    if (taskProgressDeltaFlushInFlight === currentFlush) {
+      taskProgressDeltaFlushInFlight = null;
+    }
+  }
+};
+
+export const initializeTaskProgressDeltaFlushService = async (): Promise<void> => {
+  if (taskProgressDeltaFlushTimer) return;
+
+  taskProgressDeltaFlushTimer = setInterval(() => {
+    void runTaskProgressDeltaFlushLoopOnce();
+  }, TASK_PROGRESS_DELTA_FLUSH_INTERVAL_MS);
+};
+
+export const shutdownTaskProgressDeltaFlushService = async (): Promise<void> => {
+  if (taskProgressDeltaFlushTimer) {
+    clearInterval(taskProgressDeltaFlushTimer);
+    taskProgressDeltaFlushTimer = null;
+  }
+
+  if (taskProgressDeltaFlushInFlight) {
+    await taskProgressDeltaFlushInFlight;
+  }
+
+  await flushBufferedCharacterProgressDeltas({ drainAll: true });
+};
+
 const recordTalkNpcEvent = async (characterId: number, npcId: string): Promise<void> => {
   const nid = asNonEmptyString(npcId);
   if (!nid) return;
 
-  const taskOverviewChanged = await applyTaskEvent(characterId, { type: 'talk_npc', npcId: nid });
-
-  await updateSectionProgress(characterId, { type: 'talk_npc', npcId: nid });
-
-  await updateAchievementProgress(characterId, `talk:npc:${nid}`, 1);
-  if (taskOverviewChanged) {
-    await notifyTaskOverviewUpdate(characterId, ['task']);
-  }
+  await bufferCharacterProgressEventBatches([{
+    characterId,
+    taskEvents: [{ type: 'talk_npc', npcId: nid }],
+    mainQuestEvents: [{ type: 'talk_npc', npcId: nid }],
+    achievementInputs: [{ trackKey: `talk:npc:${nid}`, increment: 1 }],
+  }]);
 };
 
 export const recordKillMonsterEvent = async (characterId: number, monsterId: string, count: number): Promise<void> => {
@@ -1500,38 +2390,23 @@ export const recordKillMonsterEvents = async (
   characterId: number,
   events: KillMonsterEventInput[],
 ): Promise<void> => {
-  const normalizedEvents = normalizeKillMonsterEvents(events);
-  if (normalizedEvents.length <= 0) return;
+  await recordKillMonsterEventsBatch([{ characterId, events }]);
+};
 
-  const taskOverviewChanged = await applyTaskEvents(
-    characterId,
-    normalizedEvents.map((event) => ({
-      type: 'kill_monster',
-      monsterId: event.monsterId,
-      count: event.count,
+export const recordKillMonsterEventsBatch = async (
+  inputs: KillMonsterEventsBatchInput[],
+): Promise<void> => {
+  const normalizedInputs = normalizeKillMonsterEventBatchInputs(inputs);
+  if (normalizedInputs.length <= 0) return;
+
+  await bufferCharacterProgressEventBatches(
+    normalizedInputs.map((input) => ({
+      characterId: input.characterId,
+      taskEvents: buildKillMonsterTaskEvents(input.normalizedEvents),
+      mainQuestEvents: buildKillMonsterMainQuestEvents(input.normalizedEvents),
+      achievementInputs: buildKillMonsterAchievementInputs(input.normalizedEvents),
     })),
   );
-
-  await updateSectionProgressBatch(
-    characterId,
-    normalizedEvents.map((event) => ({
-      type: 'kill_monster' as const,
-      monsterId: event.monsterId,
-      count: event.count,
-    })),
-  );
-
-  await updateAchievementProgressBatch(
-    normalizedEvents.map((event) => ({
-      characterId,
-      trackKey: `kill:monster:${event.monsterId}`,
-      increment: event.count,
-    })),
-  );
-
-  if (taskOverviewChanged) {
-    await notifyTaskOverviewUpdate(characterId, ['task']);
-  }
 };
 
 export const recordGatherResourceEvent = async (characterId: number, resourceId: string, count: number): Promise<void> => {
@@ -1539,18 +2414,18 @@ export const recordGatherResourceEvent = async (characterId: number, resourceId:
   if (!rid) return;
   const c = normalizePositiveInt(count, 1);
 
-  const taskOverviewChanged = await applyTaskEvent(characterId, { type: 'gather_resource', resourceId: rid, count: c });
-
-  await updateSectionProgressBatch(characterId, [
-    { type: 'gather_resource', resourceId: rid, count: c },
-    { type: 'collect', itemId: rid, count: c },
-  ]);
-
-  await updateAchievementProgress(characterId, `gather:resource:${rid}`, c);
-  await updateAchievementProgress(characterId, `item:obtain:${rid}`, c);
-  if (taskOverviewChanged) {
-    await notifyTaskOverviewUpdate(characterId, ['task']);
-  }
+  await bufferCharacterProgressEventBatches([{
+    characterId,
+    taskEvents: [{ type: 'gather_resource', resourceId: rid, count: c }],
+    mainQuestEvents: [
+      { type: 'gather_resource', resourceId: rid, count: c },
+      { type: 'collect', itemId: rid, count: c },
+    ],
+    achievementInputs: [
+      { trackKey: `gather:resource:${rid}`, increment: c },
+      { trackKey: `item:obtain:${rid}`, increment: c },
+    ],
+  }]);
 };
 
 export const recordCollectItemEvent = async (characterId: number, itemId: string, count: number): Promise<void> => {
@@ -1594,10 +2469,8 @@ const buildCollectTaskEvents = (
 }));
 
 const buildCollectAchievementProgressInputs = (
-  characterId: number,
   normalizedEvents: CollectItemEventInput[],
 ) => normalizedEvents.map((event) => ({
-  characterId,
   trackKey: `item:obtain:${event.itemId}`,
   increment: event.count,
 }));
@@ -1638,47 +2511,14 @@ const recordCollectItemEventsBatchInternal = async (
   const normalizedInputs = normalizeCollectItemEventBatchInputs(inputs);
   if (normalizedInputs.length <= 0) return;
 
-  const stateByCharacterId = await loadCharacterTaskRealmStatesBatch(
-    normalizedInputs.map((input) => input.characterId),
+  await bufferCharacterProgressEventBatches(
+    normalizedInputs.map((input) => ({
+      characterId: input.characterId,
+      taskEvents: buildCollectTaskEvents(input.normalizedEvents),
+      mainQuestEvents: buildCollectTaskEvents(input.normalizedEvents),
+      achievementInputs: buildCollectAchievementProgressInputs(input.normalizedEvents),
+    })),
   );
-  if (stateByCharacterId.size <= 0) return;
-
-  const achievementProgressInputs: Array<{
-    characterId: number;
-    trackKey: string;
-    increment: number;
-  }> = [];
-  const notifyCharacterIds: number[] = [];
-
-  for (const input of normalizedInputs) {
-    const characterRealmState = stateByCharacterId.get(input.characterId);
-    if (!characterRealmState) continue;
-
-    const taskEvents = buildCollectTaskEvents(input.normalizedEvents);
-    achievementProgressInputs.push(
-      ...buildCollectAchievementProgressInputs(input.characterId, input.normalizedEvents),
-    );
-
-    await resetRecurringTaskProgressIfNeeded(input.characterId, undefined, characterRealmState);
-    const taskOverviewChanged = await applyTaskEvents(
-      input.characterId,
-      taskEvents,
-      characterRealmState,
-    );
-    await updateSectionProgressByEvents(input.characterId, taskEvents);
-
-    if (taskOverviewChanged) {
-      notifyCharacterIds.push(input.characterId);
-    }
-  }
-
-  if (achievementProgressInputs.length > 0) {
-    await updateAchievementProgressBatch(achievementProgressInputs);
-  }
-
-  for (const characterId of notifyCharacterIds) {
-    await notifyTaskOverviewUpdate(characterId, ['task']);
-  }
 };
 
 /**
@@ -1730,33 +2570,15 @@ export const recordDungeonClearEvent = async (
   const diffId = asNonEmptyString(difficultyId) ?? undefined;
   const c = normalizePositiveInt(count, 1);
 
-  await resetRecurringTaskProgressIfNeeded(characterId);
-  const taskOverviewChanged = await applyTaskEvent(characterId, {
-    type: 'dungeon_clear',
-    dungeonId: did,
-    difficultyId: diffId,
-    count: c,
-  });
-
-  await updateSectionProgress(characterId, { type: 'dungeon_clear', dungeonId: did, difficultyId: diffId, count: c });
-
-  const achievementProgressInputs: Array<{
-    characterId: number;
-    trackKey: string;
-    increment: number;
-  }> = [
-    {
-      characterId,
-      trackKey: `dungeon:clear:${did}`,
-      increment: c,
-    },
-  ];
+  const achievementProgressInputs: CharacterBatchAchievementInput[] = [{
+    trackKey: `dungeon:clear:${did}`,
+    increment: c,
+  }];
   if (diffId) {
     const difficultyDef = getDungeonDifficultyById(diffId);
     const difficultyName = typeof difficultyDef?.name === 'string' ? difficultyDef.name.trim() : '';
     if (difficultyName === '噩梦') {
       achievementProgressInputs.push({
-        characterId,
         trackKey: 'dungeon:clear:difficulty:nightmare',
         increment: c,
       });
@@ -1764,15 +2586,26 @@ export const recordDungeonClearEvent = async (
   }
   if (participantCount > 1) {
     achievementProgressInputs.push({
-      characterId,
       trackKey: `team:dungeon:clear:${did}`,
       increment: c,
     });
   }
-  await updateAchievementProgressBatch(achievementProgressInputs);
-  if (taskOverviewChanged) {
-    await notifyTaskOverviewUpdate(characterId, ['task']);
-  }
+  await bufferCharacterProgressEventBatches([{
+    characterId,
+    taskEvents: [{
+      type: 'dungeon_clear',
+      dungeonId: did,
+      difficultyId: diffId,
+      count: c,
+    }],
+    mainQuestEvents: [{
+      type: 'dungeon_clear',
+      dungeonId: did,
+      difficultyId: diffId,
+      count: c,
+    }],
+    achievementInputs: achievementProgressInputs,
+  }]);
 };
 
 export const recordCraftItemEvent = async (
@@ -1789,31 +2622,31 @@ export const recordCraftItemEvent = async (
   const rtype = asNonEmptyString(recipeType) ?? undefined;
   const c = normalizePositiveInt(count, 1);
 
-  await resetRecurringTaskProgressIfNeeded(characterId);
-  const taskOverviewChanged = await applyTaskEvent(characterId, {
-    type: 'craft_item',
-    recipeId: rid,
-    recipeType: rtype,
-    craftKind: kind,
-    itemId: iid,
-    count: c,
-  });
+  const achievementInputs: CharacterBatchAchievementInput[] = [];
+  if (rid) achievementInputs.push({ trackKey: `craft:recipe:${rid}`, increment: c });
+  if (kind) achievementInputs.push({ trackKey: `craft:kind:${kind}`, increment: c });
+  if (iid) achievementInputs.push({ trackKey: `craft:item:${iid}`, increment: c });
 
-  await updateSectionProgress(characterId, {
-    type: 'craft_item',
-    recipeId: rid,
-    recipeType: rtype,
-    craftKind: kind,
-    itemId: iid,
-    count: c,
-  });
-
-  if (rid) await updateAchievementProgress(characterId, `craft:recipe:${rid}`, c);
-  if (kind) await updateAchievementProgress(characterId, `craft:kind:${kind}`, c);
-  if (iid) await updateAchievementProgress(characterId, `craft:item:${iid}`, c);
-  if (taskOverviewChanged) {
-    await notifyTaskOverviewUpdate(characterId, ['task']);
-  }
+  await bufferCharacterProgressEventBatches([{
+    characterId,
+    taskEvents: [{
+      type: 'craft_item',
+      recipeId: rid,
+      recipeType: rtype,
+      craftKind: kind,
+      itemId: iid,
+      count: c,
+    }],
+    mainQuestEvents: [{
+      type: 'craft_item',
+      recipeId: rid,
+      recipeType: rtype,
+      craftKind: kind,
+      itemId: iid,
+      count: c,
+    }],
+    achievementInputs,
+  }]);
 };
 
 type NpcTalkTaskOption = {
@@ -2100,7 +2933,13 @@ class TaskService {
         const qtyRange = resolveRewardQtyRange(rw);
         const qty = rollRangeIntInclusive(qtyRange.min, qtyRange.max);
         const itemMeta = resolveRewardItemDisplayMeta(itemDefId);
-        const result = await itemService.createItem(userId, characterId, itemDefId, qty, { obtainedFrom: 'task_reward' });
+        const result = await enqueueCharacterItemGrant({
+          characterId,
+          userId,
+          itemDefId,
+          qty,
+          obtainedFrom: 'task_reward',
+        });
         if (!result.success) return { success: false, message: result.message, rewards: out, rewardDelta };
         out.push({
           type: 'item',
@@ -2167,15 +3006,16 @@ class TaskService {
   }
 
   /**
-   * 记录收集物品事件
+   * 记录收集物品事件。
    *
-   * @Transactional 自动管理事务边界
+   * 作用：
+   * 1. 把高频收集事件直接写入 Redis Delta，避免掉落链路为任务/主线/成就同步开事务打库。
+   * 2. 复用批量收集入口，让单条和批量事件都走同一套归一化与合并协议。
    *
-   * 流程：
-   * 1. 更新主线任务进度
-   * 2. 更新成就进度
+   * 边界条件：
+   * 1. 这里只负责写入缓存增量，不在当前调用栈内等待主线/成就实际落库。
+   * 2. 调用方如果本身位于事务内，真正写 Redis 会自动延迟到事务提交后，避免回滚后留下脏进度。
    */
-  @Transactional
   async recordCollectItemEvent(characterId: number, itemId: string, count: number): Promise<void> {
     await this.recordCollectItemEvents(characterId, [{ itemId, count }]);
   }
@@ -2184,19 +3024,17 @@ class TaskService {
    * 批量记录收集物品事件。
    *
    * 作用：
-   * 1. 把同一角色的一批收集事件聚合成一次主线推进和一次成就推进。
-   * 2. 保持在同一事务中完成，避免结算链路里出现“主线已写、成就未写”的半成功状态。
+   * 1. 把同一角色的一批收集事件聚合成一组 Redis Delta field，降低同批掉落的缓存写放大。
+   * 2. 让战斗掉落、邮件补发等入口共享同一套收集增量协议，避免 Redis key 设计散落。
    *
    * 边界条件：
    * 1. 重复 itemId 必须先合并，避免同一批次重复更新同一目标。
    * 2. 空事件或非法 itemId 直接忽略，和单条入口保持同一口径。
    */
-  @Transactional
   async recordCollectItemEvents(characterId: number, events: CollectItemEventInput[]): Promise<void> {
     await recordCollectItemEventsBatchInternal([{ characterId, events }]);
   }
 
-  @Transactional
   async recordCollectItemEventsBatch(inputs: CollectItemEventsBatchInput[]): Promise<void> {
     await recordCollectItemEventsBatchInternal(inputs);
   }

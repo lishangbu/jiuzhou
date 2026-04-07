@@ -22,11 +22,11 @@ import { randomUUID } from 'crypto';
 import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
 import { resolveSkillTriggerType, type SkillTriggerType } from '../shared/skillTriggerType.js';
-import { addItemToInventory } from './inventory/index.js';
 import { consumeMaterialByDefId } from './inventory/shared/consume.js';
 import { mailService } from './mailService.js';
 import { getItemDefinitionById, getTechniqueDefinitions, refreshGeneratedTechniqueSnapshots } from './staticConfigLoader.js';
 import { resolveQualityRankFromName } from './shared/itemQuality.js';
+import { enqueueCharacterItemGrant } from './shared/characterItemGrantDeltaService.js';
 import { buildTechniqueResearchJobState } from './shared/techniqueResearchJobShared.js';
 import { normalizeTechniqueName, validateTechniqueCustomName, getTechniqueNameRulesView } from './shared/techniqueNameRules.js';
 import { isCharacterVisibleTechniqueDefinition } from './shared/techniqueUsageScope.js';
@@ -1596,7 +1596,7 @@ class TechniqueGenerationService {
     userId: number;
     generationId: string;
     customName: string;
-  }): Promise<ServiceResult<{ techniqueId: string; finalName: string; bookItemInstanceId: number }>> {
+  }): Promise<ServiceResult<{ techniqueId: string; finalName: string; bookItemInstanceId: number | null }>> {
     const { characterId, userId, generationId, customName } = args;
 
     await this.refundExpiredDraftJobsTx(characterId);
@@ -1711,8 +1711,11 @@ class TechniqueGenerationService {
     );
 
     const qualityText = asString(draftRow.quality) || '黄';
-    const addRes = await addItemToInventory(characterId, userId, GENERATED_TECHNIQUE_BOOK_ITEM_DEF_ID, 1, {
-      location: 'bag',
+    const addRes = await enqueueCharacterItemGrant({
+      characterId,
+      userId,
+      itemDefId: GENERATED_TECHNIQUE_BOOK_ITEM_DEF_ID,
+      qty: 1,
       bindType: 'none',
       obtainedFrom: `technique_generate:${generationId}`,
       metadata: {
@@ -1722,8 +1725,7 @@ class TechniqueGenerationService {
       quality: qualityText,
       qualityRank: resolveQualityRankFromName(qualityText, 1),
     });
-
-    if (!addRes.success || !addRes.itemIds || addRes.itemIds.length === 0) {
+    if (!addRes.success) {
       throw new TechniqueGenerationRollbackError(
         addRes.message || '发放领悟功法书失败',
         'REWARD_FAILED',
@@ -1738,7 +1740,7 @@ class TechniqueGenerationService {
       data: {
         techniqueId: draftTechniqueId,
         finalName: nameCheck.displayName,
-        bookItemInstanceId: addRes.itemIds[0],
+        bookItemInstanceId: null,
       },
     };
   }
@@ -1748,7 +1750,7 @@ class TechniqueGenerationService {
     userId: number;
     generationId: string;
     customName: string;
-  }): Promise<ServiceResult<{ techniqueId: string; finalName: string; bookItemInstanceId: number }>> {
+  }): Promise<ServiceResult<{ techniqueId: string; finalName: string; bookItemInstanceId: number | null }>> {
     try {
       const result = await this.publishGeneratedTechniqueTx(args);
       if (result.success && result.data) {
