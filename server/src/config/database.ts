@@ -30,6 +30,7 @@ import dotenv from 'dotenv';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool as PgPool, PoolClient, QueryResult, QueryResultRow } from 'pg';
 import { resolveDatabaseConnectionString } from './databaseConnection.js';
+import { resolveDatabasePoolConfig } from './databasePoolConfig.js';
 import { isTransientPgError } from './databaseRuntimeError.js';
 
 dotenv.config();
@@ -39,6 +40,7 @@ const { Pool } = pg;
 // 是否启用查询日志（生产环境关闭）
 const ENABLE_QUERY_LOG = process.env.DB_LOG === 'true';
 const DATABASE_CONNECTION_STRING = resolveDatabaseConnectionString(process.env);
+const DATABASE_POOL_CONFIG = resolveDatabasePoolConfig(process.env);
 
 /**
  * 严格写入事务模式：
@@ -50,8 +52,7 @@ const STRICT_WRITE_TRANSACTION = true;
 // 数据库连接池
 export const pool = new Pool({
   connectionString: DATABASE_CONNECTION_STRING,
-  max: 600,
-  min: 200
+  ...DATABASE_POOL_CONFIG,
 });
 
 pool.on('error', (error) => {
