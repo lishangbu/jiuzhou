@@ -730,6 +730,7 @@ model game_time {
   weather         String   @db.VarChar(16)
   scale           Int      @default(60)
   last_real_ms    BigInt
+  last_sect_maintenance_day_serial Int?
   updated_at      DateTime @default(now()) @db.Timestamptz(6)
 }
 

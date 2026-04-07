@@ -31,13 +31,18 @@ const LOG_TYPE_LABEL_MAP: Record<string, string> = {
   leave: '退出宗门',
   kick: '踢出成员',
   appoint: '任命职位',
+  join: '加入宗门',
   apply: '提交申请',
   approve: '通过申请',
+  reject: '拒绝申请',
+  cancel_apply: '取消申请',
   donate: '捐献',
   upgrade_building: '升级建筑',
   shop_buy: '商店购买',
   quest_submit: '任务提交',
   quest_claim: '任务领奖',
+  sect_blessing: '宗门祈福',
+  daily_maintenance: '宗门维护',
 };
 
 const formatLogType = (logType: string): string => {

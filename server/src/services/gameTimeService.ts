@@ -1,4 +1,8 @@
 import { query } from '../config/database.js';
+import { withTransaction } from '../config/database.js';
+import { buildShanghaiDayKey, buildShanghaiDayToken } from './shared/shanghaiNaturalDay.js';
+import { invalidateSectInfoCache } from './sect/cache.js';
+import { applySectDailyMaintenanceTx } from './sect/dailyMaintenance.js';
 
 export type GameTimeSnapshot = {
   era_name: string;
@@ -27,6 +31,7 @@ type GameTimeStateRow = {
   weather: string;
   scale: number;
   last_real_ms: number;
+  last_sect_maintenance_day_serial: number | string | null;
 };
 
 type GameTimeState = {
@@ -36,6 +41,7 @@ type GameTimeState = {
   weather: string;
   scale: number;
   last_real_ms: number;
+  last_sect_maintenance_day_serial: number;
 };
 
 const DEFAULT_ERA_NAME = '末法纪元';
@@ -43,7 +49,6 @@ const DEFAULT_BASE_YEAR = 1000;
 const DEFAULT_WEATHER = '晴';
 const DEFAULT_START_HOUR = 7;
 const WEATHER_BUCKET_MS = 1 * 60 * 60 * 1000;
-
 const getEnvScale = (): number => {
   const raw = process.env.GAME_TIME_SCALE;
   const n = raw ? Number(raw) : NaN;
@@ -115,6 +120,17 @@ const getCalendarFromElapsed = (baseYear: number, gameElapsedMs: number): { year
   const yearAdd = Math.floor(totalMonth / 12);
   const year = baseYear + yearAdd;
   return { year, month, day, hour };
+};
+
+const normalizeLastSectMaintenanceDaySerial = (
+  value: number | string | null | undefined,
+  currentDayToken: number,
+): number => {
+  const normalized = Number(value);
+  if (!Number.isInteger(normalized) || normalized < 0) {
+    return currentDayToken;
+  }
+  return normalized;
 };
 
 const hashU32 = (seed: number): number => {
@@ -213,6 +229,7 @@ const loadOrCreateState = async (): Promise<GameTimeState> => {
 
   if (!row) {
     const startElapsedMs = DEFAULT_START_HOUR * 60 * 60 * 1000;
+    const currentDayToken = buildShanghaiDayToken(new Date(nowMs));
     const state: GameTimeState = {
       era_name: DEFAULT_ERA_NAME,
       base_year: DEFAULT_BASE_YEAR,
@@ -220,11 +237,12 @@ const loadOrCreateState = async (): Promise<GameTimeState> => {
       weather: DEFAULT_WEATHER,
       scale,
       last_real_ms: nowMs,
+      last_sect_maintenance_day_serial: currentDayToken,
     };
     await query(
       `
-        INSERT INTO game_time (id, era_name, base_year, game_elapsed_ms, weather, scale, last_real_ms)
-        VALUES (1, $1, $2, $3, $4, $5, $6)
+        INSERT INTO game_time (id, era_name, base_year, game_elapsed_ms, weather, scale, last_real_ms, last_sect_maintenance_day_serial)
+        VALUES (1, $1, $2, $3, $4, $5, $6, $7)
         ON CONFLICT (id) DO UPDATE SET
           era_name = EXCLUDED.era_name,
           base_year = EXCLUDED.base_year,
@@ -232,9 +250,18 @@ const loadOrCreateState = async (): Promise<GameTimeState> => {
           weather = EXCLUDED.weather,
           scale = EXCLUDED.scale,
           last_real_ms = EXCLUDED.last_real_ms,
+          last_sect_maintenance_day_serial = EXCLUDED.last_sect_maintenance_day_serial,
           updated_at = NOW()
       `,
-      [state.era_name, state.base_year, state.game_elapsed_ms, state.weather, state.scale, state.last_real_ms]
+      [
+        state.era_name,
+        state.base_year,
+        state.game_elapsed_ms,
+        state.weather,
+        state.scale,
+        state.last_real_ms,
+        state.last_sect_maintenance_day_serial,
+      ]
     );
     return state;
   }
@@ -244,6 +271,7 @@ const loadOrCreateState = async (): Promise<GameTimeState> => {
   const baseElapsedMs = Number(row.game_elapsed_ms ?? 0);
   const deltaRealMs = Math.max(0, nowMs - lastRealMs);
   const curElapsedMs = baseElapsedMs + deltaRealMs * prevScale;
+  const currentDayToken = buildShanghaiDayToken(new Date(nowMs));
 
   const state: GameTimeState = {
     era_name: typeof row.era_name === 'string' && row.era_name.length > 0 ? row.era_name : DEFAULT_ERA_NAME,
@@ -252,6 +280,10 @@ const loadOrCreateState = async (): Promise<GameTimeState> => {
     weather: typeof row.weather === 'string' && row.weather.length > 0 ? row.weather : DEFAULT_WEATHER,
     scale: prevScale > 0 ? Math.floor(prevScale) : scale,
     last_real_ms: nowMs,
+    last_sect_maintenance_day_serial: normalizeLastSectMaintenanceDaySerial(
+      row.last_sect_maintenance_day_serial,
+      currentDayToken,
+    ),
   };
 
   await query(
@@ -264,13 +296,70 @@ const loadOrCreateState = async (): Promise<GameTimeState> => {
         weather = $4,
         scale = $5,
         last_real_ms = $6,
+        last_sect_maintenance_day_serial = $7,
         updated_at = NOW()
       WHERE id = 1
     `,
-    [state.era_name, state.base_year, state.game_elapsed_ms, state.weather, state.scale, state.last_real_ms]
+    [
+      state.era_name,
+      state.base_year,
+      state.game_elapsed_ms,
+      state.weather,
+      state.scale,
+      state.last_real_ms,
+      state.last_sect_maintenance_day_serial,
+    ]
   );
 
   return state;
+};
+
+const persistGameTimeState = async (state: GameTimeState): Promise<void> => {
+  await query(
+    `
+      UPDATE game_time
+      SET
+        game_elapsed_ms = $1,
+        weather = $2,
+        scale = $3,
+        last_real_ms = $4,
+        last_sect_maintenance_day_serial = $5,
+        updated_at = NOW()
+      WHERE id = 1
+    `,
+    [
+      state.game_elapsed_ms,
+      state.weather,
+      state.scale,
+      state.last_real_ms,
+      state.last_sect_maintenance_day_serial,
+    ]
+  );
+};
+
+const settleSectMaintenanceIfNeededTx = async (state: GameTimeState): Promise<string[]> => {
+  const currentDayToken = buildShanghaiDayToken(new Date(state.last_real_ms));
+  if (currentDayToken <= state.last_sect_maintenance_day_serial) {
+    return [];
+  }
+
+  const affectedSectIds = await applySectDailyMaintenanceTx({
+    dayKey: buildShanghaiDayKey(new Date(state.last_real_ms)),
+    dayToken: currentDayToken,
+  });
+
+  state.last_sect_maintenance_day_serial = currentDayToken;
+  return affectedSectIds;
+};
+
+const persistStateAndSettleSectMaintenance = async (
+  state: GameTimeState,
+): Promise<string[]> => {
+  return withTransaction(async () => {
+    const affectedSectIds = await settleSectMaintenanceIfNeededTx(state);
+    await persistGameTimeState(state);
+    return affectedSectIds;
+  });
 };
 
 const tickAndPersist = async (): Promise<void> => {
@@ -293,19 +382,10 @@ const tickAndPersist = async (): Promise<void> => {
 
   saving = true;
   try {
-    await query(
-      `
-        UPDATE game_time
-        SET
-          game_elapsed_ms = $1,
-          weather = $2,
-          scale = $3,
-          last_real_ms = $4,
-          updated_at = NOW()
-        WHERE id = 1
-      `,
-      [state.game_elapsed_ms, state.weather, state.scale, state.last_real_ms]
-    );
+    const affectedSectIds = await persistStateAndSettleSectMaintenance(state);
+    if (affectedSectIds.length > 0) {
+      await Promise.all(affectedSectIds.map((sectId) => invalidateSectInfoCache(sectId)));
+    }
 
     const nextSnapshot = buildSnapshotFromElapsed(
       state,
@@ -327,6 +407,11 @@ export const initGameTimeService = async (): Promise<void> => {
   if (runtimeState) return;
   runtimeState = await loadOrCreateState();
   updateWeatherIfNeeded(runtimeState, runtimeState.game_elapsed_ms);
+  const currentDayToken = buildShanghaiDayToken(new Date(runtimeState.last_real_ms));
+  if (currentDayToken !== runtimeState.last_sect_maintenance_day_serial) {
+    runtimeState.last_sect_maintenance_day_serial = currentDayToken;
+    await persistGameTimeState(runtimeState);
+  }
   if (!timer) timer = setInterval(() => void tickAndPersist(), 1000);
 };
 
