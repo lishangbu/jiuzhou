@@ -4,6 +4,9 @@ import { itemService } from '../itemService.js';
 import { sendSystemMail, type MailAttachItem } from '../mailService.js';
 import type { GenerateOptions, GeneratedEquipment } from '../equipmentService.js';
 import { createScopedLogger } from '../../utils/logger.js';
+import { lockCharacterInventoryMutex } from '../inventoryMutex.js';
+import { createCharacterBagSlotAllocator } from './characterBagSlotAllocator.js';
+import { createCharacterInventoryMutationContext } from './characterInventoryMutationContext.js';
 
 /**
  * 角色物品授予 Delta 聚合服务
@@ -473,6 +476,11 @@ const flushSingleCharacterItemGrants = async (
   if (grants.length <= 0) return;
 
   await withTransaction(async () => {
+    await lockCharacterInventoryMutex(characterId);
+    const [bagSlotAllocator, inventoryMutationContext] = await Promise.all([
+      createCharacterBagSlotAllocator([characterId]),
+      createCharacterInventoryMutationContext([characterId]),
+    ]);
     const pendingMailItems: MailAttachItem[] = [];
     let receiverUserId = 0;
 
@@ -487,6 +495,9 @@ const flushSingleCharacterItemGrants = async (
           location: 'bag',
           obtainedFrom: grant.payload.obtainedFrom,
           bindType: grant.payload.bindType,
+          bagSlotAllocator,
+          inventoryMutationContext,
+          skipInventoryMutexLock: true,
           ...(grant.payload.metadata ? { metadata: grant.payload.metadata } : {}),
           ...(grant.payload.quality ? { quality: grant.payload.quality } : {}),
           ...(grant.payload.qualityRank !== null ? { qualityRank: grant.payload.qualityRank } : {}),

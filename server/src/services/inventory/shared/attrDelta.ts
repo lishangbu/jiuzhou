@@ -25,7 +25,6 @@
  *    保留函数签名以兼容调用链，未来如需恢复直接实现即可
  * 2. 查询不到装备实例或非 equipment 类别时返回 null，调用方需检查
  */
-import { query } from "../../../config/database.js";
 import {
   buildEquipmentDisplayBaseAttrs,
 } from "../../equipmentGrowthRules.js";
@@ -38,6 +37,9 @@ import type { CharacterAttrKey, InventoryLocation } from "./types.js";
 import { allowedCharacterAttrKeys } from "./types.js";
 import { safeNumber, getStaticItemDef } from "./helpers.js";
 import { getEquippedSetPieceCountMap } from "./equippedSetCount.js";
+import {
+  loadProjectedCharacterItemInstanceById,
+} from "../../shared/characterItemInstanceMutationService.js";
 
 /**
  * 向差分 map 添加属性值（仅白名单内的 key 生效）
@@ -98,33 +100,8 @@ export const getEquipmentAttrDeltaByInstanceId = async (
   characterId: number,
   instanceId: number,
 ): Promise<Map<CharacterAttrKey, number> | null> => {
-  const result = await query(
-    `
-      SELECT
-        ii.id,
-        ii.owner_character_id,
-        ii.item_def_id,
-        ii.affixes,
-        ii.strengthen_level,
-        ii.refine_level,
-        ii.socketed_gems,
-        ii.quality_rank
-      FROM item_instance ii
-      WHERE ii.id = $1 AND ii.owner_character_id = $2
-      LIMIT 1
-    `,
-    [instanceId, characterId],
-  );
-
-  if (result.rows.length === 0) return null;
-  const row = result.rows[0] as {
-    item_def_id: string;
-    affixes: unknown;
-    strengthen_level: unknown;
-    refine_level: unknown;
-    socketed_gems: unknown;
-    quality_rank: unknown;
-  };
+  const row = await loadProjectedCharacterItemInstanceById(characterId, instanceId);
+  if (!row) return null;
   const itemDef = getStaticItemDef(row.item_def_id);
   if (!itemDef || itemDef.category !== "equipment") return null;
 

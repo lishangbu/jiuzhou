@@ -44,6 +44,8 @@ import type { CharacterBagSlotAllocator } from './shared/characterBagSlotAllocat
 import type { CharacterInventoryMutationContext } from './shared/characterInventoryMutationContext.js';
 import { applyCharacterRewardDeltas, createCharacterRewardDelta } from './shared/characterRewardSettlement.js';
 import { bufferSimpleCharacterItemGrants } from './shared/characterItemGrantDeltaService.js';
+import { loadProjectedCharacterItemInstanceById } from './shared/characterItemInstanceMutationService.js';
+import { consumeSpecificItemInstance } from './inventory/shared/consume.js';
 
 // 物品定义接口
 export interface ItemDef {
@@ -477,21 +479,10 @@ class ItemService {
     await lockCharacterInventoryMutex(characterId);
 
     // 获取物品实例
-    const instanceResult = await query<ItemInstanceRow>(
-      `
-      SELECT *
-      FROM item_instance
-      WHERE id = $1 AND owner_character_id = $2
-      FOR UPDATE
-    `,
-      [instanceId, characterId],
-    );
-
-    if (instanceResult.rows.length === 0) {
+    const item = await loadProjectedCharacterItemInstanceById(characterId, instanceId);
+    if (!item) {
       return { success: false, message: '物品不存在' };
     }
-
-    const item = instanceResult.rows[0];
     const itemDefId = item.item_def_id.trim();
     if (!itemDefId) {
       return { success: false, message: '物品数据异常' };
@@ -997,13 +988,9 @@ class ItemService {
     }
 
     // 扣除物品
-    if ((Number(item.qty) || 0) === qty) {
-      await query('DELETE FROM item_instance WHERE id = $1', [instanceId]);
-    } else {
-      await query(
-        'UPDATE item_instance SET qty = qty - $1, updated_at = NOW() WHERE id = $2',
-        [qty, instanceId]
-      );
+    const consumeItemResult = await consumeSpecificItemInstance(characterId, instanceId, qty);
+    if (!consumeItemResult.success) {
+      return { success: false, message: consumeItemResult.message };
     }
     if (partnerTechniqueResult) {
       partnerTechniqueResult = {

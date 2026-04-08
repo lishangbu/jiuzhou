@@ -67,6 +67,15 @@ import type {
   PlainAutoStackLookupRow,
 } from "../shared/characterInventoryMutationContext.js";
 import { loadCharacterPendingItemGrants } from "../shared/characterItemGrantDeltaService.js";
+import {
+  applyCharacterItemInstanceMutations,
+  bufferCharacterItemInstanceMutations,
+  type BufferedCharacterItemInstanceMutation,
+  loadProjectedCharacterItemInstanceById,
+  loadProjectedCharacterItemInstances,
+  loadProjectedCharacterItemInstancesByLocation,
+  type CharacterItemInstanceSnapshot,
+} from "../shared/characterItemInstanceMutationService.js";
 
 // ============================================
 // 获取背包信息（容量与使用情况）
@@ -149,6 +158,283 @@ const loadAllInventoryItemsByLocation = async (
     [characterId, location],
   );
   return result.rows.map((row) => row as InventoryItem);
+};
+
+const mapProjectedSnapshotToInventoryItem = (
+  snapshot: CharacterItemInstanceSnapshot,
+): InventoryItem => {
+  return {
+    id: snapshot.id,
+    item_def_id: snapshot.item_def_id,
+    qty: snapshot.qty,
+    quality: snapshot.quality,
+    quality_rank: snapshot.quality_rank,
+    metadata: snapshot.metadata,
+    location: snapshot.location as InventoryLocation,
+    location_slot: snapshot.location_slot,
+    equipped_slot: snapshot.equipped_slot,
+    strengthen_level: snapshot.strengthen_level,
+    refine_level: snapshot.refine_level,
+    socketed_gems: snapshot.socketed_gems,
+    affixes: snapshot.affixes,
+    identified: snapshot.identified,
+    locked: snapshot.locked,
+    bind_type: snapshot.bind_type,
+    created_at: snapshot.created_at,
+  };
+};
+
+const loadProjectedInventoryItemsByLocation = async (
+  characterId: number,
+  location: InventoryLocation,
+): Promise<InventoryItem[]> => {
+  const projectedItems = await loadProjectedCharacterItemInstances(characterId);
+  return projectedItems
+    .filter((item) => item.location === location)
+    .map((item) => mapProjectedSnapshotToInventoryItem(item));
+};
+
+const buildItemInstanceMutationOpId = (
+  prefix: string,
+  itemId: number,
+  index: number,
+): string => `${prefix}:${itemId}:${Date.now()}:${index}`;
+
+const buildUpsertItemMutation = (
+  prefix: string,
+  characterId: number,
+  snapshot: CharacterItemInstanceSnapshot,
+  index: number,
+): BufferedCharacterItemInstanceMutation => ({
+  opId: buildItemInstanceMutationOpId(prefix, snapshot.id, index),
+  characterId,
+  itemId: snapshot.id,
+  createdAt: Date.now() + index,
+  kind: "upsert",
+  snapshot,
+});
+
+const buildDeleteItemMutation = (
+  prefix: string,
+  characterId: number,
+  itemId: number,
+  index: number,
+): BufferedCharacterItemInstanceMutation => ({
+  opId: buildItemInstanceMutationOpId(prefix, itemId, index),
+  characterId,
+  itemId,
+  createdAt: Date.now() + index,
+  kind: "delete",
+  snapshot: null,
+});
+
+const toMetadataText = (metadata: CharacterItemInstanceSnapshot["metadata"]): string | null => {
+  if (!metadata) return null;
+  return JSON.stringify(metadata);
+};
+
+const sortProjectedStackCandidates = (
+  rows: readonly CharacterItemInstanceSnapshot[],
+): CharacterItemInstanceSnapshot[] => {
+  return [...rows].sort((left, right) => {
+    if (right.qty !== left.qty) {
+      return right.qty - left.qty;
+    }
+    return left.id - right.id;
+  });
+};
+
+const applyBufferedMutationsToProjectedItems = (
+  sourceItems: readonly CharacterItemInstanceSnapshot[],
+  mutations: readonly BufferedCharacterItemInstanceMutation[],
+): CharacterItemInstanceSnapshot[] => {
+  return applyCharacterItemInstanceMutations(sourceItems, mutations);
+};
+
+type MoveItemInstanceToBagComputationResult = {
+  success: boolean;
+  message: string;
+  itemId?: number;
+  mutations?: BufferedCharacterItemInstanceMutation[];
+  projectedItems?: CharacterItemInstanceSnapshot[];
+};
+
+export const buildMoveItemInstanceToBagMutations = async (
+  projectedItems: CharacterItemInstanceSnapshot[],
+  characterId: number,
+  itemInstanceId: number,
+  options: {
+    expectedSourceLocation: MoveToBagSourceLocation;
+    expectedOwnerUserId?: number;
+  },
+): Promise<MoveItemInstanceToBagComputationResult> => {
+  const source = projectedItems.find((item) => item.id === itemInstanceId);
+  if (!source) {
+    return { success: false, message: "物品不存在" };
+  }
+  if (Number(source.owner_character_id) !== characterId) {
+    return { success: false, message: "物品归属异常" };
+  }
+  if (
+    options.expectedOwnerUserId !== undefined &&
+    Number(source.owner_user_id) !== options.expectedOwnerUserId
+  ) {
+    return { success: false, message: "物品归属异常" };
+  }
+
+  const location = String(source.location || "");
+  if (location !== options.expectedSourceLocation) {
+    return { success: false, message: "物品不在预期位置" };
+  }
+
+  const itemDefId = String(source.item_def_id || "").trim();
+  const itemDef = getStaticItemDef(itemDefId);
+  if (!itemDef) {
+    return { success: false, message: "物品不存在" };
+  }
+
+  const stackMax = Math.max(1, Math.floor(Number(itemDef.stack_max) || 1));
+  const sourceQty = Math.max(1, Math.floor(Number(source.qty) || 1));
+  const bindType = normalizeItemBindType(
+    typeof source.bind_type === "string" ? source.bind_type : null,
+  );
+  const sourceCanAutoStack =
+    stackMax > 1 &&
+    isPlainStackingState({
+      metadataText: toMetadataText(source.metadata),
+      quality: source.quality,
+      qualityRank: source.quality_rank,
+    });
+
+  let stackRows: CharacterItemInstanceSnapshot[] = [];
+  if (sourceCanAutoStack) {
+    stackRows = sortProjectedStackCandidates(
+      projectedItems.filter((item) => {
+        if (item.id === itemInstanceId) return false;
+        if (item.location !== "bag") return false;
+        if (item.item_def_id !== itemDefId) return false;
+        if (normalizeItemBindType(item.bind_type) !== bindType) return false;
+        return isPlainStackingState({
+          metadataText: toMetadataText(item.metadata),
+          quality: item.quality,
+          qualityRank: item.quality_rank,
+        }) && item.qty < stackMax;
+      }),
+    );
+  }
+
+  let freeInStacks = 0;
+  for (const row of stackRows) {
+    freeInStacks += Math.max(0, stackMax - row.qty);
+  }
+  const needsEmptySlot = Math.max(0, sourceQty - freeInStacks) > 0;
+
+  let remainingQty = sourceQty;
+  let representativeItemId: number | null = null;
+  const pendingMutations: BufferedCharacterItemInstanceMutation[] = [];
+  for (const row of stackRows) {
+    if (remainingQty <= 0) break;
+    const canAdd = Math.min(remainingQty, Math.max(0, stackMax - row.qty));
+    if (canAdd <= 0) continue;
+
+    pendingMutations.push(buildUpsertItemMutation(
+      "move-instance-to-bag",
+      characterId,
+      {
+        ...row,
+        qty: row.qty + canAdd,
+        bind_type: bindType,
+        metadata: null,
+        quality: null,
+        quality_rank: null,
+      },
+      pendingMutations.length,
+    ));
+
+    if (representativeItemId === null) {
+      representativeItemId = row.id;
+    }
+    remainingQty -= canAdd;
+  }
+
+  if (remainingQty <= 0) {
+    pendingMutations.push(buildDeleteItemMutation(
+      "move-instance-to-bag",
+      characterId,
+      itemInstanceId,
+      pendingMutations.length,
+    ));
+    if (representativeItemId === null) {
+      throw new Error("实例堆叠后缺少承载目标，数据状态异常");
+    }
+    return {
+      success: true,
+      message: "移动成功",
+      itemId: representativeItemId,
+      mutations: pendingMutations,
+      projectedItems: applyBufferedMutationsToProjectedItems(projectedItems, pendingMutations),
+    };
+  }
+
+  let targetSlot: number | null = null;
+  if (needsEmptySlot) {
+    const info = await getInventoryInfo(characterId);
+    const localProjectedItems = applyBufferedMutationsToProjectedItems(projectedItems, pendingMutations);
+    targetSlot = findFirstEmptyProjectedSlot(
+      localProjectedItems,
+      "bag",
+      getSlottedCapacity(info, "bag"),
+    );
+    if (targetSlot === null) {
+      return { success: false, message: "背包已满" };
+    }
+  }
+
+  if (targetSlot === null) {
+    throw new Error("实例剩余数量需落格但未分配格子，数据状态异常");
+  }
+
+  pendingMutations.push(buildUpsertItemMutation(
+    "move-instance-to-bag",
+    characterId,
+    {
+      ...source,
+      qty: remainingQty,
+      location: "bag",
+      location_slot: targetSlot,
+      equipped_slot: null,
+      bind_type: bindType,
+      metadata: sourceCanAutoStack ? null : source.metadata,
+      quality: sourceCanAutoStack ? null : source.quality,
+      quality_rank: sourceCanAutoStack ? null : source.quality_rank,
+    },
+    pendingMutations.length,
+  ));
+
+  return {
+    success: true,
+    message: "移动成功",
+    itemId: itemInstanceId,
+    mutations: pendingMutations,
+    projectedItems: applyBufferedMutationsToProjectedItems(projectedItems, pendingMutations),
+  };
+};
+
+const findFirstEmptyProjectedSlot = (
+  items: readonly CharacterItemInstanceSnapshot[],
+  location: SlottedInventoryLocation,
+  capacity: number,
+): number | null => {
+  const usedSlots = new Set(
+    items
+      .filter((item) => item.location === location)
+      .map((item) => item.location_slot)
+      .filter((slot): slot is number => slot !== null && slot >= 0),
+  );
+  for (let slot = 0; slot < capacity; slot += 1) {
+    if (!usedSlots.has(slot)) return slot;
+  }
+  return null;
 };
 
 const applyPendingBagGrantOverlay = async (
@@ -250,15 +536,32 @@ export const getInventoryInfo = async (
   characterId: number,
 ): Promise<InventoryInfo> => {
   const info = await loadBaseInventoryInfo(characterId);
-  const pendingGrants = await loadCharacterPendingItemGrants(characterId);
+  const [projectedItems, pendingGrants] = await Promise.all([
+    loadProjectedCharacterItemInstances(characterId),
+    loadCharacterPendingItemGrants(characterId),
+  ]);
+  const projectedBagItems = projectedItems
+    .filter((item) => item.location === "bag")
+    .map((item) => mapProjectedSnapshotToInventoryItem(item));
+  const projectedWarehouseItems = projectedItems
+    .filter((item) => item.location === "warehouse")
+    .map((item) => mapProjectedSnapshotToInventoryItem(item));
   if (pendingGrants.length <= 0) {
-    return info;
+    return {
+      ...info,
+      bag_used: projectedBagItems.filter((item) => item.location_slot !== null && item.location_slot >= 0).length,
+      warehouse_used: projectedWarehouseItems.filter((item) => item.location_slot !== null && item.location_slot >= 0).length,
+    };
   }
-  const bagItems = await loadAllInventoryItemsByLocation(characterId, "bag");
-  const overlayBagItems = await applyPendingBagGrantOverlay(bagItems, characterId, Number(info.bag_capacity) || 0);
+  const overlayBagItems = await applyPendingBagGrantOverlay(
+    projectedBagItems,
+    characterId,
+    Number(info.bag_capacity) || 0,
+  );
   return {
     ...info,
     bag_used: overlayBagItems.filter((item) => item.location_slot !== null && item.location_slot >= 0).length,
+    warehouse_used: projectedWarehouseItems.filter((item) => item.location_slot !== null && item.location_slot >= 0).length,
   };
 };
 
@@ -274,12 +577,22 @@ export const getInventoryItems = async (
 ): Promise<{ items: InventoryItem[]; total: number }> => {
   const info = await loadBaseInventoryInfo(characterId);
   if (location === "bag") {
-    const rawItems = await loadAllInventoryItemsByLocation(characterId, location);
+    const rawItems = await loadProjectedInventoryItemsByLocation(characterId, location);
     const overlayItems = await applyPendingBagGrantOverlay(rawItems, characterId, Number(info.bag_capacity) || 0);
     const offset = (page - 1) * pageSize;
     return {
       items: overlayItems.slice(offset, offset + pageSize),
       total: overlayItems.length,
+    };
+  }
+  if (location === "warehouse" || location === "equipped") {
+    const rawItems = sortInventoryItemsForDisplay(
+      await loadProjectedInventoryItemsByLocation(characterId, location),
+    );
+    const offset = (page - 1) * pageSize;
+    return {
+      items: rawItems.slice(offset, offset + pageSize),
+      total: rawItems.length,
     };
   }
   const offset = (page - 1) * pageSize;
@@ -352,13 +665,12 @@ const findEmptySlotsByCapacity = async (
     return [];
   }
 
-  const sql = `
-    SELECT location_slot FROM item_instance
-    WHERE owner_character_id = $1 AND location = $2 AND location_slot IS NOT NULL
-    ORDER BY location_slot
-  `;
-  const result = await query(sql, [characterId, location]);
-  const usedSlots = new Set(result.rows.map((row) => row.location_slot));
+  const projectedItems = await loadProjectedCharacterItemInstancesByLocation(characterId, location);
+  const usedSlots = new Set(
+    projectedItems
+      .map((row) => row.location_slot)
+      .filter((slot): slot is number => slot !== null && slot >= 0),
+  );
 
   const emptySlots: number[] = [];
   for (let slot = 0; slot < capacity && emptySlots.length < count; slot += 1) {
@@ -779,161 +1091,51 @@ export const moveItemInstanceToBagWithStacking = async (
     expectedOwnerUserId?: number;
   },
 ): Promise<{ success: boolean; message: string; itemId?: number }> => {
-  const sourceResult = await query(
-    `
-      SELECT
-        id,
-        owner_user_id,
-        owner_character_id,
-        item_def_id,
-        qty,
-        quality,
-        quality_rank,
-        metadata::text AS metadata_text,
-        location,
-        bind_type
-      FROM item_instance
-      WHERE id = $1
-      FOR UPDATE
-    `,
-    [itemInstanceId],
+  const projectedItems = await loadProjectedCharacterItemInstances(characterId);
+  const result = await buildMoveItemInstanceToBagMutations(
+    projectedItems,
+    characterId,
+    itemInstanceId,
+    options,
   );
-
-  if (sourceResult.rows.length === 0) {
-    return { success: false, message: "物品不存在" };
+  if (!result.success || !result.mutations) {
+    return { success: result.success, message: result.message, itemId: result.itemId };
   }
+  await bufferCharacterItemInstanceMutations(result.mutations);
+  return { success: true, message: result.message, itemId: result.itemId };
+};
 
-  const source = sourceResult.rows[0] as MoveToBagSourceRow;
-  if (Number(source.owner_character_id) !== characterId) {
-    return { success: false, message: "物品归属异常" };
-  }
-  if (
-    options.expectedOwnerUserId !== undefined &&
-    Number(source.owner_user_id) !== options.expectedOwnerUserId
-  ) {
-    return { success: false, message: "物品归属异常" };
-  }
+export const moveItemInstancesToBagWithStacking = async (
+  characterId: number,
+  itemInstanceIds: number[],
+  options: {
+    expectedSourceLocation: MoveToBagSourceLocation;
+    expectedOwnerUserId?: number;
+  },
+): Promise<{ success: boolean; message: string; itemIds: number[] }> => {
+  let projectedItems = await loadProjectedCharacterItemInstances(characterId);
+  const bufferedMutations: BufferedCharacterItemInstanceMutation[] = [];
+  const itemIds: number[] = [];
 
-  const location = String(source.location || "");
-  if (location !== options.expectedSourceLocation) {
-    return { success: false, message: "物品不在预期位置" };
-  }
-
-  const itemDefId = String(source.item_def_id || "").trim();
-  const itemDef = getStaticItemDef(itemDefId);
-  if (!itemDef) {
-    return { success: false, message: "物品不存在" };
-  }
-
-  const stackMax = Math.max(1, Math.floor(Number(itemDef.stack_max) || 1));
-  const sourceQty = Math.max(1, Math.floor(Number(source.qty) || 1));
-  const bindType = normalizeItemBindType(
-    typeof source.bind_type === "string" ? source.bind_type : null,
-  );
-  const sourceCanAutoStack =
-    stackMax > 1 &&
-    isPlainStackingState({
-      metadataText: source.metadata_text,
-      quality: source.quality,
-      qualityRank: source.quality_rank,
-    });
-
-  let stackRows: PlainAutoStackLookupRow[] = [];
-  if (sourceCanAutoStack) {
-    stackRows = await loadPlainAutoStackRows({
+  for (const itemInstanceId of itemInstanceIds) {
+    const result = await buildMoveItemInstanceToBagMutations(
+      projectedItems,
       characterId,
-      itemDefId,
-      location: "bag",
-      stackMax,
-      bindType,
-      excludeItemId: itemInstanceId,
-    });
-  }
-
-  let freeInStacks = 0;
-  for (const row of stackRows) {
-    freeInStacks += Math.max(0, stackMax - row.qty);
-  }
-  const needsEmptySlot = Math.max(0, sourceQty - freeInStacks) > 0;
-  let targetSlot: number | null = null;
-  if (needsEmptySlot) {
-    const emptySlots = await findEmptySlots(characterId, "bag", 1);
-    if (emptySlots.length < 1) {
-      return { success: false, message: "背包已满" };
-    }
-    targetSlot = emptySlots[0];
-  }
-
-  let remainingQty = sourceQty;
-  let representativeItemId: number | null = null;
-  for (const row of stackRows) {
-    if (remainingQty <= 0) break;
-    const canAdd = Math.min(remainingQty, Math.max(0, stackMax - row.qty));
-    if (canAdd <= 0) continue;
-
-    await query(
-      `
-        UPDATE item_instance
-        SET qty = qty + $1,
-            ${PLAIN_STACKING_CANONICAL_SET_SQL}
-        WHERE id = $3
-      `,
-      [canAdd, bindType, row.id],
+      itemInstanceId,
+      options,
     );
-
-    if (representativeItemId === null) {
-      representativeItemId = row.id;
+    if (!result.success || !result.mutations || !result.projectedItems) {
+      return { success: false, message: result.message, itemIds };
     }
-    remainingQty -= canAdd;
-  }
-
-  if (remainingQty <= 0) {
-    await query(`DELETE FROM item_instance WHERE id = $1`, [itemInstanceId]);
-    if (representativeItemId === null) {
-      throw new Error("实例堆叠后缺少承载目标，数据状态异常");
+    bufferedMutations.push(...result.mutations);
+    projectedItems = result.projectedItems;
+    if (result.itemId !== undefined) {
+      itemIds.push(result.itemId);
     }
-    return { success: true, message: "移动成功", itemId: representativeItemId };
   }
 
-  if (targetSlot === null) {
-    throw new Error("实例剩余数量需落格但未分配格子，数据状态异常");
-  }
-
-  if (remainingQty !== sourceQty) {
-    await query(
-      `
-        UPDATE item_instance
-        SET qty = $1, updated_at = NOW()
-        WHERE id = $2
-      `,
-      [remainingQty, itemInstanceId],
-    );
-  }
-
-  const moveResult = await query(
-    `
-      UPDATE item_instance
-      SET location = 'bag',
-          location_slot = $1,
-          bind_type = $2,
-          equipped_slot = NULL,
-          ${sourceCanAutoStack ? "metadata = NULL,\n          quality = NULL,\n          quality_rank = NULL,\n          " : ""}
-          updated_at = NOW()
-      WHERE id = $3
-      RETURNING id
-    `,
-    [targetSlot, bindType, itemInstanceId],
-  );
-
-  if (moveResult.rows.length === 0) {
-    throw new Error("实例入包更新失败，数据状态异常");
-  }
-
-  return {
-    success: true,
-    message: "移动成功",
-    itemId: Number(moveResult.rows[0].id),
-  };
+  await bufferCharacterItemInstanceMutations(bufferedMutations);
+  return { success: true, message: '移动成功', itemIds };
 };
 
 // ============================================
@@ -948,23 +1150,13 @@ export const removeItemFromInventory = async (
   if (!Number.isInteger(qty) || qty <= 0) {
     return { success: false, message: "数量参数错误" };
   }
-
+  
   await lockCharacterInventoryMutex(characterId);
 
-  const result = await query(
-    `
-    SELECT id, qty, locked FROM item_instance
-    WHERE id = $1 AND owner_character_id = $2
-    FOR UPDATE
-  `,
-    [itemInstanceId, characterId],
-  );
-
-  if (result.rows.length === 0) {
+  const item = await loadProjectedCharacterItemInstanceById(characterId, itemInstanceId);
+  if (!item) {
     return { success: false, message: "物品不存在" };
   }
-
-  const item = result.rows[0];
 
   if (item.locked) {
     return { success: false, message: "物品已锁定" };
@@ -975,14 +1167,21 @@ export const removeItemFromInventory = async (
   }
 
   if (item.qty === qty) {
-    await query("DELETE FROM item_instance WHERE id = $1", [
-      itemInstanceId,
+    await bufferCharacterItemInstanceMutations([
+      buildDeleteItemMutation("remove-item", characterId, itemInstanceId, 0),
     ]);
   } else {
-    await query(
-      "UPDATE item_instance SET qty = qty - $1, updated_at = NOW() WHERE id = $2",
-      [qty, itemInstanceId],
-    );
+    await bufferCharacterItemInstanceMutations([
+      buildUpsertItemMutation(
+        "remove-item",
+        characterId,
+        {
+          ...item,
+          qty: item.qty - qty,
+        },
+        0,
+      ),
+    ]);
   }
   return { success: true, message: "移除成功" };
 };
@@ -1050,44 +1249,13 @@ export const moveItem = async (
   targetLocation: SlottedInventoryLocation,
   targetSlot?: number,
 ): Promise<{ success: boolean; message: string }> => {
-  type MoveItemRow = {
-    id: number;
-    item_def_id: string;
-    qty: number;
-    quality: string | null;
-    quality_rank: number | null;
-    metadata_text: string | null;
-    location: string;
-    location_slot: number | null;
-    bind_type: string;
-  };
-
   await lockCharacterInventoryMutex(characterId);
 
-  const itemResult = await query(
-    `
-    SELECT
-      ii.id,
-      ii.item_def_id,
-      ii.qty,
-      ii.quality,
-      ii.quality_rank,
-      ii.metadata::text AS metadata_text,
-      ii.location,
-      ii.location_slot,
-      ii.bind_type
-    FROM item_instance ii
-    WHERE ii.id = $1 AND ii.owner_character_id = $2
-    FOR UPDATE
-  `,
-    [itemInstanceId, characterId],
-  );
-
-  if (itemResult.rows.length === 0) {
+  const projectedItems = await loadProjectedCharacterItemInstances(characterId);
+  const item = projectedItems.find((entry) => entry.id === itemInstanceId);
+  if (!item) {
     return { success: false, message: "物品不存在" };
   }
-
-  const item = itemResult.rows[0] as MoveItemRow;
   const itemDef = getStaticItemDef(item.item_def_id);
   if (!itemDef) {
     return { success: false, message: "物品不存在" };
@@ -1114,59 +1282,58 @@ export const moveItem = async (
   const sourceCanAutoStack =
     stackMax > 1 &&
     isPlainStackingState({
-      metadataText: item.metadata_text,
+      metadataText: toMetadataText(item.metadata),
       quality: item.quality,
       qualityRank: item.quality_rank,
     });
 
   let remainingQty = originalQty;
+  const pendingMutations: BufferedCharacterItemInstanceMutation[] = [];
   if (currentLocation !== targetLocation && sourceCanAutoStack) {
-    const stackRows = await loadPlainAutoStackRows({
-      characterId,
-      itemDefId: item.item_def_id,
-      location: targetLocation,
-      stackMax,
-      bindType: normalizedBindType,
-      excludeItemId: itemInstanceId,
-    });
+    const stackRows = sortProjectedStackCandidates(
+      projectedItems.filter((entry) => {
+        if (entry.id === itemInstanceId) return false;
+        if (entry.location !== targetLocation) return false;
+        if (entry.item_def_id !== item.item_def_id) return false;
+        if (normalizeItemBindType(entry.bind_type) !== normalizedBindType) return false;
+        return isPlainStackingState({
+          metadataText: toMetadataText(entry.metadata),
+          quality: entry.quality,
+          qualityRank: entry.quality_rank,
+        }) && entry.qty < stackMax;
+      }),
+    );
     for (const row of stackRows) {
       if (remainingQty <= 0) break;
       const stackQty = Math.max(0, Number(row.qty) || 0);
       const canAdd = Math.min(remainingQty, Math.max(0, stackMax - stackQty));
       if (canAdd <= 0) continue;
 
-      await query(
-        `
-          UPDATE item_instance
-          SET qty = qty + $1,
-              ${PLAIN_STACKING_CANONICAL_SET_SQL}
-          WHERE id = $3 AND owner_character_id = $4
-        `,
-        [canAdd, normalizedBindType, Number(row.id), characterId],
-      );
+      pendingMutations.push(buildUpsertItemMutation(
+        "move-item",
+        characterId,
+        {
+          ...row,
+          qty: row.qty + canAdd,
+          bind_type: normalizedBindType,
+          metadata: null,
+          quality: null,
+          quality_rank: null,
+        },
+        pendingMutations.length,
+      ));
       remainingQty -= canAdd;
     }
 
     if (remainingQty <= 0) {
-      await query(
-        `
-          DELETE FROM item_instance
-          WHERE id = $1 AND owner_character_id = $2
-        `,
-        [itemInstanceId, characterId],
-      );
+      pendingMutations.push(buildDeleteItemMutation(
+        "move-item",
+        characterId,
+        itemInstanceId,
+        pendingMutations.length,
+      ));
+      await bufferCharacterItemInstanceMutations(pendingMutations);
       return { success: true, message: "移动成功" };
-    }
-
-    if (remainingQty !== originalQty) {
-      await query(
-        `
-          UPDATE item_instance
-          SET qty = $1, updated_at = NOW()
-          WHERE id = $2 AND owner_character_id = $3
-        `,
-        [remainingQty, itemInstanceId, characterId],
-      );
     }
   }
 
@@ -1182,65 +1349,53 @@ export const moveItem = async (
     }
   }
 
-  let finalSlot = targetSlot;
+  let finalSlot: number | null | undefined = targetSlot;
+  const localProjectedItems = applyBufferedMutationsToProjectedItems(projectedItems, pendingMutations);
   if (finalSlot === undefined) {
-    const emptySlots = await findEmptySlotsByCapacity(
-      characterId,
-      targetLocation,
-      capacity,
-      1,
-    );
-    if (emptySlots.length === 0) {
+    finalSlot = findFirstEmptyProjectedSlot(localProjectedItems, targetLocation, capacity);
+    if (finalSlot === null) {
       return { success: false, message: "目标位置已满" };
     }
-    finalSlot = emptySlots[0];
   } else {
-    const slotCheck = await query(
-      `
-      SELECT id FROM item_instance
-      WHERE owner_character_id = $1 AND location = $2 AND location_slot = $3 AND id != $4
-      FOR UPDATE
-    `,
-      [characterId, targetLocation, finalSlot, itemInstanceId],
-    );
-
-    if (slotCheck.rows.length > 0) {
-      const otherItemId = Number(slotCheck.rows[0].id);
-      if (!Number.isInteger(otherItemId) || otherItemId <= 0) {
-        return { success: false, message: "目标格子状态异常" };
-      }
-
-      await query(
-        `
-          UPDATE item_instance
-          SET location_slot = NULL, updated_at = NOW()
-          WHERE id = $1 AND owner_character_id = $2
-        `,
-        [itemInstanceId, characterId],
-      );
-
-      await query(
-        `
-        UPDATE item_instance SET location = $1, location_slot = $2, updated_at = NOW()
-        WHERE id = $3 AND owner_character_id = $4
-      `,
-        [currentLocation, currentSlot, otherItemId, characterId],
-      );
+    const slotOccupant = localProjectedItems.find((entry) => (
+      entry.id !== itemInstanceId
+      && entry.location === targetLocation
+      && entry.location_slot === finalSlot
+    ));
+    if (slotOccupant) {
+      pendingMutations.push(buildUpsertItemMutation(
+        "move-item",
+        characterId,
+        {
+          ...slotOccupant,
+          location: currentLocation,
+          location_slot: currentSlot,
+        },
+        pendingMutations.length,
+      ));
     }
   }
 
-  await query(
-    `
-    UPDATE item_instance
-    SET location = $1,
-        location_slot = $2,
-        bind_type = $3,
-        ${sourceCanAutoStack ? "metadata = NULL,\n        quality = NULL,\n        quality_rank = NULL,\n        " : ""}
-        updated_at = NOW()
-    WHERE id = $4 AND owner_character_id = $5
-  `,
-    [targetLocation, finalSlot, normalizedBindType, itemInstanceId, characterId],
-  );
+  if (finalSlot === undefined || finalSlot === null) {
+    return { success: false, message: "目标格子状态异常" };
+  }
+
+  pendingMutations.push(buildUpsertItemMutation(
+    "move-item",
+    characterId,
+    {
+      ...item,
+      qty: remainingQty,
+      location: targetLocation,
+      location_slot: finalSlot,
+      bind_type: normalizedBindType,
+      metadata: sourceCanAutoStack ? null : item.metadata,
+      quality: sourceCanAutoStack ? null : item.quality,
+      quality_rank: sourceCanAutoStack ? null : item.quality_rank,
+    },
+    pendingMutations.length,
+  ));
+  await bufferCharacterItemInstanceMutations(pendingMutations);
   return { success: true, message: "移动成功" };
 };
 
@@ -1276,45 +1431,27 @@ export const removeItemsBatch = async (
   if (uniqueIds.length > 200) {
     return { success: false, message: "一次最多丢弃200个物品" };
   }
-
+  
   await lockCharacterInventoryMutex(characterId);
 
-  const itemResult = await query(
-    `
-      SELECT
-        ii.id,
-        ii.qty,
-        ii.location,
-        ii.locked,
-        ii.item_def_id
-      FROM item_instance ii
-      WHERE ii.owner_character_id = $1 AND ii.id = ANY($2)
-      FOR UPDATE
-    `,
-    [characterId, uniqueIds],
-  );
+  const projectedItems = await loadProjectedCharacterItemInstances(characterId);
+  const targetRows = uniqueIds
+    .map((itemId) => projectedItems.find((item) => item.id === itemId) ?? null)
+    .filter((row): row is CharacterItemInstanceSnapshot => row !== null);
 
-  if (itemResult.rows.length !== uniqueIds.length) {
+  if (targetRows.length !== uniqueIds.length) {
     return { success: false, message: "包含不存在的物品" };
   }
 
   const staticDefMap = getItemDefinitionsByIds(
-    itemResult.rows.map((row) =>
-      String((row as { item_def_id?: unknown }).item_def_id || "").trim(),
-    ),
+    targetRows.map((row) => String(row.item_def_id || "").trim()),
   );
 
   const removableIds: number[] = [];
   let skippedLockedCount = 0;
   let skippedLockedQtyTotal = 0;
   let removedQtyTotal = 0;
-  for (const row of itemResult.rows as Array<{
-    id: number;
-    qty: number;
-    location: InventoryLocation;
-    locked: boolean;
-    item_def_id: string;
-  }>) {
+  for (const row of targetRows) {
     const itemDef = staticDefMap.get(String(row.item_def_id || "").trim());
     if (!itemDef) {
       return { success: false, message: "包含不存在的物品" };
@@ -1348,9 +1485,13 @@ export const removeItemsBatch = async (
     return { success: false, message: "没有可丢弃的物品" };
   }
 
-  await query(
-    "DELETE FROM item_instance WHERE owner_character_id = $1 AND id = ANY($2)",
-    [characterId, removableIds],
+  await bufferCharacterItemInstanceMutations(
+    removableIds.map((itemId, index) => buildDeleteItemMutation(
+      "remove-items-batch",
+      characterId,
+      itemId,
+      index,
+    )),
   );
   const msg =
     skippedLockedCount > 0
@@ -1624,25 +1765,16 @@ export const sortInventory = async (
 
   const info = await getInventoryInfo(characterId);
   const capacity = getSlottedCapacity(info, location);
-  const itemResult = await query(
-    `
-      SELECT
-        id,
-        item_def_id,
-        qty,
-        quality,
-        quality_rank,
-        bind_type,
-        metadata::text AS metadata_text,
-        location_slot
-      FROM item_instance
-      WHERE owner_character_id = $1 AND location = $2
-      FOR UPDATE
-    `,
-    [characterId, location],
-  );
-
-  const rows = itemResult.rows as SortInventoryRow[];
+  const rows = (await loadProjectedCharacterItemInstancesByLocation(characterId, location)).map((row) => ({
+    id: row.id,
+    item_def_id: row.item_def_id,
+    qty: row.qty,
+    quality: row.quality,
+    quality_rank: row.quality_rank,
+    bind_type: row.bind_type,
+    metadata_text: toMetadataText(row.metadata),
+    location_slot: row.location_slot,
+  })) as SortInventoryRow[];
   const defMap = getItemDefinitionsByIds(
     rows.map((row) => String(row.item_def_id || "").trim()),
   );
@@ -1663,41 +1795,7 @@ export const sortInventory = async (
     stackMaxByItemDefId,
   );
 
-  for (const { itemId, nextQty, nextBindType, clearPlainFields } of rowUpdates) {
-    if (clearPlainFields) {
-      await query(
-        `
-          UPDATE item_instance
-          SET qty = $1,
-              ${PLAIN_STACKING_CANONICAL_SET_SQL}
-          WHERE id = $3 AND owner_character_id = $4
-        `,
-        [nextQty, nextBindType, itemId, characterId],
-      );
-      continue;
-    }
-
-    await query(
-      `
-        UPDATE item_instance
-        SET qty = $1,
-            bind_type = $2,
-            updated_at = NOW()
-        WHERE id = $3 AND owner_character_id = $4
-      `,
-      [nextQty, nextBindType, itemId, characterId],
-    );
-  }
-
-  for (const deleteId of deleteIds) {
-    await query(
-      `
-        DELETE FROM item_instance
-        WHERE id = $1 AND owner_character_id = $2
-      `,
-      [deleteId, characterId],
-    );
-  }
+  const projectedItems = await loadProjectedCharacterItemInstances(characterId);
 
   let minExistingSlot = 0;
   for (const row of compactedRows) {
@@ -1751,32 +1849,51 @@ export const sortInventory = async (
     return Number(left.id) - Number(right.id);
   });
 
+  const mutationByItemId = new Map<number, BufferedCharacterItemInstanceMutation>();
+  for (const { itemId, nextQty, nextBindType, clearPlainFields } of rowUpdates) {
+    const source = projectedItems.find((item) => item.id === itemId);
+    if (!source) continue;
+    mutationByItemId.set(itemId, buildUpsertItemMutation(
+      "sort-inventory",
+      characterId,
+      {
+        ...source,
+        qty: nextQty,
+        bind_type: nextBindType,
+        metadata: clearPlainFields ? null : source.metadata,
+        quality: clearPlainFields ? null : source.quality,
+        quality_rank: clearPlainFields ? null : source.quality_rank,
+      },
+      mutationByItemId.size,
+    ));
+  }
+  for (const deleteId of deleteIds) {
+    mutationByItemId.set(deleteId, buildDeleteItemMutation(
+      "sort-inventory",
+      characterId,
+      deleteId,
+      mutationByItemId.size,
+    ));
+  }
   for (let index = 0; index < sortableRows.length; index += 1) {
     const row = sortableRows[index];
-    const tempSlot = tempSlotStart + index;
-    await query(
-      `
-        UPDATE item_instance
-        SET location_slot = $1,
-            updated_at = NOW()
-        WHERE id = $2 AND owner_character_id = $3
-      `,
-      [tempSlot, row.id, characterId],
-    );
+    const source = projectedItems.find((item) => item.id === row.id);
+    if (!source) continue;
+    mutationByItemId.set(row.id, buildUpsertItemMutation(
+      "sort-inventory",
+      characterId,
+      {
+        ...source,
+        qty: row.qty,
+        bind_type: row.bind_type,
+        metadata: row.metadata_text === null ? null : source.metadata,
+        quality: row.quality,
+        quality_rank: row.quality_rank,
+        location_slot: index < capacity ? index : null,
+      },
+      mutationByItemId.size,
+    ));
   }
-
-  for (let index = 0; index < sortableRows.length; index += 1) {
-    const row = sortableRows[index];
-    const finalSlot = index < capacity ? index : null;
-    await query(
-      `
-        UPDATE item_instance
-        SET location_slot = $1,
-            updated_at = NOW()
-        WHERE id = $2 AND owner_character_id = $3
-      `,
-      [finalSlot, row.id, characterId],
-    );
-  }
+  await bufferCharacterItemInstanceMutations([...mutationByItemId.values()]);
   return { success: true, message: "整理完成" };
 };

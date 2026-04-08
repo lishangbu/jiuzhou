@@ -19,6 +19,8 @@ import {
   BREAKTHROUGH_NUMERIC_REWARD_DEFS,
   type RealmBreakthroughRewardsConfig,
 } from "./shared/realmBreakthroughRewards.js";
+import { consumeSpecificItemInstance } from "./inventory/shared/consume.js";
+import { loadProjectedCharacterItemInstances } from "./shared/characterItemInstanceMutationService.js";
 
 export type RealmRequirementStatus = "done" | "todo" | "unknown";
 
@@ -1155,44 +1157,23 @@ const consumeItemFromBagTx = async (
   let remaining = Math.max(0, Math.floor(qty));
   if (!itemDefId || remaining <= 0) return { success: true, message: "ok" };
 
-  while (remaining > 0) {
-    const res = await query(
-      `
-        SELECT id, qty
-        FROM item_instance
-        WHERE owner_character_id = $1
-          AND item_def_id = $2
-          AND location = 'bag'
-        ORDER BY created_at ASC
-        LIMIT 1
-        FOR UPDATE
-      `,
-      [characterId, itemDefId],
-    );
+  const bagItems = (await loadProjectedCharacterItemInstances(characterId))
+    .filter((item) => item.item_def_id === itemDefId && item.location === 'bag')
+    .sort((left, right) => left.created_at.getTime() - right.created_at.getTime());
 
-    if (res.rows.length === 0) return { success: false, message: "材料不足" };
-
-    const row = res.rows[0] as { id?: unknown; qty?: unknown };
-    const instanceId = Number(row.id ?? 0) || 0;
-    const hasQty = Number(row.qty ?? 0) || 0;
-    if (instanceId <= 0 || hasQty <= 0)
-      return { success: false, message: "材料数据异常" };
-
-    if (hasQty <= remaining) {
-      await query(
-        "DELETE FROM item_instance WHERE id = $1 AND owner_character_id = $2",
-        [instanceId, characterId],
-      );
-      remaining -= hasQty;
-    } else {
-      await query(
-        "UPDATE item_instance SET qty = qty - $1, updated_at = NOW() WHERE id = $2 AND owner_character_id = $3",
-        [remaining, instanceId, characterId],
-      );
-      remaining = 0;
+  for (const item of bagItems) {
+    if (remaining <= 0) break;
+    const itemQty = Math.max(0, Number(item.qty) || 0);
+    if (itemQty <= 0) continue;
+    const consumeQty = Math.min(remaining, itemQty);
+    const consumeResult = await consumeSpecificItemInstance(characterId, item.id, consumeQty);
+    if (!consumeResult.success) {
+      return { success: false, message: consumeResult.message };
     }
+    remaining -= consumeQty;
   }
 
+  if (remaining > 0) return { success: false, message: "材料不足" };
   return { success: true, message: "ok" };
 };
 

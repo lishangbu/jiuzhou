@@ -1,13 +1,21 @@
 import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
 import { randomInt } from 'crypto';
-import { consumeCharacterCurrencies } from './inventory/shared/consume.js';
+import {
+  consumeCharacterCurrencies,
+  consumeMaterialByDefId,
+  consumeSpecificItemInstance,
+} from './inventory/shared/consume.js';
 import { lockCharacterInventoryMutex } from './inventoryMutex.js';
 import {
   getCharacterComputedByCharacterId,
   type CharacterComputedRow,
 } from './characterComputedService.js';
 import { bufferSimpleCharacterItemGrants } from './shared/characterItemGrantDeltaService.js';
+import {
+  loadProjectedCharacterItemInstanceById,
+  loadProjectedCharacterItemInstances,
+} from './shared/characterItemInstanceMutationService.js';
 import {
   getEnabledItemDefinitions,
   getItemDefinitionsByIds,
@@ -499,27 +507,20 @@ const getItemInstanceRowsByIdsForUpdateTx = async (
   const ids = [...new Set(itemInstanceIds.map((id) => clampInt(id, 1, Number.MAX_SAFE_INTEGER)).filter((id) => id > 0))];
   if (ids.length === 0) return [];
 
-  const result = await query(
-    `
-      SELECT id, item_def_id, qty, locked, location
-      FROM item_instance
-      WHERE owner_character_id = $1
-        AND id = ANY($2::int[])
-      FOR UPDATE
-    `,
-    [characterId, ids],
-  );
-
-  return (result.rows as ItemInstanceRow[]).map((row) => ({
-    id: clampInt(row.id, 0, Number.MAX_SAFE_INTEGER),
-    itemDefId: String(row.item_def_id || '').trim(),
-    qty: clampInt(row.qty, 0, Number.MAX_SAFE_INTEGER),
-    locked: Boolean(row.locked),
-    location: String(row.location || '').trim(),
-  }));
+  const rows = await Promise.all(ids.map((itemId) => loadProjectedCharacterItemInstanceById(characterId, itemId)));
+  return rows
+    .filter((row): row is NonNullable<(typeof rows)[number]> => row !== null)
+    .map((row) => ({
+      id: clampInt(row.id, 0, Number.MAX_SAFE_INTEGER),
+      itemDefId: String(row.item_def_id || '').trim(),
+      qty: clampInt(row.qty, 0, Number.MAX_SAFE_INTEGER),
+      locked: Boolean(row.locked),
+      location: String(row.location || '').trim(),
+    }));
 };
 
 const consumeSelectedItemInstancesTx = async (
+  characterId: number,
   consumeQtyByItemId: Map<number, number>,
   rowsByItemId: Map<number, ItemInstanceMaterialRow>,
 ): Promise<{ success: boolean; message: string }> => {
@@ -529,11 +530,10 @@ const consumeSelectedItemInstancesTx = async (
     if (!row) return { success: false, message: '所选宝石不存在' };
     if (row.qty < consumeQty) return { success: false, message: '所选宝石数量不足' };
 
-    if (row.qty === consumeQty) {
-      await query('DELETE FROM item_instance WHERE id = $1', [itemId]);
-      continue;
+    const consumeResult = await consumeSpecificItemInstance(characterId, itemId, consumeQty);
+    if (!consumeResult.success) {
+      return { success: false, message: consumeResult.message };
     }
-    await query('UPDATE item_instance SET qty = qty - $1, updated_at = NOW() WHERE id = $2', [consumeQty, itemId]);
   }
 
   return { success: true, message: '扣除材料成功' };
@@ -569,23 +569,22 @@ const consumeItemDefIdsQtyTx = async (
   if (ids.length === 0) {
     return { success: false, message: options.insufficientMessage || '材料不足' };
   }
+  if (ids.length === 1) {
+    return consumeMaterialByDefId(characterId, ids[0], need);
+  }
   const locations = normalizeMaterialLocations(options.locations);
 
-  const result = await query(
-    `
-      SELECT id, qty
-      FROM item_instance
-      WHERE owner_character_id = $1
-        AND item_def_id = ANY($2::text[])
-        AND locked = false
-        AND location = ANY($3::text[])
-      ORDER BY CASE WHEN location = 'bag' THEN 0 ELSE 1 END ASC, qty DESC, id ASC
-      FOR UPDATE
-    `,
-    [characterId, ids, locations],
-  );
-
-  const rows = result.rows as ItemConsumeRow[];
+  const rows = (await loadProjectedCharacterItemInstances(characterId))
+    .filter((row) => ids.includes(String(row.item_def_id || '').trim()))
+    .filter((row) => !row.locked && locations.includes(row.location as MaterialLocation))
+    .sort((left, right) => {
+      const leftPriority = left.location === 'bag' ? 0 : 1;
+      const rightPriority = right.location === 'bag' ? 0 : 1;
+      if (leftPriority !== rightPriority) return leftPriority - rightPriority;
+      if (right.qty !== left.qty) return right.qty - left.qty;
+      return left.id - right.id;
+    })
+    .map((row) => ({ id: row.id, qty: row.qty }));
   const total = rows.reduce((sum, row) => sum + clampInt(row.qty, 0, Number.MAX_SAFE_INTEGER), 0);
   if (total < need) {
     return { success: false, message: options.insufficientMessage || '材料不足' };
@@ -597,14 +596,12 @@ const consumeItemDefIdsQtyTx = async (
     const rowQty = clampInt(row.qty, 0, Number.MAX_SAFE_INTEGER);
     if (rowQty <= 0) continue;
 
-    if (rowQty <= remaining) {
-      await query('DELETE FROM item_instance WHERE id = $1', [row.id]);
-      remaining -= rowQty;
-      continue;
+    const consumeQty = Math.min(remaining, rowQty);
+    const consumeResult = await consumeSpecificItemInstance(characterId, row.id, consumeQty);
+    if (!consumeResult.success) {
+      return { success: false, message: consumeResult.message };
     }
-
-    await query('UPDATE item_instance SET qty = qty - $1, updated_at = NOW() WHERE id = $2', [remaining, row.id]);
-    remaining = 0;
+    remaining -= consumeQty;
   }
 
   return { success: true, message: '扣除材料成功' };
@@ -1195,7 +1192,7 @@ class GemSynthesisService {
       return { success: false, message: spendResult.message };
     }
 
-    const consumeRes = await consumeSelectedItemInstancesTx(consumeQtyByItemId, rowsByItemId);
+    const consumeRes = await consumeSelectedItemInstancesTx(characterId, consumeQtyByItemId, rowsByItemId);
     if (!consumeRes.success) {
       return { success: false, message: consumeRes.message };
     }

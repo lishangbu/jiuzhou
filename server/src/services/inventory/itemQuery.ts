@@ -51,6 +51,7 @@ import type {
 } from "./shared/types.js";
 import { getInventoryInfo, getInventoryItems } from "./bag.js";
 import { getEquippedSetPieceCountMap } from "./shared/equippedSetCount.js";
+import { loadProjectedCharacterItemInstancesByLocation } from "../shared/characterItemInstanceMutationService.js";
 
 type InventoryItemDefContext = {
   staticDefMap: Map<string, Record<string, unknown>>;
@@ -73,12 +74,7 @@ type InventoryItemDefContext = {
 export const getEquippedItemDefIds = async (
   characterId: number,
 ): Promise<string[]> => {
-  const result = await query(
-    `SELECT item_def_id FROM item_instance ii
-     WHERE ii.owner_character_id = $1 AND ii.location = 'equipped'`,
-    [characterId],
-  );
-  return (result.rows as Array<{ item_def_id?: unknown }>)
+  return (await loadProjectedCharacterItemInstancesByLocation(characterId, "equipped"))
     .map((row) => String(row.item_def_id || "").trim())
     .filter((id) => id.length > 0);
 };

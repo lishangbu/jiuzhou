@@ -18,7 +18,7 @@
 import { afterTransactionCommit, query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
 import type { GenerateOptions } from './equipmentService.js';
-import { moveItemInstanceToBagWithStacking } from './inventory/index.js';
+import { getInventoryInfo, moveItemInstancesToBagWithStacking } from './inventory/index.js';
 import { lockCharacterInventoryMutex } from './inventoryMutex.js';
 import { recordCollectItemEventsBatch } from './taskService.js';
 import { createCacheLayer } from './shared/cacheLayer.js';
@@ -53,6 +53,10 @@ import {
   type MailCounterStateRow,
 } from './shared/mailCounterStore.js';
 import { enqueueCharacterItemGrant } from './shared/characterItemGrantDeltaService.js';
+import {
+  loadProjectedCharacterItemInstanceById,
+  loadProjectedCharacterItemInstancesByLocation,
+} from './shared/characterItemInstanceMutationService.js';
 
 // ============================================
 // 类型定义
@@ -187,6 +191,12 @@ type PrepareMailInsertPayloadResult =
 
 const MAIL_HAS_ATTACHMENTS_SQL = '(attach_silver > 0 OR attach_spirit_stones > 0 OR attach_items IS NOT NULL OR attach_rewards IS NOT NULL OR attach_instance_ids IS NOT NULL)';
 const MAIL_ACTIVE_SCOPE_SQL = `COALESCE(expire_at, 'infinity'::timestamptz) > NOW()`;
+export const CLAIM_MAIL_STATUS_UPDATE_SQL = `
+      UPDATE mail
+      SET claimed_at = NOW(), read_at = COALESCE(read_at, NOW()),
+          updated_at = NOW()
+      WHERE id = $1
+    `;
 const MAIL_UNREAD_CACHE_REDIS_TTL_SEC = 300;
 const MAIL_UNREAD_CACHE_MEMORY_TTL_MS = 5_000;
 const MAIL_UNREAD_CACHE_MIN_REDIS_TTL_SEC = 1;
@@ -954,22 +964,19 @@ class MailService {
       );
     }
 
-    const bagResult = await query(
-      `
-        SELECT item_def_id, bind_type, qty
-        FROM item_instance
-        WHERE owner_character_id = $1
-          AND location = 'bag'
-          AND item_def_id = ANY($2::varchar[])
-      `,
-      [characterId, uniqueItemDefIds],
-    );
+    const bagRows = (await loadProjectedCharacterItemInstancesByLocation(characterId, 'bag'))
+      .filter((row) => uniqueItemDefIds.includes(String(row.item_def_id || '').trim()))
+      .map((row) => ({
+        item_def_id: row.item_def_id,
+        bind_type: row.bind_type,
+        qty: row.qty,
+      }));
 
     const keyOf = (itemDefId: string, bindType: string): string =>
       `${itemDefId}::${bindType}`;
     const freeCapByGroup = new Map<string, number[]>();
 
-    for (const row of bagResult.rows) {
+    for (const row of bagRows) {
       const itemDefId = String(row.item_def_id || '').trim();
       if (!itemDefId) continue;
 
@@ -1781,19 +1788,24 @@ class MailService {
     if (attachInstanceIds.length > 0) {
       // 只有“保留原实例属性”的附件仍需要同步入包，因此只为这一类领取持有背包互斥锁并做容量校验。
       await lockCharacterInventoryMutex(characterId);
-      const lockedInstanceResult = await query<ClaimInstanceRow>(
-        `
-          SELECT id, item_def_id, qty, bind_type
-          FROM item_instance
-          WHERE id = ANY($1::bigint[])
-            AND owner_user_id = $2
-            AND owner_character_id = $3
-            AND location = 'mail'
-          FOR UPDATE
-        `,
-        [attachInstanceIds, userId, characterId],
+      const projectedInstances = await Promise.all(
+        attachInstanceIds.map((attachInstanceId) =>
+          loadProjectedCharacterItemInstanceById(characterId, attachInstanceId),
+        ),
       );
-      lockedInstanceRows = lockedInstanceResult.rows;
+      lockedInstanceRows = projectedInstances
+        .filter((row): row is NonNullable<(typeof projectedInstances)[number]> => {
+          return row !== null
+            && row.owner_user_id === userId
+            && row.owner_character_id === characterId
+            && row.location === 'mail';
+        })
+        .map((row) => ({
+          id: row.id,
+          item_def_id: row.item_def_id,
+          qty: row.qty,
+          bind_type: row.bind_type,
+        }));
 
       const lockedIds = new Set(lockedInstanceRows.map((row) => Number(row.id)));
       for (const attachInstanceId of attachInstanceIds) {
@@ -1829,31 +1841,9 @@ class MailService {
         characterId,
         lockedInstanceRows,
       );
-      const inventoryInfo = await query<{
-        bag_capacity: number;
-        bag_used: number;
-      }>(
-        `
-          SELECT
-            i.bag_capacity,
-            COALESCE(usage.bag_used, 0)::int AS bag_used
-          FROM inventory i
-          LEFT JOIN (
-            SELECT owner_character_id, COUNT(DISTINCT location_slot) AS bag_used
-            FROM item_instance
-            WHERE owner_character_id = $1
-              AND location = 'bag'
-              AND location_slot IS NOT NULL
-              AND location_slot >= 0
-            GROUP BY owner_character_id
-          ) AS usage
-            ON usage.owner_character_id = i.character_id
-          WHERE i.character_id = $1
-        `,
-        [characterId],
-      );
-      const bagCapacity = Number(inventoryInfo.rows[0]?.bag_capacity) || 0;
-      const bagUsed = Number(inventoryInfo.rows[0]?.bag_used) || 0;
+      const inventoryInfo = await getInventoryInfo(characterId);
+      const bagCapacity = Number(inventoryInfo.bag_capacity) || 0;
+      const bagUsed = Number(inventoryInfo.bag_used) || 0;
       const freeSlots = Math.max(0, bagCapacity - bagUsed);
       if (freeSlots < requiredSlots) {
         return { success: false, message: `背包空间不足，需要${requiredSlots}格，当前剩余${freeSlots}格` };
@@ -1891,22 +1881,18 @@ class MailService {
 
       if (attachInstanceIds.length > 0) {
         // 实例附件领取：复用库存模块“实例入包自动堆叠”逻辑，避免同规则在邮件/坊市重复实现。
-        for (const attachInstanceId of attachInstanceIds) {
-          const moveResult = await moveItemInstanceToBagWithStacking(
-            characterId,
-            attachInstanceId,
-            {
-              expectedSourceLocation: 'mail',
-              expectedOwnerUserId: userId,
-            },
-          );
-          if (!moveResult.success) {
-            throw new Error(`实例附件入包失败: ${moveResult.message}`);
-          }
-          if (moveResult.itemId !== undefined) {
-            claimedInstanceIds.push(moveResult.itemId);
-          }
+        const moveResult = await moveItemInstancesToBagWithStacking(
+          characterId,
+          attachInstanceIds,
+          {
+            expectedSourceLocation: 'mail',
+            expectedOwnerUserId: userId,
+          },
+        );
+        if (!moveResult.success) {
+          throw new Error(`实例附件入包失败: ${moveResult.message}`);
         }
+        claimedInstanceIds = moveResult.itemIds;
 
         for (const row of lockedInstanceRows) {
           const key = String(row.item_def_id || '').trim();
@@ -2031,12 +2017,7 @@ class MailService {
     }
 
     // 8. 更新邮件状态
-    await query(`
-      UPDATE mail
-      SET claimed_at = NOW(), read_at = COALESCE(read_at, NOW()),
-          attach_instance_ids = $1, updated_at = NOW()
-      WHERE id = $2
-    `, [JSON.stringify(claimedInstanceIds), mailId]);
+    await query(CLAIM_MAIL_STATUS_UPDATE_SQL, [mailId]);
 
     if (collectCounts.size > 0) {
       await recordCollectItemEventsBatch([{

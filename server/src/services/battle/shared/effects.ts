@@ -33,6 +33,7 @@ import {
   extractBattleAffixEffectsFromEquippedItems,
   type BattleAffixEffectSource,
 } from "../../battleAffixEffectService.js";
+import { loadProjectedCharacterItemInstancesByLocation } from "../../shared/characterItemInstanceMutationService.js";
 import { toNumber, toRecord, toText } from "./helpers.js";
 
 // ------ 常量 ------
@@ -230,33 +231,21 @@ const loadEquippedBattleEffectRowsMap = async (
     return result;
   }
 
-  const characterIdChunks = splitIntoChunks(
-    normalizedCharacterIds,
-    BATTLE_EFFECT_QUERY_BATCH_SIZE,
+  const projectedGroups = await Promise.all(
+    normalizedCharacterIds.map(async (characterId) => {
+      const rows = (await loadProjectedCharacterItemInstancesByLocation(characterId, "equipped")).map((item) => ({
+        owner_character_id: item.owner_character_id,
+        item_instance_id: item.id,
+        item_def_id: item.item_def_id,
+        affixes: item.affixes,
+      })) as EquippedBattleEffectRow[];
+      return { characterId, rows };
+    }),
   );
 
-  for (const chunkGroup of splitIntoChunks(
-    characterIdChunks,
-    BATTLE_EFFECT_QUERY_CONCURRENCY,
-  )) {
-    const queryResults = await Promise.all(
-      chunkGroup.map((characterIdChunk) => query(
-        `
-          SELECT owner_character_id, id AS item_instance_id, item_def_id, affixes
-          FROM item_instance
-          WHERE owner_character_id = ANY($1)
-            AND location = 'equipped'
-        `,
-        [characterIdChunk],
-      )),
-    );
-
-    for (const queryResult of queryResults) {
-      mergeEquippedBattleEffectRowsMap(
-        result,
-        groupEquippedBattleEffectRowsByCharacterId(queryResult.rows as EquippedBattleEffectRow[]),
-      );
-    }
+  for (const projectedGroup of projectedGroups) {
+    if (projectedGroup.rows.length <= 0) continue;
+    result.set(projectedGroup.characterId, projectedGroup.rows);
   }
 
   return result;
@@ -269,17 +258,9 @@ export async function getCharacterBattleSetBonusEffects(
 ): Promise<BattleSetBonusEffect[]> {
   if (!Number.isFinite(characterId) || characterId <= 0) return [];
 
-  const result = await query(
-    `
-      SELECT item_def_id
-      FROM item_instance
-      WHERE owner_character_id = $1
-        AND location = 'equipped'
-    `,
-    [characterId],
-  );
-
-  const rows = result.rows as EquippedBattleEffectRow[];
+  const rows = (await loadProjectedCharacterItemInstancesByLocation(characterId, "equipped")).map((item) => ({
+    item_def_id: item.item_def_id,
+  })) as EquippedBattleEffectRow[];
   const itemDefIds = Array.from(new Set(rows.map((row) => toText(row.item_def_id)).filter((itemDefId) => itemDefId.length > 0)));
   const defs = getItemDefinitionsByIds(itemDefIds);
   return buildCharacterBattleSetBonusEffectsFromRows(rows, defs, buildStaticSetBonusBySetId());
@@ -292,18 +273,11 @@ export async function getCharacterBattleAffixEffects(
 ): Promise<BattleSetBonusEffect[]> {
   if (!Number.isFinite(characterId) || characterId <= 0) return [];
 
-  const result = await query(
-    `
-      SELECT id AS item_instance_id, item_def_id, affixes
-      FROM item_instance
-      WHERE owner_character_id = $1
-        AND location = 'equipped'
-      ORDER BY id ASC
-    `,
-    [characterId],
-  );
-
-  const rows = result.rows as EquippedBattleEffectRow[];
+  const rows = (await loadProjectedCharacterItemInstancesByLocation(characterId, "equipped")).map((item) => ({
+    item_instance_id: item.id,
+    item_def_id: item.item_def_id,
+    affixes: item.affixes,
+  })) as EquippedBattleEffectRow[];
   const itemDefIds = Array.from(new Set(rows.map((row) => toText(row.item_def_id)).filter((itemDefId) => itemDefId.length > 0)));
   const defs = getItemDefinitionsByIds(itemDefIds);
   return buildCharacterBattleAffixEffectsFromRows(rows, defs);

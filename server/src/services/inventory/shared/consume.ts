@@ -33,6 +33,12 @@ import {
 } from "../../shared/characterSettlementResourceDeltaService.js";
 import { applyCharacterRewardDeltas } from "../../shared/characterRewardSettlement.js";
 import { afterTransactionCommit } from "../../../config/database.js";
+import {
+  bufferCharacterItemInstanceMutations,
+  loadProjectedCharacterItemInstanceById,
+  loadProjectedCharacterItemInstances,
+  type BufferedCharacterItemInstanceMutation,
+} from "../../shared/characterItemInstanceMutationService.js";
 
 type CharacterStoredResourceSnapshot = {
   silver: number;
@@ -83,6 +89,40 @@ const normalizeNonNegativeBigint = (value: bigint | null | undefined): bigint =>
   return value > 0n ? value : 0n;
 };
 
+const buildItemMutation = (
+  prefix: string,
+  characterId: number,
+  itemId: number,
+  index: number,
+  qty: number,
+  snapshot: Awaited<ReturnType<typeof loadProjectedCharacterItemInstanceById>>,
+): BufferedCharacterItemInstanceMutation => {
+  if (!snapshot) {
+    throw new Error(`库存实例不存在: ${itemId}`);
+  }
+  if (qty <= 0) {
+    return {
+      opId: `${prefix}:${itemId}:${Date.now()}:${index}`,
+      characterId,
+      itemId,
+      createdAt: Date.now() + index,
+      kind: "delete",
+      snapshot: null,
+    };
+  }
+  return {
+    opId: `${prefix}:${itemId}:${Date.now()}:${index}`,
+    characterId,
+    itemId,
+    createdAt: Date.now() + index,
+    kind: "upsert",
+    snapshot: {
+      ...snapshot,
+      qty,
+    },
+  };
+};
+
 /**
  * 按物品定义 ID 消耗指定数量的材料
  * 从 bag/warehouse 位置的未锁定行中按数量降序扣除
@@ -93,28 +133,14 @@ export const consumeMaterialByDefId = async (
   qty: number,
 ): Promise<{ success: boolean; message: string }> => {
   const need = clampInt(qty, 1, 999999);
-  const rowResult = await query(
-    `
-      SELECT id, qty, locked
-      FROM item_instance
-      WHERE owner_character_id = $1
-        AND item_def_id = $2
-        AND location IN ('bag', 'warehouse')
-      ORDER BY qty DESC, id ASC
-      FOR UPDATE
-    `,
-    [characterId, materialItemDefId],
-  );
+  const rows = (await loadProjectedCharacterItemInstances(characterId))
+    .filter((row) => row.item_def_id === materialItemDefId && (row.location === "bag" || row.location === "warehouse"))
+    .sort((left, right) => right.qty - left.qty || left.id - right.id)
+    .map((row) => ({ id: row.id, qty: row.qty, locked: row.locked }));
 
-  if (rowResult.rows.length === 0) {
+  if (rows.length === 0) {
     return { success: false, message: "材料不足" };
   }
-
-  const rows = rowResult.rows as Array<{
-    id: number;
-    qty: number;
-    locked: boolean;
-  }>;
   const unlockedRows = rows.filter(
     (row) => !row.locked && (Number(row.qty) || 0) > 0,
   );
@@ -131,22 +157,26 @@ export const consumeMaterialByDefId = async (
   }
 
   let remaining = need;
+  const mutations: BufferedCharacterItemInstanceMutation[] = [];
   for (const row of unlockedRows) {
     if (remaining <= 0) break;
     const rowQty = Math.max(0, Number(row.qty) || 0);
     if (rowQty <= 0) continue;
 
     const consume = Math.min(rowQty, remaining);
-    if (consume >= rowQty) {
-      await query("DELETE FROM item_instance WHERE id = $1", [row.id]);
-    } else {
-      await query(
-        "UPDATE item_instance SET qty = qty - $1, updated_at = NOW() WHERE id = $2",
-        [consume, row.id],
-      );
-    }
+    const snapshot = await loadProjectedCharacterItemInstanceById(characterId, row.id);
+    mutations.push(buildItemMutation(
+      "consume-material",
+      characterId,
+      row.id,
+      mutations.length,
+      rowQty - consume,
+      snapshot,
+    ));
     remaining -= consume;
   }
+
+  await bufferCharacterItemInstanceMutations(mutations);
 
   return { success: true, message: "扣除成功" };
 };
@@ -161,27 +191,9 @@ export const consumeSpecificItemInstance = async (
   qty: number,
 ): Promise<{ success: boolean; message: string; itemDefId?: string }> => {
   const need = clampInt(qty, 1, 999999);
-  const result = await query(
-    `
-      SELECT id, item_def_id, qty, locked, location
-      FROM item_instance
-      WHERE id = $1 AND owner_character_id = $2
-      FOR UPDATE
-      LIMIT 1
-    `,
-    [itemInstanceId, characterId],
-  );
-
-  if (result.rows.length === 0)
+  const row = await loadProjectedCharacterItemInstanceById(characterId, itemInstanceId);
+  if (!row)
     return { success: false, message: "道具不存在" };
-
-  const row = result.rows[0] as {
-    id: number;
-    item_def_id: string;
-    qty: number;
-    locked: boolean;
-    location: string;
-  };
   if (row.locked) return { success: false, message: "道具已锁定" };
   if (!["bag", "warehouse"].includes(String(row.location))) {
     return { success: false, message: "道具当前位置不可消耗" };
@@ -189,14 +201,16 @@ export const consumeSpecificItemInstance = async (
   if ((Number(row.qty) || 0) < need)
     return { success: false, message: "道具数量不足" };
 
-  if ((Number(row.qty) || 0) === need) {
-    await query("DELETE FROM item_instance WHERE id = $1", [row.id]);
-  } else {
-    await query(
-      "UPDATE item_instance SET qty = qty - $1, updated_at = NOW() WHERE id = $2",
-      [need, row.id],
-    );
-  }
+  await bufferCharacterItemInstanceMutations([
+    buildItemMutation(
+      "consume-item-instance",
+      characterId,
+      row.id,
+      0,
+      row.qty - need,
+      row,
+    ),
+  ]);
   return {
     success: true,
     message: "扣除成功",

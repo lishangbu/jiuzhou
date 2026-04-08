@@ -3,6 +3,7 @@ import { Transactional } from '../decorators/transactional.js';
 import { getGameServer } from '../game/gameServer.js';
 import { updateAchievementProgress } from './achievementService.js';
 import { addCharacterCurrenciesExact } from './inventory/shared/consume.js';
+import { consumeSpecificItemInstance } from './inventory/shared/consume.js';
 import { invalidateStaminaCache } from './staminaCacheService.js';
 import {
   DEFAULT_MONTH_CARD_ITEM_DEF_ID,
@@ -11,6 +12,10 @@ import {
   type MonthCardBenefitValues,
 } from './shared/monthCardBenefits.js';
 import { loadCharacterIdByUserIdDirect } from './shared/characterId.js';
+import {
+  loadProjectedCharacterItemInstanceById,
+  loadProjectedCharacterItemInstancesByLocation,
+} from './shared/characterItemInstanceMutationService.js';
 
 export type MonthCardStatusResult = {
   success: boolean;
@@ -146,51 +151,29 @@ class MonthCardService {
 
     let itemInstanceRow: { id: number; qty: number } | null = null;
     if (Number.isInteger(options?.itemInstanceId) && Number(options?.itemInstanceId) > 0) {
-      const instanceResult = await query(
-        `
-          SELECT id, qty
-          FROM item_instance
-          WHERE id = $1
-            AND owner_character_id = $2
-            AND item_def_id = $3
-            AND location = 'bag'
-          LIMIT 1
-          FOR UPDATE
-        `,
-        [Number(options?.itemInstanceId), characterId, itemDefId],
+      const instance = await loadProjectedCharacterItemInstanceById(
+        characterId,
+        Number(options?.itemInstanceId),
       );
-      if (instanceResult.rows.length > 0) {
-        itemInstanceRow = { id: Number(instanceResult.rows[0].id), qty: Number(instanceResult.rows[0].qty) };
+      if (instance && instance.item_def_id === itemDefId && instance.location === 'bag') {
+        itemInstanceRow = { id: instance.id, qty: Number(instance.qty) };
       }
     } else {
-      const instanceResult = await query(
-        `
-          SELECT id, qty
-          FROM item_instance
-          WHERE owner_character_id = $1
-            AND item_def_id = $2
-            AND location = 'bag'
-          ORDER BY created_at ASC
-          LIMIT 1
-          FOR UPDATE
-        `,
-        [characterId, itemDefId],
-      );
-      if (instanceResult.rows.length > 0) {
-        itemInstanceRow = { id: Number(instanceResult.rows[0].id), qty: Number(instanceResult.rows[0].qty) };
+      const bagItems = await loadProjectedCharacterItemInstancesByLocation(characterId, 'bag');
+      const instance = bagItems
+        .filter((item) => item.item_def_id === itemDefId)
+        .sort((left, right) => left.created_at.getTime() - right.created_at.getTime())[0];
+      if (instance) {
+        itemInstanceRow = { id: instance.id, qty: Number(instance.qty) };
       }
     }
 
     if (!itemInstanceRow || !Number.isFinite(itemInstanceRow.qty) || itemInstanceRow.qty <= 0) {
       return { success: false, message: '背包中没有可用的月卡道具' };
     }
-    if (itemInstanceRow.qty === 1) {
-      await query(`DELETE FROM item_instance WHERE id = $1 AND owner_character_id = $2`, [itemInstanceRow.id, characterId]);
-    } else {
-      await query(`UPDATE item_instance SET qty = qty - 1, updated_at = NOW() WHERE id = $1 AND owner_character_id = $2`, [
-        itemInstanceRow.id,
-        characterId,
-      ]);
+    const consumeResult = await consumeSpecificItemInstance(characterId, itemInstanceRow.id, 1);
+    if (!consumeResult.success) {
+      return { success: false, message: consumeResult.message };
     }
 
     const ownRes = await query(

@@ -78,7 +78,7 @@ import {
 } from './shared/partnerView.js';
 import { ensurePartnerInnateTechniquesVisible } from './shared/partnerInnateTechniqueVisibility.js';
 import { loadPartnerMarketTradeStateMap, loadActivePartnerMarketListing } from './shared/partnerMarketState.js';
-import { consumeCharacterStoredResources } from './inventory/shared/consume.js';
+import { consumeCharacterStoredResources, consumeMaterialByDefId } from './inventory/shared/consume.js';
 import {
   loadActivePartnerFusionMaterial,
   loadPartnerFusionLockStateMap,
@@ -110,6 +110,15 @@ import {
   normalizeManagedAvatarValue,
 } from './uploadService.js';
 import { consumeSpecificItemInstance } from './inventory/shared/consume.js';
+import {
+  bufferCharacterItemInstanceMutations,
+  type CharacterItemInstanceMetadata,
+  type JsonValue,
+  loadProjectedCharacterItemInstanceById,
+  loadProjectedCharacterItemInstances,
+  loadProjectedCharacterItemInstancesByLocation,
+  reserveItemInstanceIds,
+} from './shared/characterItemInstanceMutationService.js';
 import { executeGeneratedPartnerRebone } from './shared/partnerReboneExecution.js';
 import {
   getTechniqueDetailByIdForPartner,
@@ -712,6 +721,16 @@ type PartnerPendingTechniqueLearnPreviewContext = {
   preview: PartnerTechniqueLearnPreviewDto;
 };
 
+const normalizePreviewMetadataForSnapshot = (
+  metadata: ReturnType<typeof buildPartnerTechniqueLearnPreviewMetadata>,
+): CharacterItemInstanceMetadata => {
+  const cloned = JSON.parse(JSON.stringify(metadata)) as JsonValue;
+  if (cloned !== null && !Array.isArray(cloned) && typeof cloned === 'object') {
+    return cloned;
+  }
+  return null;
+};
+
 const loadCharacterPartnerContext = async (
   characterId: number,
   forUpdate: boolean,
@@ -968,63 +987,16 @@ const reservePartnerTechniqueLearnPreviewBook = async (params: {
   learnedTechniqueId: string;
   replacedTechniqueId: string;
 }): Promise<PartnerResult<number>> => {
-  const existingPreview = await query(
-    `
-      SELECT id
-      FROM item_instance
-      WHERE owner_character_id = $1
-        AND location = $2
-      LIMIT 1
-      FOR UPDATE
-    `,
-    [params.characterId, PARTNER_TECHNIQUE_PREVIEW_ITEM_LOCATION],
-  );
-  if (existingPreview.rows.length > 0) {
+  const existingPreview = (await loadProjectedCharacterItemInstances(params.characterId))
+    .find((item) => item.location === PARTNER_TECHNIQUE_PREVIEW_ITEM_LOCATION) ?? null;
+  if (existingPreview) {
     return { success: false, message: '当前已有待处理的伙伴打书预览，请先确认或放弃' };
   }
 
-  const result = await query(
-    `
-      SELECT
-        id,
-        owner_user_id,
-        owner_character_id,
-        item_def_id,
-        qty,
-        quality,
-        quality_rank,
-        bind_type,
-        bind_owner_user_id,
-        bind_owner_character_id,
-        location,
-        location_slot,
-        strengthen_level,
-        refine_level,
-        socketed_gems,
-        random_seed,
-        affixes,
-        identified,
-        affix_gen_version,
-        affix_roll_meta,
-        custom_name,
-        locked,
-        expire_at,
-        obtained_from,
-        obtained_ref_id,
-        metadata
-      FROM item_instance
-      WHERE id = $1
-        AND owner_character_id = $2
-      LIMIT 1
-      FOR UPDATE
-    `,
-    [params.itemInstanceId, params.characterId],
-  );
-  if (result.rows.length <= 0) {
+  const itemRow = await loadProjectedCharacterItemInstanceById(params.characterId, params.itemInstanceId);
+  if (!itemRow) {
     return { success: false, message: '功法书不存在' };
   }
-
-  const itemRow = result.rows[0] as PartnerPreviewItemInstanceRow;
   if (itemRow.locked) {
     return { success: false, message: '道具已锁定' };
   }
@@ -1041,112 +1013,71 @@ const reservePartnerTechniqueLearnPreviewBook = async (params: {
     learnedTechniqueId: params.learnedTechniqueId,
     replacedTechniqueId: params.replacedTechniqueId,
   });
+  const snapshotMetadata = normalizePreviewMetadataForSnapshot(metadata);
 
   if (currentQty === 1) {
-    const updateResult = await query(
-      `
-        UPDATE item_instance
-        SET location = $2,
-            location_slot = NULL,
-            equipped_slot = NULL,
-            metadata = $3::jsonb,
-            updated_at = NOW()
-        WHERE id = $1
-        RETURNING id
-      `,
-      [params.itemInstanceId, PARTNER_TECHNIQUE_PREVIEW_ITEM_LOCATION, JSON.stringify(metadata)],
-    );
-    if (updateResult.rows.length <= 0) {
-      return { success: false, message: '保留待处理功法书失败' };
-    }
+    await bufferCharacterItemInstanceMutations([
+      {
+        opId: `partner-technique-preview-move:${params.itemInstanceId}:${Date.now()}`,
+        characterId: params.characterId,
+        itemId: params.itemInstanceId,
+        createdAt: Date.now(),
+        kind: 'upsert',
+        snapshot: {
+          ...itemRow,
+          location: PARTNER_TECHNIQUE_PREVIEW_ITEM_LOCATION,
+          location_slot: null,
+          equipped_slot: null,
+          metadata: snapshotMetadata,
+        },
+      },
+    ]);
     return {
       success: true,
       message: 'ok',
-      data: normalizeInteger(updateResult.rows[0]?.id, 1),
+      data: params.itemInstanceId,
     };
   }
 
-  await query(
-    `
-      UPDATE item_instance
-      SET qty = qty - 1,
-          updated_at = NOW()
-      WHERE id = $1
-    `,
-    [params.itemInstanceId],
-  );
-
-  const insertResult = await query(
-    `
-      INSERT INTO item_instance (
-        owner_user_id,
-        owner_character_id,
-        item_def_id,
-        qty,
-        quality,
-        quality_rank,
-        bind_type,
-        bind_owner_user_id,
-        bind_owner_character_id,
-        location,
-        location_slot,
-        equipped_slot,
-        strengthen_level,
-        refine_level,
-        socketed_gems,
-        random_seed,
-        affixes,
-        identified,
-        affix_gen_version,
-        affix_roll_meta,
-        custom_name,
-        locked,
-        expire_at,
-        obtained_from,
-        obtained_ref_id,
-        metadata,
-        created_at,
-        updated_at
-      )
-      VALUES (
-        $1, $2, $3, 1, $4, $5, $6, $7, $8, $9, NULL, NULL, $10, $11, $12::jsonb, $13,
-        $14::jsonb, $15, $16, $17::jsonb, $18, FALSE, $19, $20, $21, $22::jsonb, NOW(), NOW()
-      )
-      RETURNING id
-    `,
-    [
-      normalizeInteger(itemRow.owner_user_id),
-      normalizeInteger(itemRow.owner_character_id),
-      normalizeText(itemRow.item_def_id),
-      normalizeText(itemRow.quality) || null,
-      normalizeInteger(itemRow.quality_rank) || null,
-      normalizeText(itemRow.bind_type) || 'none',
-      normalizeInteger(itemRow.bind_owner_user_id) || null,
-      normalizeInteger(itemRow.bind_owner_character_id) || null,
-      PARTNER_TECHNIQUE_PREVIEW_ITEM_LOCATION,
-      normalizeInteger(itemRow.strengthen_level),
-      normalizeInteger(itemRow.refine_level),
-      itemRow.socketed_gems ? JSON.stringify(itemRow.socketed_gems) : null,
-      normalizeInteger(itemRow.random_seed) || null,
-      itemRow.affixes ? JSON.stringify(itemRow.affixes) : null,
-      itemRow.identified !== false,
-      normalizeInteger(itemRow.affix_gen_version, 1),
-      itemRow.affix_roll_meta ? JSON.stringify(itemRow.affix_roll_meta) : null,
-      normalizeText(itemRow.custom_name) || null,
-      itemRow.expire_at,
-      normalizeText(itemRow.obtained_from) || null,
-      normalizeText(itemRow.obtained_ref_id) || null,
-      JSON.stringify(metadata),
-    ],
-  );
-  if (insertResult.rows.length <= 0) {
+  const [previewItemInstanceId] = await reserveItemInstanceIds(1);
+  if (!Number.isInteger(previewItemInstanceId) || previewItemInstanceId <= 0) {
     return { success: false, message: '保留待处理功法书失败' };
   }
+  await bufferCharacterItemInstanceMutations([
+    {
+      opId: `partner-technique-preview-source:${params.itemInstanceId}:${Date.now()}`,
+      characterId: params.characterId,
+      itemId: params.itemInstanceId,
+      createdAt: Date.now(),
+      kind: 'upsert',
+      snapshot: {
+        ...itemRow,
+        qty: currentQty - 1,
+      },
+    },
+    {
+      opId: `partner-technique-preview-clone:${previewItemInstanceId}:${Date.now()}`,
+      characterId: params.characterId,
+      itemId: previewItemInstanceId,
+      createdAt: Date.now() + 1,
+      kind: 'upsert',
+      snapshot: {
+        ...itemRow,
+        id: previewItemInstanceId,
+        qty: 1,
+        location: PARTNER_TECHNIQUE_PREVIEW_ITEM_LOCATION,
+        location_slot: null,
+        equipped_slot: null,
+        metadata: snapshotMetadata,
+        created_at: new Date(),
+      },
+    },
+  ]);
 
   return {
     success: true,
     message: 'ok',
-    data: normalizeInteger(insertResult.rows[0]?.id, 1),
+    data: previewItemInstanceId,
   };
 };
 
@@ -1154,44 +1085,40 @@ const deletePendingPartnerTechniqueLearnPreviewBook = async (params: {
   characterId: number;
   itemInstanceId: number;
 }): Promise<PartnerResult> => {
-  const deleteResult = await query(
-    `
-      DELETE FROM item_instance
-      WHERE id = $1
-        AND owner_character_id = $2
-        AND location = $3
-      RETURNING id
-    `,
-    [params.itemInstanceId, params.characterId, PARTNER_TECHNIQUE_PREVIEW_ITEM_LOCATION],
-  );
-  if (deleteResult.rows.length <= 0) {
+  const previewItem = await loadProjectedCharacterItemInstanceById(params.characterId, params.itemInstanceId);
+  if (!previewItem || previewItem.location !== PARTNER_TECHNIQUE_PREVIEW_ITEM_LOCATION) {
     return { success: false, message: '待处理打书预览不存在或已失效' };
   }
+  await bufferCharacterItemInstanceMutations([
+    {
+      opId: `partner-technique-preview-delete:${params.itemInstanceId}:${Date.now()}`,
+      characterId: params.characterId,
+      itemId: params.itemInstanceId,
+      createdAt: Date.now(),
+      kind: 'delete',
+      snapshot: null,
+    },
+  ]);
   return { success: true, message: 'ok' };
 };
 
 const loadPartnerConsumables = async (
   characterId: number,
 ): Promise<PartnerConsumableDto[]> => {
-  const result = await query(
-    `
-      SELECT id, item_def_id, qty, location, location_slot
-      FROM item_instance
-      WHERE owner_character_id = $1
-        AND location = 'bag'
-        AND qty > 0
-        AND item_def_id = $2
-      ORDER BY location_slot ASC NULLS LAST, id ASC
-    `,
-    [characterId, PARTNER_REBONE_ELIXIR_ITEM_DEF_ID],
-  );
-
   const itemDef = getItemDefinitionById(PARTNER_REBONE_ELIXIR_ITEM_DEF_ID);
   if (!itemDef) {
     return [];
   }
 
-  return (result.rows as PartnerItemInstanceRow[]).map((row) => ({
+  return (await loadProjectedCharacterItemInstancesByLocation(characterId, 'bag'))
+    .filter((row) => row.qty > 0 && row.item_def_id === PARTNER_REBONE_ELIXIR_ITEM_DEF_ID)
+    .sort((left, right) => {
+      const leftSlot = left.location_slot ?? Number.MAX_SAFE_INTEGER;
+      const rightSlot = right.location_slot ?? Number.MAX_SAFE_INTEGER;
+      if (leftSlot !== rightSlot) return leftSlot - rightSlot;
+      return left.id - right.id;
+    })
+    .map((row) => ({
     itemDefId: PARTNER_REBONE_ELIXIR_ITEM_DEF_ID,
     itemInstanceId: normalizeInteger(row.id, 1),
     name: normalizeText(itemDef.name) || PARTNER_REBONE_ELIXIR_ITEM_DEF_ID,
@@ -2095,32 +2022,9 @@ class PartnerService {
       }
 
       for (const material of cost.materials) {
-        let remainingQty = material.qty;
-        const itemsResult = await query(
-          `
-            SELECT id, qty
-            FROM item_instance
-            WHERE owner_character_id = $1
-              AND item_def_id = $2
-              AND location IN ('bag', 'warehouse')
-            ORDER BY qty ASC
-            FOR UPDATE
-          `,
-          [characterId, material.itemId],
-        );
-
-        for (const item of itemsResult.rows as Array<{ id: number; qty: number }>) {
-          if (remainingQty <= 0) break;
-          if (item.qty <= remainingQty) {
-            await query('DELETE FROM item_instance WHERE id = $1', [item.id]);
-            remainingQty -= item.qty;
-            continue;
-          }
-          await query(
-            'UPDATE item_instance SET qty = qty - $1, updated_at = NOW() WHERE id = $2',
-            [remainingQty, item.id],
-          );
-          remainingQty = 0;
+        const consumeResult = await consumeMaterialByDefId(characterId, material.itemId, material.qty);
+        if (!consumeResult.success) {
+          return { success: false, message: consumeResult.message };
         }
       }
 

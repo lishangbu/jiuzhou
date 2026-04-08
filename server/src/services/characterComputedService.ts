@@ -58,6 +58,7 @@ import {
   TITLE_EFFECT_KEY_SET,
 } from './shared/characterAttrRegistry.js';
 import { listTitleDefinitionsByIds } from './titleDefinitionService.js';
+import { loadProjectedCharacterItemInstancesByLocation } from './shared/characterItemInstanceMutationService.js';
 import { toSafeNonNegativeIntegerStrict } from './shared/safeInteger.js';
 import {
   BREAKTHROUGH_ADD_PERCENT_REWARD_DEFS,
@@ -952,25 +953,16 @@ const buildEquippedAttrBonusesFromRows = (
 };
 
 const loadEquippedAttrBonuses = async (characterId: number, effectiveLevel: number): Promise<EquippedAttrBonuses> => {
-  const equippedResult = await query(
-    `
-      SELECT
-        ii.owner_character_id,
-        ii.affixes,
-        ii.strengthen_level,
-        ii.refine_level,
-        ii.socketed_gems,
-        ii.item_def_id,
-        ii.quality_rank
-      FROM item_instance ii
-      WHERE ii.owner_character_id = $1
-        AND ii.location = 'equipped'
-    `,
-    [characterId],
-  );
-
   return buildEquippedAttrBonusesFromRows(
-    equippedResult.rows as EquippedItemAttrRow[],
+    (await loadProjectedCharacterItemInstancesByLocation(characterId, 'equipped')).map((item) => ({
+      owner_character_id: item.owner_character_id,
+      affixes: item.affixes,
+      strengthen_level: item.strengthen_level,
+      refine_level: item.refine_level,
+      socketed_gems: item.socketed_gems,
+      item_def_id: item.item_def_id,
+      quality_rank: item.quality_rank,
+    })) as EquippedItemAttrRow[],
     effectiveLevel,
   );
 };
@@ -1056,31 +1048,19 @@ const loadEquippedAttrBonusesMap = async (
     return result;
   }
 
-  const equippedResult = await query(
-    `
-      SELECT
-        ii.owner_character_id,
-        ii.affixes,
-        ii.strengthen_level,
-        ii.refine_level,
-        ii.socketed_gems,
-        ii.item_def_id,
-        ii.quality_rank
-      FROM item_instance ii
-      WHERE ii.owner_character_id = ANY($1)
-        AND ii.location = 'equipped'
-      ORDER BY ii.owner_character_id ASC, ii.id ASC
-    `,
-    [normalizedCharacterIds],
-  );
-
   const rowsByCharacterId = new Map<number, EquippedItemAttrRow[]>();
-  for (const row of equippedResult.rows as EquippedItemAttrRow[]) {
-    const characterId = Math.floor(Number(row.owner_character_id) || 0);
-    if (characterId <= 0) continue;
-    const currentRows = rowsByCharacterId.get(characterId) ?? [];
-    currentRows.push(row);
-    rowsByCharacterId.set(characterId, currentRows);
+  for (const characterId of normalizedCharacterIds) {
+    const projectedRows = (await loadProjectedCharacterItemInstancesByLocation(characterId, 'equipped')).map((item) => ({
+      owner_character_id: item.owner_character_id,
+      affixes: item.affixes,
+      strengthen_level: item.strengthen_level,
+      refine_level: item.refine_level,
+      socketed_gems: item.socketed_gems,
+      item_def_id: item.item_def_id,
+      quality_rank: item.quality_rank,
+    })) as EquippedItemAttrRow[];
+    if (projectedRows.length <= 0) continue;
+    rowsByCharacterId.set(characterId, projectedRows);
   }
 
   for (const characterId of normalizedCharacterIds) {

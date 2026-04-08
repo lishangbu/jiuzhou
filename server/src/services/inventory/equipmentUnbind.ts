@@ -19,6 +19,10 @@
 import { query } from '../../config/database.js';
 import { normalizeItemBindType } from '../shared/itemBindType.js';
 import { getStaticItemDef } from './shared/helpers.js';
+import {
+  bufferCharacterItemInstanceMutations,
+  loadProjectedCharacterItemInstanceById,
+} from '../shared/characterItemInstanceMutationService.js';
 
 type QueryResultLike = {
   rows: Array<Record<string, unknown>>;
@@ -53,6 +57,53 @@ export const unbindEquipmentBindingByInstanceId = async ({
   queryRunner = query,
   resolveItemDef = getStaticItemDef,
 }: EquipmentUnbindParams): Promise<EquipmentUnbindResult> => {
+  if (queryRunner === query && resolveItemDef === getStaticItemDef) {
+    const targetRow = await loadProjectedCharacterItemInstanceById(characterId, itemInstanceId);
+    if (!targetRow) {
+      return { success: false, message: '目标装备不存在' };
+    }
+
+    const itemDefId = typeof targetRow.item_def_id === 'string' ? targetRow.item_def_id.trim() : '';
+    if (!itemDefId) {
+      return { success: false, message: '目标装备数据异常' };
+    }
+
+    const itemDef = resolveItemDef(itemDefId);
+    if (!itemDef || String(itemDef.category || '').trim() !== 'equipment') {
+      return { success: false, message: '目标物品不是装备' };
+    }
+
+    if (Boolean(targetRow.locked)) {
+      return { success: false, message: '目标装备已锁定' };
+    }
+
+    if (normalizeItemBindType(targetRow.bind_type) === 'none') {
+      return { success: false, message: '目标装备尚未绑定' };
+    }
+
+    await bufferCharacterItemInstanceMutations([
+      {
+        opId: `equipment-unbind:${itemInstanceId}:${Date.now()}`,
+        characterId,
+        itemId: itemInstanceId,
+        createdAt: Date.now(),
+        kind: 'upsert',
+        snapshot: {
+          ...targetRow,
+          bind_type: 'none',
+          bind_owner_user_id: null,
+          bind_owner_character_id: null,
+        },
+      },
+    ]);
+
+    return {
+      success: true,
+      message: '解绑成功',
+      itemInstanceId,
+    };
+  }
+
   const targetResult = await queryRunner(
     `
       SELECT id, item_def_id, bind_type, locked

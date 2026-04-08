@@ -4,7 +4,7 @@
  */
 import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
-import { consumeCharacterStoredResources } from './inventory/shared/consume.js';
+import { consumeCharacterStoredResources, consumeMaterialByDefId } from './inventory/shared/consume.js';
 import { updateSectionProgress } from './mainQuest/index.js';
 import { updateAchievementProgress } from './achievementService.js';
 import { isCharacterInBattle } from './battle/index.js';
@@ -20,6 +20,7 @@ import {
   scaleTechniqueBaseCostByQuality,
   type TechniqueLayerStaticRow,
 } from './shared/techniqueUpgradeRules.js';
+import { loadProjectedCharacterItemInstances } from './shared/characterItemInstanceMutationService.js';
 import {
   cleanupPersistedIdleConfigAutoSkillPolicy,
 } from './idle/idleAutoSkillPolicy.js';
@@ -402,14 +403,11 @@ class CharacterTechniqueService {
     const costMaterials = layer.costMaterials;
 
     // 检查并扣除材料
+    const projectedItems = await loadProjectedCharacterItemInstances(characterId);
     for (const mat of costMaterials) {
-      const matResult = await query(
-        `SELECT COALESCE(SUM(qty), 0) as total
-         FROM item_instance
-         WHERE owner_character_id = $1 AND item_def_id = $2 AND location IN ('bag', 'warehouse')`,
-        [characterId, mat.itemId]
-      );
-      const totalQty = parseInt(matResult.rows[0].total);
+      const totalQty = projectedItems
+        .filter((item) => item.item_def_id === mat.itemId && (item.location === 'bag' || item.location === 'warehouse'))
+        .reduce((sum, item) => sum + Math.max(0, Number(item.qty) || 0), 0);
       if (totalQty < mat.qty) {
         // 获取材料名称
         const matName = getItemDefinitionById(mat.itemId)?.name || mat.itemId;
@@ -428,27 +426,10 @@ class CharacterTechniqueService {
 
     // 扣除材料
     for (const mat of costMaterials) {
-      let remainingQty = mat.qty;
-      const itemsResult = await query(
-        `SELECT id, qty FROM item_instance
-         WHERE owner_character_id = $1 AND item_def_id = $2 AND location IN ('bag', 'warehouse')
-         ORDER BY qty ASC FOR UPDATE`,
-        [characterId, mat.itemId]
-      );
-
-      for (const item of itemsResult.rows) {
-        if (remainingQty <= 0) break;
-
-        if (item.qty <= remainingQty) {
-          await query('DELETE FROM item_instance WHERE id = $1', [item.id]);
-          remainingQty -= item.qty;
-        } else {
-          await query(
-            'UPDATE item_instance SET qty = qty - $1, updated_at = NOW() WHERE id = $2',
-            [remainingQty, item.id]
-          );
-          remainingQty = 0;
-        }
+      const consumeResult = await consumeMaterialByDefId(characterId, mat.itemId, mat.qty);
+      if (!consumeResult.success) {
+        const matName = getItemDefinitionById(mat.itemId)?.name || mat.itemId;
+        return { success: false, message: `材料不足：${matName}，需要${mat.qty}` };
       }
     }
 
