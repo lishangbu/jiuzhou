@@ -605,7 +605,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
           const res = await discardTechniqueResearchDraft(characterId, generationId);
           if (!res.success) throw new Error(getUnifiedApiErrorMessage(res, '放弃失败'));
           message.success(res.message || '已放弃本次研修草稿');
-          await Promise.all([refreshResearchStatus('background'), refreshStatus()]);
+          await refreshResearchStatus('background');
         } catch {
           void 0;
         } finally {
@@ -613,7 +613,7 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
         }
       },
     });
-  }, [characterId, discardSubmitting, message, modal, refreshResearchStatus, refreshStatus]);
+  }, [characterId, discardSubmitting, message, modal, refreshResearchStatus]);
 
   const handleSubmitResearchPublish = useCallback(async () => {
     if (!characterId || publishSubmitting || !publishTargetGenerationId) return;
@@ -635,14 +635,14 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
         }
         if (publishRes?.code === 'GENERATION_NOT_READY' || publishRes?.code === 'GENERATION_EXPIRED') {
           closeResearchPublishDialog();
-          await Promise.all([refreshResearchStatus('background'), refreshStatus()]);
+          await refreshResearchStatus('background');
         }
         throw new Error(errorMessage);
       }
 
       closeResearchPublishDialog();
       message.success(`抄写成功，已发放《${publishRes.data.finalName}》功法书`);
-      await Promise.all([refreshResearchStatus('background'), refreshStatus()]);
+      await refreshResearchStatus('background');
     } catch {
       void 0;
     } finally {
@@ -656,7 +656,6 @@ const TechniqueModal: React.FC<TechniqueModalProps> = ({ open, onClose, onResear
     publishSubmitting,
     publishTargetGenerationId,
     refreshResearchStatus,
-    refreshStatus,
   ]);
 
   const publishRuleLines = useMemo(() => {
