@@ -28,8 +28,6 @@ import {
   settleSetDeferredDamageAtRoundEnd,
   triggerSetBonusEffects,
 } from './modules/setBonus.js';
-import { decayUnitMarksAtRoundStart } from './modules/mark.js';
-import { decayUnitMomentumAtRoundEnd } from './modules/momentum.js';
 import {
   ensureBattleStateSkillCooldownState,
   reduceUnitSkillCooldowns,
@@ -277,9 +275,6 @@ export class BattleEngine {
       unit.canAct = true;
       resetSetRuntimeStateForRound(unit);
 
-      // 统一回合开始印记衰减
-      decayUnitMarksAtRoundStart(unit);
-      
       // DOT/HOT结算
       const effectLogs = processRoundStartEffects(this.state, unit);
       effectLogs.forEach(log => this.logAppender(log));
@@ -778,7 +773,6 @@ export class BattleEngine {
       buffLogs.forEach(log => this.logAppender(log));
       const deferredLogs = settleSetDeferredDamageAtRoundEnd(this.state, unit);
       deferredLogs.forEach(log => this.logAppender(log));
-      decayUnitMomentumAtRoundEnd(unit);
     }
 
     // 记录回合结束日志

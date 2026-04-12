@@ -2,7 +2,7 @@
  * 战斗印记模块（统一抽象）
  *
  * 作用（做什么 / 不做什么）：
- * - 做什么：统一处理印记配置解析、施加、消耗、来源隔离、回合衰减、增伤读取与日志文案。
+ * - 做什么：统一处理印记配置解析、施加、消耗、来源隔离、增伤读取与日志文案。
  * - 不做什么：不直接改写技能/套装行为流程，不负责日志写入顺序与战斗行动编排。
  *
  * 输入/输出：
@@ -16,7 +16,7 @@
  *
  * 关键边界条件与坑点：
  * 1) 每目标每施加者独立计数：同 markId 但不同 sourceUnitId 绝不合并。
- * 2) 消耗层数与回合衰减顺序分离：衰减统一在回合开始执行，技能/套装仅处理本次即时消耗。
+ * 2) 印记层数与存在期只在显式施加/消耗时变化，不能在回合推进里偷偷扣减，避免机制理解偏差。
  */
 
 import type {
@@ -374,18 +374,8 @@ export const consumeMarkStacks = (
 };
 
 export const decayUnitMarksAtRoundStart = (unit: BattleUnit): void => {
-  const marks = ensureUnitMarks(unit);
-  if (marks.length === 0) return;
-  const next: ActiveMark[] = [];
-  for (const mark of marks) {
-    const nextDuration = mark.remainingDuration - 1;
-    if (nextDuration <= 0 || mark.stacks <= 0) continue;
-    next.push({
-      ...mark,
-      remainingDuration: nextDuration,
-    });
-  }
-  unit.marks = next;
+  // 保留空实现，兼容旧调用入口；当前规则改为印记不会随回合自动衰减或过期。
+  unit.marks = ensureUnitMarks(unit);
 };
 
 export const getSoulShackleRecoveryBlockRate = (target: BattleUnit): number => {

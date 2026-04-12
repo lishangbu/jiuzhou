@@ -66,7 +66,7 @@ test('势能技能应在施法后叠层并写入日志', () => {
   assert.deepEqual(actionLog.targets[0]?.momentumGained, ['势+2（当前2层）']);
 });
 
-test('势能 consume 应强化本次技能伤害并在回合结束衰减', () => {
+test('势能 consume 应强化本次技能伤害且不在回合结束自动衰减', () => {
   const caster = createUnit({ id: 'player-2', name: '刀修' });
   const target = createUnit({ id: 'monster-2', name: '木桩妖', type: 'monster' });
   caster.momentum = {
@@ -121,5 +121,5 @@ test('势能 consume 应强化本次技能伤害并在回合结束衰减', () =>
     maxStacks: 5,
   };
   decayUnitMomentumAtRoundEnd(caster);
-  assert.equal(caster.momentum?.stacks, 2);
+  assert.equal(caster.momentum?.stacks, 3);
 });

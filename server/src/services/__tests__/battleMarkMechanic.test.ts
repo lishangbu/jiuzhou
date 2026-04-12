@@ -39,7 +39,7 @@ test('虚蚀印记应遵循叠层上限并按施加者来源隔离', () => {
   assert.equal(target.marks?.length, 2);
 });
 
-test('虚蚀印记应在回合开始衰减并在持续归零时移除', () => {
+test('虚蚀印记不应在回合开始自动衰减或移除', () => {
   const target = createUnit({ id: 'monster-2', name: '木桩妖', type: 'monster' });
   target.marks = [
     {
@@ -59,12 +59,16 @@ test('虚蚀印记应在回合开始衰减并在持续归零时移除', () => {
   ];
 
   decayUnitMarksAtRoundStart(target);
-  assert.equal(target.marks?.length, 1);
+  assert.equal(target.marks?.length, 2);
   assert.equal(target.marks?.[0]?.sourceUnitId, 'player-1');
-  assert.equal(target.marks?.[0]?.remainingDuration, 1);
+  assert.equal(target.marks?.[0]?.remainingDuration, 2);
+  assert.equal(target.marks?.[1]?.sourceUnitId, 'player-2');
+  assert.equal(target.marks?.[1]?.remainingDuration, 1);
 
   decayUnitMarksAtRoundStart(target);
-  assert.equal(target.marks?.length, 0);
+  assert.equal(target.marks?.length, 2);
+  assert.equal(target.marks?.[0]?.remainingDuration, 2);
+  assert.equal(target.marks?.[1]?.remainingDuration, 1);
 });
 
 test('虚蚀印记应支持 fixed/all 两种消耗模式', () => {

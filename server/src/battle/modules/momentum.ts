@@ -2,12 +2,12 @@
  * 势能机制模块
  *
  * 作用（做什么 / 不做什么）：
- * 1) 做什么：统一处理“势”的配置解析、叠层、消耗、回合衰减与日志文案，供技能执行与 AI 生成功法共享。
+ * 1) 做什么：统一处理“势”的配置解析、叠层、消耗与日志文案，供技能执行与 AI 生成功法共享。
  * 2) 不做什么：不负责目标选择、不直接写战斗日志、不处理技能主流程编排。
  *
  * 输入/输出：
  * - 输入：BattleUnit、技能 momentum 效果配置。
- * - 输出：解析后的配置、叠层/消耗结果，以及衰减后的势状态。
+ * - 输出：解析后的配置、叠层/消耗结果，以及可直接复用的势状态。
  *
  * 数据流/状态流：
  * 技能 effects[] -> resolveMomentumEffectConfig -> 读写 BattleUnit.momentum -> skill.ts / AI 约束消费。
@@ -196,8 +196,6 @@ export const consumeMomentumStacks = (
   };
 };
 
-export const decayUnitMomentumAtRoundEnd = (unit: BattleUnit): void => {
-  if (!unit.momentum) return;
-  if (unit.momentum.stacks <= 0) return;
-  unit.momentum.stacks = Math.max(0, unit.momentum.stacks - 1);
+export const decayUnitMomentumAtRoundEnd = (_unit: BattleUnit): void => {
+  // 保留空实现，兼容旧调用入口；当前规则改为势仅在显式消耗时减少。
 };
