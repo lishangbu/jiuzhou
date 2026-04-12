@@ -308,6 +308,79 @@ const normalizeCharacterBaseRow = (row: CharacterBaseRow): CharacterBaseRow => {
   };
 };
 
+/**
+ * 修复角色钱包中的历史负数脏数据。
+ *
+ * 作用：
+ * 1. 仅针对 `characters.silver` 与 `characters.spirit_stones` 的历史负数做收口，避免坏数据继续阻断登录与角色快照读取。
+ * 2. 把修复集中在角色基础行归一化入口，避免多个登录/加载链路各自重复兜底。
+ * 3. 不放宽其他核心字段的严格校验；修复完成后仍继续走 `toSafeNonNegativeIntegerStrict`。
+ *
+ * 输入/输出：
+ * - 输入：数据库刚读取出的角色基础行数组。
+ * - 输出：钱包字段已修正为非负值、可继续进入严格归一化的角色基础行数组。
+ *
+ * 数据流/状态流：
+ * - DB 原始 characters 行 -> 本函数识别负钱包 -> 单次 SQL 写回 0 -> 返回内存中同步修正后的 rows -> normalizeCharacterBaseRow。
+ *
+ * 复用设计说明：
+ * - `selectBaseCharacterByUserId`、`selectBaseCharacterByCharacterId`、批量角色读取都复用这一入口，保证登录、断线重连、批量角色加载的修复口径一致。
+ *
+ * 关键边界条件与坑点：
+ * 1. 只修复银两和灵石，不能顺手放宽经验、属性点、精气神等字段的约束，否则会掩盖其他数据错误。
+ * 2. 只在检测到负数时落库，避免每次读取都写库造成不必要的热路径开销。
+ */
+const repairNegativeWalletBaseRows = async (rows: CharacterBaseRow[]): Promise<CharacterBaseRow[]> => {
+  if (rows.length <= 0) {
+    return rows;
+  }
+
+  const corruptedIds: number[] = [];
+  for (const row of rows) {
+    if (safeNumber(row.silver) < 0 || safeNumber(row.spirit_stones) < 0) {
+      corruptedIds.push(row.id);
+    }
+  }
+
+  if (corruptedIds.length <= 0) {
+    return rows;
+  }
+
+  await query(
+    `
+      UPDATE characters
+      SET
+        silver = GREATEST(silver, 0),
+        spirit_stones = GREATEST(spirit_stones, 0),
+        updated_at = NOW()
+      WHERE id = ANY($1::int[])
+        AND (silver < 0 OR spirit_stones < 0)
+    `,
+    [corruptedIds],
+  );
+
+  console.error(
+    `[character:computed] 检测到角色钱包负数脏数据，已自动归零修复: characterIds=${corruptedIds.join(',')}`,
+  );
+
+  const corruptedIdSet = new Set(corruptedIds);
+  return rows.map((row) => {
+    if (!corruptedIdSet.has(row.id)) {
+      return row;
+    }
+    return {
+      ...row,
+      silver: Math.max(0, Math.floor(safeNumber(row.silver))),
+      spirit_stones: Math.max(0, Math.floor(safeNumber(row.spirit_stones))),
+    };
+  });
+};
+
+const normalizeCharacterBaseRows = async (rows: CharacterBaseRow[]): Promise<CharacterBaseRow[]> => {
+  const repairedRows = await repairNegativeWalletBaseRows(rows);
+  return repairedRows.map((row) => normalizeCharacterBaseRow(row));
+};
+
 const applyPendingSettlementResourceDelta = (
   row: CharacterBaseRow,
   delta?: {
@@ -1519,7 +1592,8 @@ const selectBaseCharacterByUserId = async (userId: number): Promise<CharacterBas
     [userId],
   );
   if (result.rows.length <= 0) return null;
-  return normalizeCharacterBaseRow(result.rows[0] as CharacterBaseRow);
+  const [normalizedRow] = await normalizeCharacterBaseRows([result.rows[0] as CharacterBaseRow]);
+  return normalizedRow ?? null;
 };
 
 const selectBaseCharactersByUserIds = async (
@@ -1545,7 +1619,7 @@ const selectBaseCharactersByUserIds = async (
     `,
     [normalizedUserIds],
   );
-  return (result.rows as CharacterBaseRow[]).map((row) => normalizeCharacterBaseRow(row));
+  return normalizeCharacterBaseRows(result.rows as CharacterBaseRow[]);
 };
 
 const selectBaseCharacterByCharacterId = async (characterId: number): Promise<CharacterBaseRow | null> => {
@@ -1562,7 +1636,8 @@ const selectBaseCharacterByCharacterId = async (characterId: number): Promise<Ch
     [characterId],
   );
   if (result.rows.length <= 0) return null;
-  return normalizeCharacterBaseRow(result.rows[0] as CharacterBaseRow);
+  const [normalizedRow] = await normalizeCharacterBaseRows([result.rows[0] as CharacterBaseRow]);
+  return normalizedRow ?? null;
 };
 
 const ensureResourceState = async (
@@ -1936,7 +2011,7 @@ export const getCharacterComputedBatchByCharacterIds = async (
   );
 
   const rows = await applyPendingSettlementResourceDeltaBatch(
-    (result.rows as CharacterBaseRow[]).map((row) => normalizeCharacterBaseRow(row)),
+    await normalizeCharacterBaseRows(result.rows as CharacterBaseRow[]),
   );
   return buildCharacterComputedRowMap(rows, options);
 };

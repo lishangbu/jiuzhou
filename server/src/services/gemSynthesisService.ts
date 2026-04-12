@@ -640,6 +640,35 @@ const calcMaxSynthesizeTimes = (params: {
 };
 
 /**
+ * 批量自动合成的钱包预扣减。
+ *
+ * 作用：
+ * 1. 在真正调用共享扣费入口前，先把本地钱包快照按本次计划消耗向前推进，避免同一事务内多次读取旧余额。
+ * 2. 只更新批量自动合成规划阶段的内存态，不直接写库，也不承担真实扣费。
+ *
+ * 输入/输出：
+ * - 输入：当前钱包快照，以及本轮计划消耗的银两/灵石。
+ * - 输出：无返回值；原地更新 wallet。
+ *
+ * 数据流/状态流：
+ * - 每层配方计算出 maxTimes -> 累加本层总消耗 -> 本地推进 wallet -> 下一层继续按剩余钱包计算。
+ *
+ * 复用设计说明：
+ * - 该逻辑只服务于批量自动合成的“先规划、后一次性真实扣费”流程，避免把共享扣费协议改成事务内可见，控制改动面。
+ *
+ * 关键边界条件与坑点：
+ * 1. 这里只允许扣到 0，不能把本地快照推进成负数，否则会再次放大错误规划。
+ * 2. 这里只更新钱包，不处理材料与产物，防止把规划阶段和真实执行阶段混在一起。
+ */
+const applyPlannedWalletCosts = (
+  wallet: CharacterWallet,
+  costs: { silver: number; spiritStones: number },
+): void => {
+  wallet.silver = Math.max(0, wallet.silver - costs.silver);
+  wallet.spiritStones = Math.max(0, wallet.spiritStones - costs.spiritStones);
+};
+
+/**
  * 在 gem 事务内扣减角色钱包资源
  *
  * 作用：
@@ -1462,19 +1491,11 @@ class GemSynthesisService {
 
       const totalSilverCost = recipe.costSilver * maxTimes;
       const totalSpiritCost = recipe.costSpiritStones * maxTimes;
-      const spendResult = await consumeCharacterWalletCostsTx(characterId, wallet, {
+      const consumeQty = recipe.inputQty * maxTimes;
+      applyPlannedWalletCosts(wallet, {
         silver: totalSilverCost,
         spiritStones: totalSpiritCost,
       });
-      if (!spendResult.success) {
-        return { success: false, message: spendResult.message };
-      }
-
-      const consumeQty = recipe.inputQty * maxTimes;
-      const consumeRes = await consumeItemDefQtyTx(characterId, recipe.inputItemDefId, consumeQty);
-      if (!consumeRes.success) {
-        return { success: false, message: consumeRes.message };
-      }
 
       spentSilver += totalSilverCost;
       spentSpiritStones += totalSpiritCost;
@@ -1524,6 +1545,24 @@ class GemSynthesisService {
     if (steps.length === 0) {
       return { success: false, message: '材料或货币不足，无法批量合成' };
     }
+
+    if (spentSilver > 0 || spentSpiritStones > 0) {
+      const spendResult = await consumeCharacterWalletCostsTx(characterId, wallet, {
+        silver: spentSilver,
+        spiritStones: spentSpiritStones,
+      });
+      if (!spendResult.success) {
+        return { success: false, message: spendResult.message };
+      }
+    }
+
+    for (const step of steps) {
+      const consumeRes = await consumeItemDefQtyTx(characterId, step.consumed.itemDefId, step.consumed.qty);
+      if (!consumeRes.success) {
+        return { success: false, message: consumeRes.message };
+      }
+    }
+
     await bufferSimpleCharacterItemGrants(characterId, userId, pendingItemGrants);
 
     const character = await getCharacterComputedByCharacterId(characterId, { bypassStaticCache: true });
