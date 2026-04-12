@@ -85,7 +85,7 @@ describe('skillDetailShared', () => {
       '惊鸿步的第1式。',
       '施加增益：下一次闪避（数值 1），持续2回合',
       '造成物理伤害，金属性，倍率 92%（物攻）',
-      '施加月痕印记（每次+1层，上限3层，持续2回合；被消耗时返还灵气并强化下一次技能）',
+      '施加月痕印记（每次+1层，上限3层，不自动衰减；被消耗时返还灵气并强化下一次技能）',
     ]);
   });
 
@@ -95,7 +95,7 @@ describe('skillDetailShared', () => {
     expect(items.filter((item) => item.isEffect).map((item) => item.value)).toStrictEqual([
       '施加增益：下一次闪避（数值 1），持续2回合',
       '造成物理伤害，金属性，倍率 92%（物攻）',
-      '施加月痕印记（每次+1层，上限3层，持续2回合；被消耗时返还灵气并强化下一次技能）',
+      '施加月痕印记（每次+1层，上限3层，不自动衰减；被消耗时返还灵气并强化下一次技能）',
     ]);
   });
 
@@ -103,7 +103,7 @@ describe('skillDetailShared', () => {
     const content = getSkillMobileDetailContent(mapResearchPreviewSkillToDetail(createPreviewSkill()));
 
     expect(content.summary).toBe(
-      '惊鸿步的第1式。 · 灵气消耗:12 + 15%最大灵气 · 冷却回合:1回合 · 目标类型:单体敌人 · 目标数量:1 · 施加增益：下一次闪避（数值 1），持续2回合 · 造成物理伤害，金属性，倍率 92%（物攻） · 施加月痕印记（每次+1层，上限3层，持续2回合；被消耗时返还灵气并强化下一次技能）',
+      '惊鸿步的第1式。 · 灵气消耗:12 + 15%最大灵气 · 冷却回合:1回合 · 目标类型:单体敌人 · 目标数量:1 · 施加增益：下一次闪避（数值 1），持续2回合 · 造成物理伤害，金属性，倍率 92%（物攻） · 施加月痕印记（每次+1层，上限3层，不自动衰减；被消耗时返还灵气并强化下一次技能）',
     );
     expect(content.detailItems.map((item) => item.label)).toStrictEqual([
       '描述',
