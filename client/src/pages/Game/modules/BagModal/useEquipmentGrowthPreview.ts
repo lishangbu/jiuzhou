@@ -6,11 +6,11 @@
  * - 不做：不发起强化/精炼实际操作，不处理洗炼/镶嵌，不做本地成本/属性公式兜底。
  *
  * 输入/输出：
- * - 输入：当前选中装备 `item`、背包物品列表 `allItems`、是否启用预览 `enabled`。
+ * - 输入：当前选中装备 `item`、背包物品列表 `allItems`、是否启用预览 `enabled`、延迟刷新期间的材料消耗增量与预览刷新版本。
  * - 输出：`enhanceState`、`refineState`、`loading`。
  *
  * 数据流/状态流：
- * - item/enabled 变化 -> 请求 `/inventory/growth/cost-preview` -> 存储后端预览 -> 结合本地背包数量和名称映射 -> 输出成长状态。
+ * - item/enabled/previewVersion 变化 -> 请求 `/inventory/growth/cost-preview` -> 存储后端预览 -> 结合本地背包数量、名称映射与延迟消耗增量 -> 输出成长状态。
  *
  * 关键边界条件与坑点：
  * 1) `item` 不是装备或未启用时，必须清空预览状态，避免展示上一个装备的旧数据。
@@ -54,6 +54,8 @@ interface UseEquipmentGrowthPreviewOptions {
   item: BagItem | null;
   allItems: BagItem[];
   enabled: boolean;
+  materialDeltaByDefId?: Record<string, number>;
+  previewVersion?: number;
 }
 
 const buildMaterialNameByDefId = (allItems: BagItem[]): Record<string, string> => {
@@ -81,6 +83,7 @@ const buildStageState = (
   previewData: GrowthCostPreviewData,
   materialCountByDefId: Record<string, number>,
   materialNameByDefId: Record<string, string>,
+  materialDeltaByDefId: Record<string, number>,
 ): EquipmentGrowthStageState => {
   const source = mode === 'enhance' ? previewData.enhance : previewData.refine;
   const costs = source.costs;
@@ -92,7 +95,9 @@ const buildStageState = (
     materialItemDefId === null
       ? ''
       : costs?.materialName ?? materialNameByDefId[materialItemDefId] ?? materialItemDefId;
-  const owned = materialItemDefId === null ? 0 : (materialCountByDefId[materialItemDefId] ?? 0);
+  const baseOwned = materialItemDefId === null ? 0 : (materialCountByDefId[materialItemDefId] ?? 0);
+  const pendingCost = materialItemDefId === null ? 0 : (materialDeltaByDefId[materialItemDefId] ?? 0);
+  const owned = Math.max(0, baseOwned - pendingCost);
   return {
     curLv: source.currentLevel,
     targetLv: source.targetLevel,
@@ -113,6 +118,8 @@ export const useEquipmentGrowthPreview = ({
   item,
   allItems,
   enabled,
+  materialDeltaByDefId = {},
+  previewVersion = 0,
 }: UseEquipmentGrowthPreviewOptions): {
   enhanceState: EquipmentGrowthStageState | null;
   refineState: EquipmentGrowthStageState | null;
@@ -149,7 +156,7 @@ export const useEquipmentGrowthPreview = ({
     return () => {
       cancelled = true;
     };
-  }, [enabled, item?.id, item?.category, item?.equip]);
+  }, [enabled, item?.id, item?.category, item?.equip, previewVersion]);
 
   const materialCountByDefId = useMemo(
     () => buildMaterialCountByDefId(allItems),
@@ -169,8 +176,9 @@ export const useEquipmentGrowthPreview = ({
       previewData,
       materialCountByDefId,
       materialNameByDefId,
+      materialDeltaByDefId,
     );
-  }, [item, previewData, materialCountByDefId, materialNameByDefId]);
+  }, [item, previewData, materialCountByDefId, materialNameByDefId, materialDeltaByDefId]);
 
   const refineState = useMemo(() => {
     if (!item || item.category !== 'equipment' || !item.equip || !previewData) {
@@ -181,8 +189,9 @@ export const useEquipmentGrowthPreview = ({
       previewData,
       materialCountByDefId,
       materialNameByDefId,
+      materialDeltaByDefId,
     );
-  }, [item, previewData, materialCountByDefId, materialNameByDefId]);
+  }, [item, previewData, materialCountByDefId, materialNameByDefId, materialDeltaByDefId]);
 
   return { enhanceState, refineState, loading };
 };

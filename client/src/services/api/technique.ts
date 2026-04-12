@@ -357,7 +357,7 @@ export interface TechniqueResearchPublishResponse {
   data?: {
     techniqueId: string;
     finalName: string;
-    bookItemInstanceId: number;
+    bookItemInstanceId: number | null;
   };
 }
 

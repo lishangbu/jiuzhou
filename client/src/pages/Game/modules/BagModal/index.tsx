@@ -65,6 +65,7 @@ import BatchDisassembleConfirmContent from './BatchDisassembleConfirmContent';
 import { buildBatchDisassembleConfirmViewModel } from './batchDisassembleConfirmShared';
 import { formatDisassembleSuccessMessage } from './disassembleRewardText';
 import { getEquipmentGrowthFailModeText, useEquipmentGrowthPreview } from './useEquipmentGrowthPreview';
+import { useDeferredGrowthSession } from './useDeferredGrowthSession';
 import { useTechniqueBookSkills } from './useTechniqueBookSkills';
 import { useAutoRerollController } from './useAutoRerollController';
 import { collectEquipmentUnbindCandidates } from './equipmentUnbind';
@@ -352,6 +353,18 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
     return out;
   }, [items]);
 
+  const deferredGrowthSession = useDeferredGrowthSession({
+    open: enhanceOpen,
+    resetKey: activeItem?.id,
+    onRefresh: refresh,
+    onInventoryChanged: () => {
+      window.dispatchEvent(new Event('inventory:changed'));
+    },
+    onClose: () => {
+      setEnhanceOpen(false);
+    },
+  });
+
   const {
     enhanceState,
     refineState,
@@ -360,7 +373,10 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
     item: activeItem,
     allItems: items,
     enabled: enhanceOpen && (growthMode === 'enhance' || growthMode === 'refine'),
+    materialDeltaByDefId: deferredGrowthSession.materialDeltaByDefId,
+    previewVersion: deferredGrowthSession.previewVersion,
   });
+  const growthCurrentBaseAttrs = deferredGrowthSession.currentBaseAttrsOverride ?? activeItem?.equip?.baseAttrs ?? {};
 
   const openBatch = useCallback(
     (mode: BatchMode) => {
@@ -642,7 +658,10 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
     playerSpiritStones,
     messageApi: message,
     onLockIndexesChange: setRerollLockIndexes,
-    onRerollCommitted: refresh,
+    onRerollCommitted: async () => {
+      await refresh();
+      deferredGrowthSession.clearSession();
+    },
     onInventoryChanged: () => {
       window.dispatchEvent(new Event('inventory:changed'));
     },
@@ -654,6 +673,8 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
     if (!activeItem.equip) return;
 
     setEnhanceSubmitting(true);
+    let shouldCloseAfterCommit = false;
+    let shouldRefreshImmediately = false;
     try {
       const res = await enhanceInventoryItem({ itemId: activeItem.id });
       if (res.success) {
@@ -661,14 +682,36 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
       } else {
         message.warning(res.message || '强化失败');
       }
-      await refresh();
-      window.dispatchEvent(new Event('inventory:changed'));
+      const levelChanged = !res.success
+        && Boolean(res.data?.usedMaterial)
+        && (res.data?.destroyed || res.data?.failMode === 'downgrade');
+      if (res.success) {
+        deferredGrowthSession.markCommitted({
+          usedMaterial: res.data?.usedMaterial ?? null,
+          nextCurrentBaseAttrs: enhanceState?.previewBaseAttrs ?? null,
+        });
+      } else if (levelChanged) {
+        shouldRefreshImmediately = true;
+        shouldCloseAfterCommit = Boolean(res.data?.destroyed);
+      } else if (res.data?.usedMaterial) {
+        deferredGrowthSession.markCommitted({
+          usedMaterial: res.data.usedMaterial,
+        });
+      }
     } catch (error: unknown) {
       void 0;
     } finally {
       setEnhanceSubmitting(false);
     }
-  }, [activeItem, message, refresh]);
+    if (shouldRefreshImmediately) {
+      await refresh();
+      window.dispatchEvent(new Event('inventory:changed'));
+      deferredGrowthSession.clearSession();
+    }
+    if (shouldCloseAfterCommit) {
+      await deferredGrowthSession.handleClose();
+    }
+  }, [activeItem, deferredGrowthSession, enhanceState?.previewBaseAttrs, message, refresh]);
 
   const handleRefine = useCallback(async () => {
     if (!activeItem) return;
@@ -676,6 +719,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
     if (!activeItem.equip) return;
 
     setRefineSubmitting(true);
+    let shouldRefreshImmediately = false;
     try {
       const res = await refineInventoryItem({ itemId: activeItem.id });
       if (res.success) {
@@ -684,14 +728,33 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
         if ((res.message || '') === '精炼失败') message.warning(res.message || '精炼失败');
         else void 0;
       }
-      await refresh();
-      window.dispatchEvent(new Event('inventory:changed'));
+      const levelChanged = !res.success
+        && Boolean(res.data?.usedMaterial)
+        && refineState !== null
+        && res.data?.refineLevel !== refineState.curLv;
+      if (res.success) {
+        deferredGrowthSession.markCommitted({
+          usedMaterial: res.data?.usedMaterial ?? null,
+          nextCurrentBaseAttrs: refineState?.previewBaseAttrs ?? null,
+        });
+      } else if (levelChanged) {
+        shouldRefreshImmediately = true;
+      } else if (res.data?.usedMaterial) {
+        deferredGrowthSession.markCommitted({
+          usedMaterial: res.data.usedMaterial,
+        });
+      }
     } catch (error: unknown) {
       void 0;
     } finally {
       setRefineSubmitting(false);
     }
-  }, [activeItem, message, refresh]);
+    if (shouldRefreshImmediately) {
+      await refresh();
+      window.dispatchEvent(new Event('inventory:changed'));
+      deferredGrowthSession.clearSession();
+    }
+  }, [activeItem, deferredGrowthSession, message, refineState, refresh]);
 
   const handleSocket = useCallback(async () => {
     if (!activeItem?.equip || activeItem.category !== 'equipment') return;
@@ -711,6 +774,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
       message.success(res.message || '镶嵌成功');
       await refresh();
       window.dispatchEvent(new Event('inventory:changed'));
+      deferredGrowthSession.clearSession();
       setSelectedGemItemId(undefined);
       setSocketSlot(undefined);
     } catch (error: unknown) {
@@ -718,7 +782,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
     } finally {
       setSocketSubmitting(false);
     }
-  }, [activeItem, message, refresh, socketState]);
+  }, [activeItem, deferredGrowthSession, message, refresh, socketState]);
 
   const handleToggleRerollLock = useCallback((index: number) => {
     if (!rerollState) return;
@@ -772,12 +836,13 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
       );
       await refresh();
       window.dispatchEvent(new Event('inventory:changed'));
+      deferredGrowthSession.clearSession();
     } catch (error: unknown) {
       void 0;
     } finally {
       setRerollSubmitting(false);
     }
-  }, [activeItem, message, refresh, rerollState]);
+  }, [activeItem, deferredGrowthSession, message, refresh, rerollState]);
 
   const bagOnlyItems = useMemo(() => items.filter((i) => i.location === 'bag'), [items]);
 
@@ -1437,15 +1502,15 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
       <Modal
         open={enhanceOpen}
         onCancel={() => {
-          if (enhanceSubmitting || refineSubmitting || socketSubmitting || rerollSubmitting || autoRerollSubmitting) return;
-          setEnhanceOpen(false);
+          if (enhanceSubmitting || refineSubmitting || socketSubmitting || rerollSubmitting || autoRerollSubmitting || deferredGrowthSession.closing) return;
+          void deferredGrowthSession.handleClose();
         }}
         footer={null}
         centered
         destroyOnHidden
         title="装备成长"
         className="bag-enhance-modal"
-        maskClosable={!(enhanceSubmitting || refineSubmitting || socketSubmitting || rerollSubmitting || autoRerollSubmitting)}
+        maskClosable={!(enhanceSubmitting || refineSubmitting || socketSubmitting || rerollSubmitting || autoRerollSubmitting || deferredGrowthSession.closing)}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <Tabs
@@ -1521,7 +1586,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
               <div className="bag-growth-attr-grid">
                 <div className="bag-growth-attr-col">
                   <div className="bag-growth-attr-title">当前属性</div>
-                  {Object.entries(activeItem?.equip?.baseAttrs ?? {})
+                  {Object.entries(growthCurrentBaseAttrs)
                     .sort(([a], [b]) => (attrOrder[a] ?? 9999) - (attrOrder[b] ?? 9999) || a.localeCompare(b))
                     .map(([k, v]) => (
                       <div className="bag-growth-attr-row" key={`cur-${k}`}>
@@ -1604,7 +1669,7 @@ const BagModal: React.FC<BagModalProps> = ({ open, onClose }) => {
               <div className="bag-growth-attr-grid">
                 <div className="bag-growth-attr-col">
                   <div className="bag-growth-attr-title">当前属性</div>
-                  {Object.entries(activeItem?.equip?.baseAttrs ?? {})
+                  {Object.entries(growthCurrentBaseAttrs)
                     .sort(([a], [b]) => (attrOrder[a] ?? 9999) - (attrOrder[b] ?? 9999) || a.localeCompare(b))
                     .map(([k, v]) => (
                       <div className="bag-growth-attr-row" key={`ref-cur-${k}`}>

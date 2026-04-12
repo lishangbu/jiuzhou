@@ -18,8 +18,8 @@
  * 2. 缺少静态定义或未配置 `set_id` 的装备必须直接忽略，不能让脏配置污染套装件数。
  */
 
-import { query } from '../../../config/database.js';
 import { getStaticItemDef } from './helpers.js';
+import { loadProjectedCharacterItemInstancesByLocation } from '../../shared/characterItemInstanceMutationService.js';
 
 type EquippedItemDefRow = {
   item_def_id: string | null;
@@ -28,18 +28,8 @@ type EquippedItemDefRow = {
 export const getEquippedSetPieceCountMap = async (
   characterId: number,
 ): Promise<Map<string, number>> => {
-  const equippedResult = await query<EquippedItemDefRow>(
-    `
-      SELECT ii.item_def_id
-      FROM item_instance ii
-      WHERE ii.owner_character_id = $1
-        AND ii.location = 'equipped'
-    `,
-    [characterId],
-  );
-
   const setPieceCountMap = new Map<string, number>();
-  for (const row of equippedResult.rows) {
+  for (const row of await loadProjectedCharacterItemInstancesByLocation(characterId, 'equipped') as EquippedItemDefRow[]) {
     const itemDefId = typeof row.item_def_id === 'string' ? row.item_def_id.trim() : '';
     if (!itemDefId) continue;
 

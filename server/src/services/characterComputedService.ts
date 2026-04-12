@@ -58,6 +58,7 @@ import {
   TITLE_EFFECT_KEY_SET,
 } from './shared/characterAttrRegistry.js';
 import { listTitleDefinitionsByIds } from './titleDefinitionService.js';
+import { loadProjectedCharacterItemInstancesByLocation } from './shared/characterItemInstanceMutationService.js';
 import { toSafeNonNegativeIntegerStrict } from './shared/safeInteger.js';
 import {
   BREAKTHROUGH_ADD_PERCENT_REWARD_DEFS,
@@ -67,6 +68,10 @@ import {
   type BreakthroughPctRewards,
   type RealmBreakthroughRewardsConfig,
 } from './shared/realmBreakthroughRewards.js';
+import {
+  loadCharacterSettlementCurrencyExactDeltaMap,
+  loadCharacterSettlementResourceDeltaMap,
+} from './shared/characterSettlementResourceDeltaService.js';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -301,6 +306,63 @@ const normalizeCharacterBaseRow = (row: CharacterBaseRow): CharacterBaseRow => {
     qi: toSafeNonNegativeIntegerStrict(row.qi, 'characters.qi'),
     shen: toSafeNonNegativeIntegerStrict(row.shen, 'characters.shen'),
   };
+};
+
+const applyPendingSettlementResourceDelta = (
+  row: CharacterBaseRow,
+  delta?: {
+    exp: number;
+    silver: number;
+    spiritStones: number;
+  },
+  exactDelta?: {
+    silver: bigint;
+    spiritStones: bigint;
+  },
+): CharacterBaseRow => {
+  if (!delta && !exactDelta) return row;
+  const exactSilver = Number(exactDelta?.silver ?? 0n);
+  const exactSpiritStones = Number(exactDelta?.spiritStones ?? 0n);
+  if (
+    (delta?.exp ?? 0) <= 0 &&
+    (delta?.silver ?? 0) <= 0 &&
+    (delta?.spiritStones ?? 0) <= 0 &&
+    exactSilver <= 0 &&
+    exactSpiritStones <= 0
+  ) {
+    return row;
+  }
+
+  return {
+    ...row,
+    exp: row.exp + (delta?.exp ?? 0),
+    silver: row.silver + (delta?.silver ?? 0) + exactSilver,
+    spirit_stones: row.spirit_stones + (delta?.spiritStones ?? 0) + exactSpiritStones,
+  };
+};
+
+const applyPendingSettlementResourceDeltaBatch = async (
+  rows: CharacterBaseRow[],
+): Promise<CharacterBaseRow[]> => {
+  if (rows.length <= 0) return rows;
+
+  const deltaByCharacterId = await loadCharacterSettlementResourceDeltaMap(
+    rows.map((row) => row.id),
+  );
+  const exactDeltaByCharacterId = await loadCharacterSettlementCurrencyExactDeltaMap(
+    rows.map((row) => row.id),
+  );
+  if (deltaByCharacterId.size <= 0 && exactDeltaByCharacterId.size <= 0) {
+    return rows;
+  }
+
+  return rows.map((row) =>
+    applyPendingSettlementResourceDelta(
+      row,
+      deltaByCharacterId.get(row.id),
+      exactDeltaByCharacterId.get(row.id),
+    ),
+  );
 };
 
 const toRecord = (value: unknown): JsonRecord => {
@@ -891,25 +953,16 @@ const buildEquippedAttrBonusesFromRows = (
 };
 
 const loadEquippedAttrBonuses = async (characterId: number, effectiveLevel: number): Promise<EquippedAttrBonuses> => {
-  const equippedResult = await query(
-    `
-      SELECT
-        ii.owner_character_id,
-        ii.affixes,
-        ii.strengthen_level,
-        ii.refine_level,
-        ii.socketed_gems,
-        ii.item_def_id,
-        ii.quality_rank
-      FROM item_instance ii
-      WHERE ii.owner_character_id = $1
-        AND ii.location = 'equipped'
-    `,
-    [characterId],
-  );
-
   return buildEquippedAttrBonusesFromRows(
-    equippedResult.rows as EquippedItemAttrRow[],
+    (await loadProjectedCharacterItemInstancesByLocation(characterId, 'equipped')).map((item) => ({
+      owner_character_id: item.owner_character_id,
+      affixes: item.affixes,
+      strengthen_level: item.strengthen_level,
+      refine_level: item.refine_level,
+      socketed_gems: item.socketed_gems,
+      item_def_id: item.item_def_id,
+      quality_rank: item.quality_rank,
+    })) as EquippedItemAttrRow[],
     effectiveLevel,
   );
 };
@@ -995,31 +1048,19 @@ const loadEquippedAttrBonusesMap = async (
     return result;
   }
 
-  const equippedResult = await query(
-    `
-      SELECT
-        ii.owner_character_id,
-        ii.affixes,
-        ii.strengthen_level,
-        ii.refine_level,
-        ii.socketed_gems,
-        ii.item_def_id,
-        ii.quality_rank
-      FROM item_instance ii
-      WHERE ii.owner_character_id = ANY($1)
-        AND ii.location = 'equipped'
-      ORDER BY ii.owner_character_id ASC, ii.id ASC
-    `,
-    [normalizedCharacterIds],
-  );
-
   const rowsByCharacterId = new Map<number, EquippedItemAttrRow[]>();
-  for (const row of equippedResult.rows as EquippedItemAttrRow[]) {
-    const characterId = Math.floor(Number(row.owner_character_id) || 0);
-    if (characterId <= 0) continue;
-    const currentRows = rowsByCharacterId.get(characterId) ?? [];
-    currentRows.push(row);
-    rowsByCharacterId.set(characterId, currentRows);
+  for (const characterId of normalizedCharacterIds) {
+    const projectedRows = (await loadProjectedCharacterItemInstancesByLocation(characterId, 'equipped')).map((item) => ({
+      owner_character_id: item.owner_character_id,
+      affixes: item.affixes,
+      strengthen_level: item.strengthen_level,
+      refine_level: item.refine_level,
+      socketed_gems: item.socketed_gems,
+      item_def_id: item.item_def_id,
+      quality_rank: item.quality_rank,
+    })) as EquippedItemAttrRow[];
+    if (projectedRows.length <= 0) continue;
+    rowsByCharacterId.set(characterId, projectedRows);
   }
 
   for (const characterId of normalizedCharacterIds) {
@@ -1762,14 +1803,15 @@ export const getCharacterComputedByUserId = async (
   if (!Number.isFinite(uid) || uid <= 0) return null;
   const base = await selectBaseCharacterByUserId(uid);
   if (!base) return null;
+  const [resolvedBase] = await applyPendingSettlementResourceDeltaBatch([base]);
   const [monthCardFuyuanBonusMap, globalBuffValuesByCharacterId] = await Promise.all([
-    loadMonthCardFuyuanBonusMap([base.id]),
-    loadCharacterGlobalBuffValueMap([base.id]),
+    loadMonthCardFuyuanBonusMap([resolvedBase.id]),
+    loadCharacterGlobalBuffValueMap([resolvedBase.id]),
   ]);
-  return buildComputedRow(base, {
+  return buildComputedRow(resolvedBase, {
     ...options,
-    monthCardFuyuanBonus: monthCardFuyuanBonusMap.get(base.id) ?? 0,
-    globalBuffValues: globalBuffValuesByCharacterId.get(base.id) ?? {},
+    monthCardFuyuanBonus: monthCardFuyuanBonusMap.get(resolvedBase.id) ?? 0,
+    globalBuffValues: globalBuffValuesByCharacterId.get(resolvedBase.id) ?? {},
   });
 };
 
@@ -1781,14 +1823,15 @@ export const getCharacterComputedByCharacterId = async (
   if (!Number.isFinite(cid) || cid <= 0) return null;
   const base = await selectBaseCharacterByCharacterId(cid);
   if (!base) return null;
+  const [resolvedBase] = await applyPendingSettlementResourceDeltaBatch([base]);
   const [monthCardFuyuanBonusMap, globalBuffValuesByCharacterId] = await Promise.all([
-    loadMonthCardFuyuanBonusMap([base.id]),
-    loadCharacterGlobalBuffValueMap([base.id]),
+    loadMonthCardFuyuanBonusMap([resolvedBase.id]),
+    loadCharacterGlobalBuffValueMap([resolvedBase.id]),
   ]);
-  return buildComputedRow(base, {
+  return buildComputedRow(resolvedBase, {
     ...options,
-    monthCardFuyuanBonus: monthCardFuyuanBonusMap.get(base.id) ?? 0,
-    globalBuffValues: globalBuffValuesByCharacterId.get(base.id) ?? {},
+    monthCardFuyuanBonus: monthCardFuyuanBonusMap.get(resolvedBase.id) ?? 0,
+    globalBuffValues: globalBuffValuesByCharacterId.get(resolvedBase.id) ?? {},
   });
 };
 
@@ -1811,7 +1854,9 @@ export const getCharacterComputedBatchByCharacterIds = async (
     [ids],
   );
 
-  const rows = (result.rows as CharacterBaseRow[]).map((row) => normalizeCharacterBaseRow(row));
+  const rows = await applyPendingSettlementResourceDeltaBatch(
+    (result.rows as CharacterBaseRow[]).map((row) => normalizeCharacterBaseRow(row)),
+  );
   return buildCharacterComputedRowMap(rows, options);
 };
 
@@ -1819,7 +1864,7 @@ export const getCharacterComputedBatchByUserIds = async (
   userIds: number[],
   options?: { bypassStaticCache?: boolean },
 ): Promise<Map<number, CharacterComputedRow>> => {
-  const rows = await selectBaseCharactersByUserIds(userIds);
+  const rows = await applyPendingSettlementResourceDeltaBatch(await selectBaseCharactersByUserIds(userIds));
   const out = new Map<number, CharacterComputedRow>();
   if (rows.length <= 0) return out;
 

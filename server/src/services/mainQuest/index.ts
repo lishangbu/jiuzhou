@@ -10,7 +10,7 @@
  */
 import { mainQuestService } from './service.js';
 import { withTransactionAuto } from '../../config/database.js';
-import { updateSectionProgressByEvents } from './progressUpdater.js';
+import { updateSectionProgressByEvents, updateSectionProgressByEventsBatch } from './progressUpdater.js';
 
 export { mainQuestService } from './service.js';
 export type { MainQuestProgressDto, MainQuestProgressEvent, SectionStatus, RewardResult } from './types.js';
@@ -39,6 +39,14 @@ export const updateSectionProgressBatch = (
   events: import('./types.js').MainQuestProgressEvent[],
 ) =>
   withTransactionAuto(() => updateSectionProgressByEvents(characterId, events));
+
+export const updateSectionProgressEventsBatch = (
+  inputs: Array<{
+    characterId: number;
+    events: import('./types.js').MainQuestProgressEvent[];
+  }>,
+) =>
+  withTransactionAuto(() => updateSectionProgressByEventsBatch(inputs));
 
 export const completeCurrentSection = (userId: number, characterId: number) =>
   mainQuestService.completeCurrentSection(userId, characterId);

@@ -1,5 +1,6 @@
 import { query } from '../config/database.js';
-import { itemService } from './itemService.js';
+import { applyCharacterRewardDeltas, createCharacterRewardDelta } from './shared/characterRewardSettlement.js';
+import { enqueueCharacterItemGrant } from './shared/characterItemGrantDeltaService.js';
 import { assertServiceSuccess } from './shared/assertServiceSuccess.js';
 import { getDialogueDefinitions } from './staticConfigLoader.js';
 
@@ -124,6 +125,7 @@ export const applyDialogueEffectsTx = async (
   effects: DialogueEffect[],
 ): Promise<{ success: boolean; message: string; results: unknown[] }> => {
   const results: unknown[] = [];
+  const rewardDelta = createCharacterRewardDelta();
   for (const effect of effects) {
     const type = typeof effect?.type === 'string' ? effect.type : '';
     const params = asObject(effect?.params);
@@ -131,10 +133,7 @@ export const applyDialogueEffectsTx = async (
       if (type === 'give_silver') {
         const amount = Number(params.amount) || 0;
         if (amount > 0) {
-          await query(`UPDATE characters SET silver = silver + $1, updated_at = NOW() WHERE id = $2`, [
-            amount,
-            characterId,
-          ]);
+          rewardDelta.silver += amount;
           results.push({ type: 'silver', amount });
         }
         continue;
@@ -142,10 +141,7 @@ export const applyDialogueEffectsTx = async (
       if (type === 'give_spirit_stones') {
         const amount = Number(params.amount) || 0;
         if (amount > 0) {
-          await query(`UPDATE characters SET spirit_stones = spirit_stones + $1, updated_at = NOW() WHERE id = $2`, [
-            amount,
-            characterId,
-          ]);
+          rewardDelta.spiritStones += amount;
           results.push({ type: 'spirit_stones', amount });
         }
         continue;
@@ -153,10 +149,7 @@ export const applyDialogueEffectsTx = async (
       if (type === 'give_exp') {
         const amount = Number(params.amount) || 0;
         if (amount > 0) {
-          await query(`UPDATE characters SET exp = exp + $1, updated_at = NOW() WHERE id = $2`, [
-            amount,
-            characterId,
-          ]);
+          rewardDelta.exp += amount;
           results.push({ type: 'exp', amount });
         }
         continue;
@@ -183,8 +176,11 @@ export const applyDialogueEffectsTx = async (
         const itemDefId = typeof params.item_def_id === 'string' ? params.item_def_id : '';
         const qty = Number(params.quantity) || 1;
         if (itemDefId && qty > 0) {
-          const result = await itemService.createItem(userId, characterId, itemDefId, qty, {
-            location: 'bag',
+          const result = await enqueueCharacterItemGrant({
+            characterId,
+            userId,
+            itemDefId,
+            qty,
             obtainedFrom: 'dialogue',
           });
           assertServiceSuccess(result);
@@ -211,6 +207,9 @@ export const applyDialogueEffectsTx = async (
     } catch (err) {
       console.error('应用对话效果失败:', type, err);
     }
+  }
+  if (rewardDelta.exp > 0 || rewardDelta.silver > 0 || rewardDelta.spiritStones > 0) {
+    await applyCharacterRewardDeltas(new Map([[characterId, rewardDelta]]));
   }
   return { success: true, message: 'ok', results };
 };

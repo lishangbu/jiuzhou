@@ -86,6 +86,12 @@ import {
 } from "./shared/equipmentGrowthCost.js";
 import { updateAchievementProgress } from "../achievementService.js";
 import { findEmptySlots } from "./bag.js";
+import {
+  bufferCharacterItemInstanceMutations,
+  type JsonValue,
+  loadProjectedCharacterItemInstanceById,
+  loadProjectedCharacterItemInstancesByLocation,
+} from "../shared/characterItemInstanceMutationService.js";
 
 // ============================================
 // 穿戴装备
@@ -105,28 +111,10 @@ export const equipItem = async (
 
   const beforeSetBonus = await getEquippedSetBonusDelta(characterId);
 
-  const itemResult = await query(
-    `
-      SELECT ii.id, ii.qty, ii.location, ii.location_slot, ii.locked, ii.item_def_id
-      FROM item_instance ii
-      WHERE ii.id = $1 AND ii.owner_character_id = $2
-      FOR UPDATE
-    `,
-    [itemInstanceId, characterId],
-  );
-
-  if (itemResult.rows.length === 0) {
+  const item = await loadProjectedCharacterItemInstanceById(characterId, itemInstanceId);
+  if (!item) {
     return { success: false, message: "物品不存在" };
   }
-
-  const item = itemResult.rows[0] as {
-    id: number;
-    qty: number;
-    location: InventoryLocation;
-    location_slot: number | null;
-    locked: boolean;
-    item_def_id: string;
-  };
 
   const itemDef = getStaticItemDef(item.item_def_id);
   if (!itemDef) {
@@ -204,19 +192,19 @@ export const equipItem = async (
     return { success: false, message: "装备数据异常" };
   }
 
-  const currentlyEquippedResult = await query(
-    `
-      SELECT ii.id
-      FROM item_instance ii
-      WHERE ii.owner_character_id = $1 AND ii.location = 'equipped' AND ii.equipped_slot = $2
-      FOR UPDATE
-    `,
-    [characterId, equipSlot],
-  );
-
   let swappedOutItemId: number | undefined;
-  if (currentlyEquippedResult.rows.length > 0) {
-    swappedOutItemId = Number(currentlyEquippedResult.rows[0].id);
+  const currentEquippedItems = await loadProjectedCharacterItemInstancesByLocation(characterId, "equipped");
+  const equippedInSlot = currentEquippedItems.find((entry) => entry.equipped_slot === equipSlot) ?? null;
+  const pendingMutations = [] as Array<{
+    opId: string;
+    characterId: number;
+    itemId: number;
+    createdAt: number;
+    kind: "upsert" | "delete";
+    snapshot: typeof item | null;
+  }>;
+  if (equippedInSlot) {
+    swappedOutItemId = Number(equippedInSlot.id);
     if (Number.isFinite(swappedOutItemId)) {
       const oldDelta = await getEquipmentAttrDeltaByInstanceId(
         characterId,
@@ -231,17 +219,19 @@ export const equipItem = async (
         return { success: false, message: "背包已满，无法替换装备" };
       }
 
-      await query(
-        `
-          UPDATE item_instance
-          SET location = 'bag',
-              location_slot = $1,
-              equipped_slot = NULL,
-              updated_at = NOW()
-          WHERE id = $2 AND owner_character_id = $3
-        `,
-        [emptySlots[0], swappedOutItemId, characterId],
-      );
+      pendingMutations.push({
+        opId: `equip-swap-out:${swappedOutItemId}:${Date.now()}`,
+        characterId,
+        itemId: swappedOutItemId,
+        createdAt: Date.now(),
+        kind: "upsert",
+        snapshot: {
+          ...equippedInSlot,
+          location: "bag",
+          location_slot: emptySlots[0],
+          equipped_slot: null,
+        },
+      });
 
       await applyCharacterAttrDelta(
         characterId,
@@ -250,35 +240,32 @@ export const equipItem = async (
     }
   }
 
-  await query(
-    `
-      UPDATE item_instance
-      SET location = 'equipped',
-          location_slot = NULL,
-          equipped_slot = $1,
-          bind_type = CASE
-            WHEN bind_type = 'none' AND $2 = 'equip' THEN 'equip'
-            ELSE bind_type
-          END,
-          bind_owner_user_id = CASE
-            WHEN bind_type = 'none' AND $2 = 'equip' THEN $3
-            ELSE bind_owner_user_id
-          END,
-          bind_owner_character_id = CASE
-            WHEN bind_type = 'none' AND $2 = 'equip' THEN $4
-            ELSE bind_owner_character_id
-          END,
-          updated_at = NOW()
-      WHERE id = $5 AND owner_character_id = $4
-    `,
-    [
-      equipSlot,
-      String(itemDef.bind_type || "none"),
-      userId,
-      characterId,
-      itemInstanceId,
-    ],
-  );
+  pendingMutations.push({
+    opId: `equip-item:${itemInstanceId}:${Date.now()}`,
+    characterId,
+    itemId: itemInstanceId,
+    createdAt: Date.now() + pendingMutations.length,
+    kind: "upsert",
+    snapshot: {
+      ...item,
+      location: "equipped",
+      location_slot: null,
+      equipped_slot: equipSlot,
+      bind_type:
+        item.bind_type === "none" && String(itemDef.bind_type || "none") === "equip"
+          ? "equip"
+          : item.bind_type,
+      bind_owner_user_id:
+        item.bind_type === "none" && String(itemDef.bind_type || "none") === "equip"
+          ? userId
+          : item.bind_owner_user_id,
+      bind_owner_character_id:
+        item.bind_type === "none" && String(itemDef.bind_type || "none") === "equip"
+          ? characterId
+          : item.bind_owner_character_id,
+    },
+  });
+  await bufferCharacterItemInstanceMutations(pendingMutations);
 
   await applyCharacterAttrDelta(characterId, newItemDelta);
 
@@ -318,26 +305,10 @@ export const unequipItem = async (
 
   const beforeSetBonus = await getEquippedSetBonusDelta(characterId);
 
-  const itemResult = await query(
-    `
-      SELECT id, location, equipped_slot, locked
-      FROM item_instance
-      WHERE id = $1 AND owner_character_id = $2
-      FOR UPDATE
-    `,
-    [itemInstanceId, characterId],
-  );
-
-  if (itemResult.rows.length === 0) {
+  const item = await loadProjectedCharacterItemInstanceById(characterId, itemInstanceId);
+  if (!item) {
     return { success: false, message: "物品不存在" };
   }
-
-  const item = itemResult.rows[0] as {
-    id: number;
-    location: InventoryLocation;
-    equipped_slot: string | null;
-    locked: boolean;
-  };
 
   if (item.locked) {
     return { success: false, message: "物品已锁定" };
@@ -370,17 +341,21 @@ export const unequipItem = async (
 
   const slot = emptySlots[0];
 
-  await query(
-    `
-      UPDATE item_instance
-      SET location = $1,
-          location_slot = $2,
-          equipped_slot = NULL,
-          updated_at = NOW()
-      WHERE id = $3 AND owner_character_id = $4
-    `,
-    [targetLocation, slot, itemInstanceId, characterId],
-  );
+  await bufferCharacterItemInstanceMutations([
+    {
+      opId: `unequip-item:${itemInstanceId}:${Date.now()}`,
+      characterId,
+      itemId: itemInstanceId,
+      createdAt: Date.now(),
+      kind: "upsert",
+      snapshot: {
+        ...item,
+        location: targetLocation,
+        location_slot: slot,
+        equipped_slot: null,
+      },
+    },
+  ]);
 
   await applyCharacterAttrDelta(characterId, invertDelta(delta));
 
@@ -493,17 +468,36 @@ export const enhanceEquipment = async (
       [targetLv, itemInstanceId, characterId],
     );
   } else if (downgraded) {
-    await query(
-      "UPDATE item_instance SET strengthen_level = $1, updated_at = NOW() WHERE id = $2 AND owner_character_id = $3",
-      [resultLevel, itemInstanceId, characterId],
-    );
+    const latestItem = await loadProjectedCharacterItemInstanceById(characterId, itemInstanceId);
+    if (!latestItem) {
+      return { success: false, message: "装备不存在" };
+    }
+    await bufferCharacterItemInstanceMutations([
+      {
+        opId: `enhance-equipment:${itemInstanceId}:${Date.now()}`,
+        characterId,
+        itemId: itemInstanceId,
+        createdAt: Date.now(),
+        kind: "upsert",
+        snapshot: {
+          ...latestItem,
+          strengthen_level: resultLevel ?? 0,
+        },
+      },
+    ]);
   } else if (destroyed) {
     if (String(item.location) === "equipped") {
       const beforeSetBonus = await getEquippedSetBonusDelta(characterId);
-      await query(
-        "DELETE FROM item_instance WHERE id = $1 AND owner_character_id = $2",
-        [itemInstanceId, characterId],
-      );
+      await bufferCharacterItemInstanceMutations([
+        {
+          opId: `enhance-destroy:${itemInstanceId}:${Date.now()}`,
+          characterId,
+          itemId: itemInstanceId,
+          createdAt: Date.now(),
+          kind: "delete",
+          snapshot: null,
+        },
+      ]);
       if (beforeDiffRes.before) {
         await applyCharacterAttrDelta(
           characterId,
@@ -516,10 +510,16 @@ export const enhanceEquipment = async (
       mergeDelta(setBonusDelta, invertDelta(beforeSetBonus));
       await applyCharacterAttrDelta(characterId, setBonusDelta);
     } else {
-      await query(
-        "DELETE FROM item_instance WHERE id = $1 AND owner_character_id = $2",
-        [itemInstanceId, characterId],
-      );
+      await bufferCharacterItemInstanceMutations([
+        {
+          opId: `enhance-destroy:${itemInstanceId}:${Date.now()}`,
+          characterId,
+          itemId: itemInstanceId,
+          createdAt: Date.now(),
+          kind: "delete",
+          snapshot: null,
+        },
+      ]);
     }
   }
 
@@ -650,10 +650,23 @@ export const refineEquipment = async (
     : getRefineFailResultLevel(curLv, targetLv);
 
   if (resultLevel !== curLv) {
-    await query(
-      "UPDATE item_instance SET refine_level = $1, updated_at = NOW() WHERE id = $2 AND owner_character_id = $3",
-      [resultLevel, itemInstanceId, characterId],
-    );
+    const latestItem = await loadProjectedCharacterItemInstanceById(characterId, itemInstanceId);
+    if (!latestItem) {
+      return { success: false, message: "装备不存在" };
+    }
+    await bufferCharacterItemInstanceMutations([
+      {
+        opId: `refine-equipment:${itemInstanceId}:${Date.now()}`,
+        characterId,
+        itemId: itemInstanceId,
+        createdAt: Date.now(),
+        kind: "upsert",
+        snapshot: {
+          ...latestItem,
+          refine_level: resultLevel,
+        },
+      },
+    ]);
   }
 
   const applyDiffRes = await applyEquipmentDiffIfEquipped(
@@ -1181,16 +1194,23 @@ export const rerollEquipmentAffixes = async (
       return { success: false, message: currencyRes.message };
     }
 
-    await query(
-      `
-        UPDATE item_instance
-        SET affixes = $1::jsonb,
-            affix_gen_version = 5,
-            updated_at = NOW()
-        WHERE id = $2 AND owner_character_id = $3
-      `,
-      [JSON.stringify(rerolledAffixes), itemInstanceId, characterId],
-    );
+    const latestItem = await loadProjectedCharacterItemInstanceById(characterId, itemInstanceId);
+    if (!latestItem) {
+      return { success: false, message: "装备不存在" };
+    }
+    await bufferCharacterItemInstanceMutations([
+      {
+        opId: `reroll-equipment:${itemInstanceId}:${Date.now()}`,
+        characterId,
+        itemId: itemInstanceId,
+        createdAt: Date.now(),
+        kind: "upsert",
+        snapshot: {
+          ...latestItem,
+          affixes: JSON.parse(JSON.stringify(rerolledAffixes)) as JsonValue,
+        },
+      },
+    ]);
 
     const applyDiffRes = await applyEquipmentDiffIfEquipped(
       characterId,

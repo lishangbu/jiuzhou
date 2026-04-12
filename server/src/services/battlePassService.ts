@@ -1,12 +1,13 @@
 import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
-import { addItemToInventory } from './inventory/index.js';
-import { lockCharacterInventoryMutex } from './inventoryMutex.js';
 import {
   getBattlePassStaticConfig,
   type BattlePassRewardEntry,
 } from './staticConfigLoader.js';
 import { getCharacterIdByUserId as getCharacterIdByUserIdShared } from './shared/characterId.js';
+import { enqueueCharacterItemGrant } from './shared/characterItemGrantDeltaService.js';
+import { applyCharacterRewardDeltas, createCharacterRewardDelta } from './shared/characterRewardSettlement.js';
+import { getCharacterComputedByCharacterId } from './characterComputedService.js';
 import {
   getRewardCurrencyDisplayName,
   resolveRewardItemDisplayMeta,
@@ -208,7 +209,7 @@ const getFallbackBattlePassSeasonId = async (): Promise<string | null> => {
  * 纯读方法不加 @Transactional，写操作方法加 @Transactional
  *
  * 边界条件：
- * 1) claimBattlePassReward 通过 @Transactional + query 自动复用事务上下文，并在发奖前获取背包互斥锁
+ * 1) claimBattlePassReward 通过 @Transactional + query 自动复用事务上下文，奖励物品走异步资产 Delta，不再同步占用背包锁
  * 2) completeBattlePassTask 内的 FOR UPDATE 查询依赖事务上下文，由 @Transactional 保证
  */
 class BattlePassService {
@@ -486,8 +487,6 @@ class BattlePassService {
     const season = config?.season?.id === seasonId ? config.season : null;
     if (!season) return { success: false, message: '赛季配置不存在' };
 
-    await lockCharacterInventoryMutex(characterId);
-
     // 获取赛季配置
     const maxLevel = Number(season.max_level) || 30;
     const expPerLevel = Number(season.exp_per_level) || 1000;
@@ -534,6 +533,7 @@ class BattlePassService {
     const rewards = toBattlePassRewardItemDtos(rewardEntries);
 
     // 发放奖励
+    const rewardDelta = createCharacterRewardDelta();
     let spiritStonesGained = 0;
     let silverGained = 0;
 
@@ -541,24 +541,21 @@ class BattlePassService {
       if (reward.type === 'currency') {
         const amount = Number(reward.amount) || 0;
         if (reward.currency === 'spirit_stones' && amount > 0) {
-          await query(
-            `UPDATE characters SET spirit_stones = spirit_stones + $1, updated_at = NOW() WHERE id = $2`,
-            [amount, characterId],
-          );
+          rewardDelta.spiritStones += amount;
           spiritStonesGained += amount;
         } else if (reward.currency === 'silver' && amount > 0) {
-          await query(
-            `UPDATE characters SET silver = silver + $1, updated_at = NOW() WHERE id = $2`,
-            [amount, characterId],
-          );
+          rewardDelta.silver += amount;
           silverGained += amount;
         }
       } else if (reward.type === 'item') {
         const itemDefId = reward.item_def_id;
         const qty = Number(reward.qty) || 1;
         if (itemDefId && qty > 0) {
-          const addResult = await addItemToInventory(characterId, userId, itemDefId, qty, {
-            location: 'bag',
+          const addResult = await enqueueCharacterItemGrant({
+            characterId,
+            userId,
+            itemDefId,
+            qty,
             obtainedFrom: 'battle_pass',
           });
           if (!addResult.success) {
@@ -566,6 +563,10 @@ class BattlePassService {
           }
         }
       }
+    }
+
+    if (rewardDelta.exp !== 0 || rewardDelta.silver !== 0 || rewardDelta.spiritStones !== 0) {
+      await applyCharacterRewardDeltas(new Map([[characterId, rewardDelta]]));
     }
     // 记录领取
     await query(
@@ -575,10 +576,7 @@ class BattlePassService {
     );
 
     // 获取更新后的灵石和银两数量
-    const charRes = await query(
-      `SELECT spirit_stones, silver FROM characters WHERE id = $1`,
-      [characterId],
-    );
+    const characterComputed = await getCharacterComputedByCharacterId(characterId);
     return {
       success: true,
       message: '领取成功',
@@ -586,8 +584,8 @@ class BattlePassService {
         level,
         track,
         rewards,
-        spiritStones: Number(charRes.rows[0]?.spirit_stones ?? 0),
-        silver: Number(charRes.rows[0]?.silver ?? 0),
+        spiritStones: Number(characterComputed?.spirit_stones ?? 0),
+        silver: Number(characterComputed?.silver ?? 0),
       },
     };
   }

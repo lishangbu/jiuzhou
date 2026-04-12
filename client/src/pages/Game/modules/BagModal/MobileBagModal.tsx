@@ -69,6 +69,7 @@ import CraftModal from './CraftModal';
 import GemSynthesisModal from './GemSynthesisModal';
 import { formatDisassembleSuccessMessage } from './disassembleRewardText';
 import { getEquipmentGrowthFailModeText, useEquipmentGrowthPreview } from './useEquipmentGrowthPreview';
+import { useDeferredGrowthSession } from './useDeferredGrowthSession';
 import { useTechniqueBookSkills } from './useTechniqueBookSkills';
 import { useAutoRerollController } from './useAutoRerollController';
 import { AutoRerollConfigModal } from './AutoRerollConfigModal';
@@ -652,6 +653,15 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
   } | null>(null);
   const [socketSlot, setSocketSlot] = useState<number | undefined>(undefined);
   const [selectedGemItemId, setSelectedGemItemId] = useState<number | undefined>(undefined);
+  const deferredGrowthSession = useDeferredGrowthSession({
+    open: true,
+    resetKey: item.id,
+    onRefresh: onDone,
+    onInventoryChanged: () => {
+      window.dispatchEvent(new Event('inventory:changed'));
+    },
+    onClose,
+  });
 
   const bagItemCounts = useMemo(() => {
     // 洗炼符是 consumable，因此需要按背包全部物品统计，而不是仅 material。
@@ -671,6 +681,8 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
     item,
     allItems,
     enabled: mode === 'enhance' || mode === 'refine',
+    materialDeltaByDefId: deferredGrowthSession.materialDeltaByDefId,
+    previewVersion: deferredGrowthSession.previewVersion,
   });
 
   useEffect(() => {
@@ -764,7 +776,10 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
     playerSpiritStones,
     messageApi: message,
     onLockIndexesChange: setRerollLockIndexes,
-    onRerollCommitted: onDone,
+    onRerollCommitted: async () => {
+      await onDone();
+      deferredGrowthSession.clearSession();
+    },
     onInventoryChanged: () => {
       window.dispatchEvent(new Event('inventory:changed'));
     },
@@ -810,23 +825,48 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
 
   const handleEnhance = useCallback(async () => {
     setSubmitting(true);
+    let shouldCloseAfterCommit = false;
+    let shouldRefreshImmediately = false;
     try {
       const res = await enhanceInventoryItem({ itemId: item.id });
       if (res.success) message.success(res.message || '强化成功');
       else {
         message.warning(res.message || '强化失败');
       }
-      await onDone();
-      window.dispatchEvent(new Event('inventory:changed'));
+      const levelChanged = !res.success
+        && Boolean(res.data?.usedMaterial)
+        && (res.data?.destroyed || res.data?.failMode === 'downgrade');
+      if (res.success) {
+        deferredGrowthSession.markCommitted({
+          usedMaterial: res.data?.usedMaterial ?? null,
+          nextCurrentBaseAttrs: enhanceState?.previewBaseAttrs ?? null,
+        });
+      } else if (levelChanged) {
+        shouldRefreshImmediately = true;
+        shouldCloseAfterCommit = Boolean(res.data?.destroyed);
+      } else if (res.data?.usedMaterial) {
+        deferredGrowthSession.markCommitted({
+          usedMaterial: res.data.usedMaterial,
+        });
+      }
     } catch (e) {
       void 0;
     } finally {
       setSubmitting(false);
     }
-  }, [item.id, message, onDone]);
+    if (shouldRefreshImmediately) {
+      await onDone();
+      window.dispatchEvent(new Event('inventory:changed'));
+      deferredGrowthSession.clearSession();
+    }
+    if (shouldCloseAfterCommit) {
+      await deferredGrowthSession.handleClose();
+    }
+  }, [deferredGrowthSession, enhanceState?.previewBaseAttrs, item.id, message]);
 
   const handleRefine = useCallback(async () => {
     setSubmitting(true);
+    let shouldRefreshImmediately = false;
     try {
       const res = await refineInventoryItem({ itemId: item.id });
       if (res.success) message.success(res.message || '精炼成功');
@@ -834,14 +874,33 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
         if (res.message === '精炼失败') message.warning(res.message);
         else void 0;
       }
-      await onDone();
-      window.dispatchEvent(new Event('inventory:changed'));
+      const levelChanged = !res.success
+        && Boolean(res.data?.usedMaterial)
+        && refineState !== null
+        && res.data?.refineLevel !== refineState.curLv;
+      if (res.success) {
+        deferredGrowthSession.markCommitted({
+          usedMaterial: res.data?.usedMaterial ?? null,
+          nextCurrentBaseAttrs: refineState?.previewBaseAttrs ?? null,
+        });
+      } else if (levelChanged) {
+        shouldRefreshImmediately = true;
+      } else if (res.data?.usedMaterial) {
+        deferredGrowthSession.markCommitted({
+          usedMaterial: res.data.usedMaterial,
+        });
+      }
     } catch (e) {
       void 0;
     } finally {
       setSubmitting(false);
     }
-  }, [item.id, message, onDone]);
+    if (shouldRefreshImmediately) {
+      await onDone();
+      window.dispatchEvent(new Event('inventory:changed'));
+      deferredGrowthSession.clearSession();
+    }
+  }, [deferredGrowthSession, item.id, message, onDone, refineState]);
 
   const handleToggleRerollLock = useCallback((index: number) => {
     if (!rerollState) return;
@@ -894,12 +953,13 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
       );
       await onDone();
       window.dispatchEvent(new Event('inventory:changed'));
+      deferredGrowthSession.clearSession();
     } catch (e) {
       void 0;
     } finally {
       setSubmitting(false);
     }
-  }, [item.id, message, onDone, rerollState]);
+  }, [deferredGrowthSession, item.id, message, onDone, rerollState]);
 
   const handleSocket = useCallback(async () => {
     if (!socketState) return;
@@ -920,22 +980,27 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
       setSelectedGemItemId(undefined);
       await onDone();
       window.dispatchEvent(new Event('inventory:changed'));
+      deferredGrowthSession.clearSession();
     } catch (e) {
       void 0;
     } finally {
       setSubmitting(false);
     }
-  }, [item.id, message, onDone, socketState]);
+  }, [deferredGrowthSession, item.id, message, onDone, socketState]);
 
   const st = mode === 'enhance' ? enhanceState : mode === 'refine' ? refineState : null;
-  const curAttrs = item.equip?.baseAttrs ?? {};
+  const curAttrs = deferredGrowthSession.currentBaseAttrsOverride ?? item.equip?.baseAttrs ?? {};
+  const handleCloseSheet = useCallback(() => {
+    if (submitting || autoRerollSubmitting || deferredGrowthSession.closing) return;
+    void deferredGrowthSession.handleClose();
+  }, [autoRerollSubmitting, deferredGrowthSession, submitting]);
 
   const sorted = (rec: Record<string, number>) =>
     Object.entries(rec).sort(([a], [b]) => (attrOrder[a] ?? 9999) - (attrOrder[b] ?? 9999) || a.localeCompare(b));
 
   return (
     <>
-      <div className="mbag-sheet-mask" onClick={() => { if (!submitting && !autoRerollSubmitting) onClose(); }} />
+      <div className="mbag-sheet-mask" onClick={handleCloseSheet} />
       <div className="mbag-sheet">
         <div className="mbag-sheet-handle"><div className="mbag-sheet-bar" /></div>
 
@@ -1218,7 +1283,7 @@ const GrowthSheet: React.FC<GrowthSheetProps> = ({
         </div>
 
         <div className="mbag-sheet-actions">
-          <button className="mbag-sheet-act-btn" onClick={onClose} disabled={submitting || autoRerollSubmitting}>取消</button>
+          <button className="mbag-sheet-act-btn" onClick={handleCloseSheet} disabled={submitting || autoRerollSubmitting || deferredGrowthSession.closing}>取消</button>
           <button
             className="mbag-sheet-act-btn is-primary"
             disabled={

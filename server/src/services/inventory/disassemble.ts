@@ -19,7 +19,6 @@
  * 1. 穿戴中的装备不可拆解，预览与实际拆解都会命中同一校验结果
  * 2. 前端不再自行推导产物，若奖励物品静态定义缺失，服务端直接返回配置错误，避免展示与结算继续漂移
  */
-import { query } from "../../config/database.js";
 import {
   getItemDefinitionsByIds,
 } from "../staticConfigLoader.js";
@@ -33,12 +32,16 @@ import { resolveQualityRankFromName } from "../shared/itemQuality.js";
 import { resolveItemCanDisassemble } from "../shared/itemDisassembleRule.js";
 import { consumeSpecificItemInstance, addCharacterCurrencies } from "./shared/consume.js";
 import { getStaticItemDef } from "./shared/helpers.js";
+import { bufferSimpleCharacterItemGrants } from "../shared/characterItemGrantDeltaService.js";
+import {
+  loadProjectedCharacterItemInstanceById,
+  loadProjectedCharacterItemInstances,
+} from "../shared/characterItemInstanceMutationService.js";
 import type {
   InventoryLocation,
   DisassembleGrantedItemReward,
   DisassembleRewardsPayload,
 } from "./shared/types.js";
-import { addItemToInventory } from "./bag.js";
 
 type SingleDisassembleItemRow = {
   id: number;
@@ -58,20 +61,31 @@ type ResolvedNamedDisassembleRewardItem = {
   qty: number;
 };
 
-const singleDisassembleItemSelect = `
-      SELECT
-        ii.id,
-        ii.item_def_id,
-        ii.qty,
-        ii.location,
-        ii.locked,
-        ii.quality_rank AS instance_quality_rank,
-        ii.strengthen_level,
-        ii.refine_level,
-        ii.affixes
-      FROM item_instance ii
-      WHERE ii.id = $1 AND ii.owner_character_id = $2
-`;
+type BatchDisassembleCandidateRow = {
+  id: number;
+  item_def_id: string;
+  qty: number;
+  location: InventoryLocation;
+  locked: boolean;
+  instance_quality_rank: number | null;
+  strengthen_level: number;
+  refine_level: number;
+  affixes: unknown;
+};
+
+type BatchDisassembleExecutionPlan = {
+  consumeOperations: Array<{
+    id: number;
+    rowQty: number;
+    consumeQty: number;
+  }>;
+  skippedEquippedCount: number;
+  skippedLockedCount: number;
+  skippedLockedQtyTotal: number;
+  disassembledQtyTotal: number;
+  totalSilver: number;
+  rewardItemsByDefId: Map<string, ResolvedNamedDisassembleRewardItem>;
+};
 
 const loadSingleDisassembleRewardPlan = async (
   characterId: number,
@@ -82,16 +96,23 @@ const loadSingleDisassembleRewardPlan = async (
   | { success: true; rewards: DisassembleRewardsPlan }
   | { success: false; message: string }
 > => {
-  const itemResult = await query(
-    `${singleDisassembleItemSelect}${options.forUpdate ? "\n      FOR UPDATE" : ""}`,
-    [itemInstanceId, characterId],
-  );
-
-  if (itemResult.rows.length === 0) {
+  void options;
+  const projectedItem = await loadProjectedCharacterItemInstanceById(characterId, itemInstanceId);
+  if (!projectedItem) {
     return { success: false, message: "物品不存在" };
   }
 
-  const item = itemResult.rows[0] as SingleDisassembleItemRow;
+  const item: SingleDisassembleItemRow = {
+    id: projectedItem.id,
+    item_def_id: projectedItem.item_def_id,
+    qty: projectedItem.qty,
+    location: projectedItem.location as InventoryLocation,
+    locked: projectedItem.locked,
+    instance_quality_rank: projectedItem.quality_rank,
+    strengthen_level: projectedItem.strengthen_level,
+    refine_level: projectedItem.refine_level,
+    affixes: projectedItem.affixes,
+  };
   const itemDef = getStaticItemDef(item.item_def_id);
   if (!itemDef) {
     return { success: false, message: "物品不存在" };
@@ -181,6 +202,112 @@ const resolveNamedDisassembleRewardItems = (
   };
 };
 
+export const buildBatchDisassembleExecutionPlan = (
+  rows: BatchDisassembleCandidateRow[],
+  qtyById: ReadonlyMap<number, number>,
+  staticDefMap: ReadonlyMap<string, ReturnType<typeof getStaticItemDef>>,
+):
+  | { success: true; plan: BatchDisassembleExecutionPlan }
+  | { success: false; message: string } => {
+  const consumeOperations: Array<{
+    id: number;
+    rowQty: number;
+    consumeQty: number;
+  }> = [];
+  let skippedEquippedCount = 0;
+  let skippedLockedCount = 0;
+  let skippedLockedQtyTotal = 0;
+  let disassembledQtyTotal = 0;
+  let totalSilver = 0;
+  const rewardItemsByDefId = new Map<string, ResolvedNamedDisassembleRewardItem>();
+
+  for (const row of rows) {
+    const itemDefId = String(row.item_def_id || "").trim();
+    const itemDef = staticDefMap.get(itemDefId);
+    if (!itemDef) {
+      return { success: false, message: "包含不存在的物品" };
+    }
+
+    const rowId = Number(row.id);
+    if (!Number.isInteger(rowId) || rowId <= 0) {
+      return { success: false, message: "items参数错误" };
+    }
+
+    const requestQty = qtyById.get(rowId) ?? 0;
+    if (requestQty <= 0) {
+      return { success: false, message: "items参数错误" };
+    }
+    const rowQty = Math.max(0, Number(row.qty) || 0);
+    if (rowQty < requestQty) {
+      return { success: false, message: "包含数量不足的物品" };
+    }
+    if (row.location === "equipped") {
+      skippedEquippedCount += 1;
+      continue;
+    }
+    if (row.location !== "bag" && row.location !== "warehouse") {
+      return { success: false, message: "包含不可分解位置的物品" };
+    }
+    if (!resolveItemCanDisassemble(itemDef)) {
+      return { success: false, message: "包含不可分解的物品" };
+    }
+    if (row.locked) {
+      skippedLockedCount += 1;
+      skippedLockedQtyTotal += requestQty;
+      continue;
+    }
+
+    const rewardPlan = buildDisassembleRewardPlan({
+      category: String(itemDef.category || ""),
+      subCategory: itemDef.sub_category ?? null,
+      effectDefs: itemDef.effect_defs ?? null,
+      qualityRankRaw:
+        row.instance_quality_rank ??
+        resolveQualityRankFromName(itemDef.quality, 1),
+      strengthenLevelRaw: row.strengthen_level,
+      refineLevelRaw: row.refine_level,
+      affixesRaw: row.affixes,
+      qty: requestQty,
+    });
+    if (!rewardPlan.success) {
+      return { success: false, message: rewardPlan.message };
+    }
+
+    const namedRewardsResult = resolveNamedDisassembleRewardItems(
+      rewardPlan.rewards.items,
+    );
+    if (!namedRewardsResult.success || !namedRewardsResult.items) {
+      return { success: false, message: namedRewardsResult.message };
+    }
+
+    totalSilver += rewardPlan.rewards.silver;
+    for (const itemReward of namedRewardsResult.items) {
+      const existing = rewardItemsByDefId.get(itemReward.itemDefId);
+      if (existing) {
+        existing.qty += itemReward.qty;
+        continue;
+      }
+      rewardItemsByDefId.set(itemReward.itemDefId, { ...itemReward });
+    }
+
+    consumeOperations.push({ id: rowId, rowQty, consumeQty: requestQty });
+    disassembledQtyTotal += requestQty;
+  }
+
+  return {
+    success: true,
+    plan: {
+      consumeOperations,
+      skippedEquippedCount,
+      skippedLockedCount,
+      skippedLockedQtyTotal,
+      disassembledQtyTotal,
+      totalSilver,
+      rewardItemsByDefId,
+    },
+  };
+};
+
 export const getDisassembleRewardPreview = async (
   characterId: number,
   itemInstanceId: number,
@@ -261,29 +388,23 @@ export const disassembleEquipment = async (
   }
 
   const grantedItemRewards: DisassembleGrantedItemReward[] = [];
+  const pendingItemGrants: Array<{ itemDefId: string; qty: number; obtainedFrom: string }> = [];
   for (let index = 0; index < rewardPlanResult.rewards.items.length; index += 1) {
     const itemReward = rewardPlanResult.rewards.items[index];
     const resolvedReward = resolvedRewardItems.items[index];
-    const addResult = await addItemToInventory(
-      characterId,
-      userId,
-      itemReward.itemDefId,
-      itemReward.qty,
-      {
-        location: "bag",
-        obtainedFrom: "disassemble",
-      },
-    );
-    if (!addResult.success) {
-      return addResult as { success: false; message: string };
-    }
+    pendingItemGrants.push({
+      itemDefId: itemReward.itemDefId,
+      qty: itemReward.qty,
+      obtainedFrom: "disassemble",
+    });
     grantedItemRewards.push({
       itemDefId: itemReward.itemDefId,
       name: resolvedReward.name,
       qty: itemReward.qty,
-      itemIds: addResult.itemIds,
+      itemIds: [],
     });
   }
+  await bufferSimpleCharacterItemGrants(characterId, userId, pendingItemGrants);
 
   if (rewardPlanResult.rewards.silver > 0) {
     const addCurrencyRes = await addCharacterCurrencies(
@@ -350,173 +471,75 @@ export const disassembleEquipmentBatch = async (
   if (uniqueIds.length > 200) {
     return { success: false, message: "一次最多分解200个物品" };
   }
-
+  
   await lockCharacterInventoryMutex(characterId);
 
-  const itemResult = await query(
-    `
-      SELECT
-        ii.id,
-        ii.item_def_id,
-        ii.qty,
-        ii.location,
-        ii.locked,
-        ii.quality_rank AS instance_quality_rank,
-        ii.strengthen_level,
-        ii.refine_level,
-        ii.affixes
-      FROM item_instance ii
-      WHERE ii.owner_character_id = $1 AND ii.id = ANY($2)
-      FOR UPDATE
-    `,
-    [characterId, uniqueIds],
-  );
-
-  if (itemResult.rows.length !== uniqueIds.length) {
+  const projectedItems = await loadProjectedCharacterItemInstances(characterId);
+  const itemRows = uniqueIds.map((itemId) => projectedItems.find((item) => item.id === itemId) ?? null);
+  if (itemRows.some((row) => row === null)) {
     return { success: false, message: "包含不存在的物品" };
   }
 
-  const consumeOperations: Array<{
-    id: number;
-    rowQty: number;
-    consumeQty: number;
-  }> = [];
-  let skippedEquippedCount = 0;
-  let skippedLockedCount = 0;
-  let skippedLockedQtyTotal = 0;
-  let disassembledQtyTotal = 0;
-  let totalSilver = 0;
-  const rewardItemsByDefId = new Map<string, ResolvedNamedDisassembleRewardItem>();
   const staticDefMap = getItemDefinitionsByIds(
-    itemResult.rows.map((row) =>
-      String((row as { item_def_id?: unknown }).item_def_id || "").trim(),
-    ),
+    itemRows.map((row) => String(row?.item_def_id || "").trim()),
   );
-
-  for (const row of itemResult.rows as Array<{
-    id: number | string;
-    item_def_id: string;
-    qty: number;
-    location: InventoryLocation;
-    locked: boolean;
-    instance_quality_rank: number | null;
-    strengthen_level: number;
-    refine_level: number;
-    affixes: unknown;
-  }>) {
-    const itemDefId = String(row.item_def_id || "").trim();
-    const itemDef = staticDefMap.get(itemDefId);
-    if (!itemDef) {
-      return { success: false, message: "包含不存在的物品" };
-    }
-
-    const rowId = Number(row.id);
-    if (!Number.isInteger(rowId) || rowId <= 0) {
-      return { success: false, message: "items参数错误" };
-    }
-
-    const requestQty = qtyById.get(rowId) ?? 0;
-    if (requestQty <= 0) {
-      return { success: false, message: "items参数错误" };
-    }
-    const rowQty = Math.max(0, Number(row.qty) || 0);
-    if (rowQty < requestQty) {
-      return { success: false, message: "包含数量不足的物品" };
-    }
-    if (row.location === "equipped") {
-      skippedEquippedCount += 1;
-      continue;
-    }
-    if (row.location !== "bag" && row.location !== "warehouse") {
-      return { success: false, message: "包含不可分解位置的物品" };
-    }
-    if (!resolveItemCanDisassemble(itemDef)) {
-      return { success: false, message: "包含不可分解的物品" };
-    }
-    if (row.locked) {
-      skippedLockedCount += 1;
-      skippedLockedQtyTotal += requestQty;
-      continue;
-    }
-
-    const rewardPlan = buildDisassembleRewardPlan({
-      category: String(itemDef.category || ""),
-      subCategory: itemDef.sub_category ?? null,
-      effectDefs: itemDef.effect_defs ?? null,
-      qualityRankRaw:
-        row.instance_quality_rank ??
-        resolveQualityRankFromName(itemDef.quality, 1),
-      strengthenLevelRaw: row.strengthen_level,
-      refineLevelRaw: row.refine_level,
-      affixesRaw: row.affixes,
-      qty: requestQty,
-    });
-    if (!rewardPlan.success) {
-      return { success: false, message: rewardPlan.message };
-    }
-
-    const namedRewardsResult = resolveNamedDisassembleRewardItems(
-      rewardPlan.rewards.items,
-    );
-    if (!namedRewardsResult.success || !namedRewardsResult.items) {
-      return { success: false, message: namedRewardsResult.message };
-    }
-
-    totalSilver += rewardPlan.rewards.silver;
-    for (const itemReward of namedRewardsResult.items) {
-      const existing = rewardItemsByDefId.get(itemReward.itemDefId);
-      if (existing) {
-        existing.qty += itemReward.qty;
-        continue;
-      }
-      rewardItemsByDefId.set(itemReward.itemDefId, { ...itemReward });
-    }
-
-    consumeOperations.push({ id: rowId, rowQty, consumeQty: requestQty });
-    disassembledQtyTotal += requestQty;
+  const normalizedRows = itemRows.filter((row): row is NonNullable<typeof row> => row !== null).map((row) => ({
+    id: row.id,
+    item_def_id: row.item_def_id,
+    qty: row.qty,
+    location: row.location as InventoryLocation,
+    locked: row.locked,
+    instance_quality_rank: row.quality_rank,
+    strengthen_level: row.strengthen_level,
+    refine_level: row.refine_level,
+    affixes: row.affixes,
+  }));
+  const planResult = buildBatchDisassembleExecutionPlan(
+    normalizedRows,
+    qtyById,
+    staticDefMap,
+  );
+  if (!planResult.success) {
+    return { success: false, message: planResult.message };
   }
+  const {
+    consumeOperations,
+    skippedEquippedCount,
+    skippedLockedCount,
+    skippedLockedQtyTotal,
+    disassembledQtyTotal,
+    totalSilver,
+    rewardItemsByDefId,
+  } = planResult.plan;
 
   if (consumeOperations.length === 0) {
     return { success: false, message: "没有可分解的物品" };
   }
 
   for (const op of consumeOperations) {
-    if (op.consumeQty >= op.rowQty) {
-      await query(
-        "DELETE FROM item_instance WHERE owner_character_id = $1 AND id = $2",
-        [characterId, op.id],
-      );
-    } else {
-      await query(
-        "UPDATE item_instance SET qty = qty - $1, updated_at = NOW() WHERE owner_character_id = $2 AND id = $3",
-        [op.consumeQty, characterId, op.id],
-      );
+    const consumeRes = await consumeSpecificItemInstance(characterId, op.id, op.consumeQty);
+    if (!consumeRes.success) {
+      return { success: false, message: consumeRes.message };
     }
   }
 
   const grantedItemRewards: DisassembleGrantedItemReward[] = [];
+  const pendingItemGrants: Array<{ itemDefId: string; qty: number; obtainedFrom: string }> = [];
   for (const rewardItem of rewardItemsByDefId.values()) {
     if (rewardItem.qty <= 0) continue;
-    const addRes = await addItemToInventory(
-      characterId,
-      userId,
-      rewardItem.itemDefId,
-      rewardItem.qty,
-      {
-        location: "bag",
-        obtainedFrom: "disassemble",
-      },
-    );
-    if (!addRes.success) {
-      return addRes as { success: false; message: string };
-    }
+    pendingItemGrants.push({
+      itemDefId: rewardItem.itemDefId,
+      qty: rewardItem.qty,
+      obtainedFrom: "disassemble",
+    });
     grantedItemRewards.push({
       itemDefId: rewardItem.itemDefId,
       name: rewardItem.name,
       qty: rewardItem.qty,
-      itemIds: addRes.itemIds,
+      itemIds: [],
     });
   }
+  await bufferSimpleCharacterItemGrants(characterId, userId, pendingItemGrants);
 
   if (totalSilver > 0) {
     const addCurrencyRes = await addCharacterCurrencies(

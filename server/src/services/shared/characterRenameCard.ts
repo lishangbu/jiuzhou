@@ -17,9 +17,10 @@
  * 1. 不能只按物品名称判断，否则后续改文案或做多张改名卡时会失真。
  * 2. 扣卡前必须先锁定具体实例并校验归属，否则并发改名时可能出现重复扣除或串用他人道具。
  */
-import { query } from '../../config/database.js';
 import type { ItemDefConfig } from '../staticConfigLoader.js';
 import { getItemDefinitionById } from '../staticConfigLoader.js';
+import { consumeSpecificItemInstance } from '../inventory/shared/consume.js';
+import { loadProjectedCharacterItemInstanceById } from './characterItemInstanceMutationService.js';
 
 type RenameCardConsumeResult =
   | {
@@ -59,20 +60,10 @@ export const consumeRenameCardItemInstance = async (
   characterId: number,
   itemInstanceId: number,
 ): Promise<RenameCardConsumeResult> => {
-  const itemResult = await query(
-    `
-      SELECT id, qty, item_def_id
-      FROM item_instance
-      WHERE id = $1 AND owner_character_id = $2
-      FOR UPDATE
-    `,
-    [itemInstanceId, characterId],
-  );
-  if (itemResult.rows.length === 0) {
+  const itemRow = await loadProjectedCharacterItemInstanceById(characterId, itemInstanceId);
+  if (!itemRow) {
     return { success: false, message: '易名符不存在' };
   }
-
-  const itemRow = itemResult.rows[0] as { qty?: number; item_def_id?: string | null };
   const itemDefId = String(itemRow.item_def_id || '').trim();
   const itemDef = getItemDefinitionById(itemDefId);
   if (!isRenameCardItemDefinition(itemDef)) {
@@ -84,13 +75,9 @@ export const consumeRenameCardItemInstance = async (
     return { success: false, message: '易名符数量不足' };
   }
 
-  if (itemQty === 1) {
-    await query('DELETE FROM item_instance WHERE id = $1', [itemInstanceId]);
-  } else {
-    await query(
-      'UPDATE item_instance SET qty = qty - 1, updated_at = NOW() WHERE id = $1',
-      [itemInstanceId],
-    );
+  const consumeResult = await consumeSpecificItemInstance(characterId, itemInstanceId, 1);
+  if (!consumeResult.success) {
+    return { success: false, message: consumeResult.message };
   }
 
   return {

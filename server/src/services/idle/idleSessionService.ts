@@ -2,17 +2,15 @@
  * IdleSessionService — 挂机会话生命周期管理
  *
  * 作用：
- *   管理 Idle_Session 的完整生命周期：启动、终止、查询、历史记录、回放数据。
+ *   管理 Idle_Session 的完整生命周期：启动、终止、查询与历史记录。
  *   不包含战斗执行逻辑（由 IdleBattleExecutor 负责）。
  *
  * 输入/输出：
  *   - startIdleSession：创建新会话，含互斥锁检查、Stamina 检查、快照写入
  *   - stopIdleSession：将会话标记为 stopping（幂等），并返回被停止的会话 ID 列表
  *   - getActiveIdleSession：查询当前活跃会话（用于断线续战）
- *   - getIdleHistory：最近 30 条历史记录（倒序）
+ *   - getIdleHistory：最近 3 条历史记录（倒序）
  *   - markSessionViewed：标记会话已查看（幂等）
- *   - getSessionBatchSummaries：查询会话内所有 Battle_Batch 摘要（用于回放列表）
- *   - getSessionBatchDetail：查询单个 Battle_Batch 详情（用于回放日志）
  *
  * 数据流：
  *   客户端 → idleRoutes → startIdleSession → Redis 互斥锁 → DB 写入 → IdleBattleExecutor
@@ -22,7 +20,7 @@
  * 关键边界条件：
  *   1. Redis 互斥锁键：`idle:lock:{characterId}`，TTL = 本次 maxDurationMs + 5min 缓冲（有上下限）
  *      SET NX EX + compare-and-del 保证并发场景下不会误删他人锁
- *   2. getIdleHistory 超过 30 条时自动删除最旧记录（按 started_at 升序取最旧）
+ *   2. getIdleHistory 超过 3 条时自动删除最旧记录（按 started_at 升序取最旧）
  *   3. markSessionViewed 幂等：已设置 viewed_at 时不重复更新
  *   4. stopIdleSession 仅负责状态持久化；执行器收到 stop 信号后会被立即唤醒做终止检查
  */
@@ -36,17 +34,9 @@ import { partnerService } from '../partnerService.js';
 import type {
   IdleConfigDto,
   IdleSessionRow,
-  IdleBattleDetailRow,
-  IdleBattleSummaryRow,
   SessionSnapshot,
-  RewardItemEntry,
 } from './types.js';
-import {
-  rowToIdleBattleStoredDetailRow,
-  rowToIdleBattleSummaryRow,
-  rowToIdleSessionRow,
-} from './rowMappers.js';
-import { replayIdleBattleLogs } from './idleBattleSimulationCore.js';
+import { rowToIdleSessionRow } from './rowMappers.js';
 import { getIdleExecutionLoopHeartbeatAt } from './idleExecutionRegistry.js';
 import {
   resolveOrphanStoppingSessionIds,
@@ -54,10 +44,13 @@ import {
 } from './idleSessionActivity.js';
 import { resolveIdleMaxDurationMs } from '../shared/idleDurationLimits.js';
 import {
-  mergeRewardItems as mergeIdleRewardItems,
   type IdleSessionSummaryDelta,
   type IdleSessionSummarySnapshot,
 } from './idleSessionSummary.js';
+import {
+  IDLE_FINISHED_SESSION_STATUSES,
+  IDLE_HISTORY_KEEP_SESSION_COUNT,
+} from './idleHistoryRetention.js';
 
 // ============================================
 // 常量
@@ -74,9 +67,6 @@ const IDLE_LOCK_TTL_MIN_SECONDS = 60;
 
 /** 互斥锁 TTL 最大值（秒，按当前最高挂机上限 + 5min 计算） */
 const IDLE_LOCK_TTL_MAX_SECONDS = (resolveIdleMaxDurationMs(true) + IDLE_LOCK_TTL_BUFFER_MS) / 1000;
-
-/** 历史记录最大保留条数 */
-const MAX_HISTORY_COUNT = 30;
 
 // ============================================
 // 内部工具
@@ -315,7 +305,7 @@ class IdleSessionService {
    */
   @Transactional
   async startIdleSession(params: StartIdleSessionParams): Promise<StartIdleSessionResult> {
-    const { characterId, userId, config } = params;
+    const { characterId, userId: _userId, config } = params;
 
     // 0. 组队中禁止挂机：查询 team_members 表判断角色是否在队伍中
     const teamCheck = await query(
@@ -401,12 +391,12 @@ class IdleSessionService {
         `INSERT INTO idle_sessions (
           id, character_id, status, map_id, room_id, max_duration_ms,
           session_snapshot, total_battles, win_count, lose_count,
-          total_exp, total_silver, reward_items, bag_full_flag,
+          total_exp, total_silver, bag_full_flag,
           started_at, ended_at, viewed_at
         ) VALUES (
           $1, $2, 'active', $3, $4, $5,
           $6, 0, 0, 0,
-          0, 0, '[]', false,
+          0, 0, false,
           NOW(), NULL, NULL
         )`,
         [
@@ -543,42 +533,42 @@ class IdleSessionService {
   }
 
   /**
-   * 查询历史记录（最近 30 条，按 started_at 倒序）
+   * 查询历史记录（最近 3 条，按 started_at 倒序）
    *
-   * 超过 30 条时自动删除最旧记录（在同一事务内完成，保证原子性）。
+   * 超过 3 条时自动删除最旧记录（在同一事务内完成，保证原子性）。
    */
   @Transactional
   async getIdleHistory(characterId: number): Promise<IdleSessionRow[]> {
     // 查询总数
     const countRes = await query(
       `SELECT COUNT(*) AS cnt FROM idle_sessions
-       WHERE character_id = $1 AND status IN ('completed', 'interrupted')`,
-      [characterId]
+       WHERE character_id = $1 AND status = ANY($2::varchar[])`,
+      [characterId, IDLE_FINISHED_SESSION_STATUSES]
     );
     const total = Number(countRes.rows[0]?.cnt ?? 0);
 
     // 超出上限时删除最旧记录
-    if (total > MAX_HISTORY_COUNT) {
-      const deleteCount = total - MAX_HISTORY_COUNT;
+    if (total > IDLE_HISTORY_KEEP_SESSION_COUNT) {
+      const deleteCount = total - IDLE_HISTORY_KEEP_SESSION_COUNT;
       await query(
         `DELETE FROM idle_sessions
          WHERE id IN (
            SELECT id FROM idle_sessions
-           WHERE character_id = $1 AND status IN ('completed', 'interrupted')
-           ORDER BY started_at ASC
-           LIMIT $2
+           WHERE character_id = $1 AND status = ANY($2::varchar[])
+           ORDER BY started_at ASC, id ASC
+           LIMIT $3
          )`,
-        [characterId, deleteCount]
+        [characterId, IDLE_FINISHED_SESSION_STATUSES, deleteCount]
       );
     }
 
-    // 查询最近 30 条（倒序）
+    // 查询最近 3 条（倒序）
     const res = await query(
       `SELECT * FROM idle_sessions
-       WHERE character_id = $1 AND status IN ('completed', 'interrupted')
-       ORDER BY started_at DESC
-       LIMIT $2`,
-      [characterId, MAX_HISTORY_COUNT]
+       WHERE character_id = $1 AND status = ANY($2::varchar[])
+       ORDER BY started_at DESC, id DESC
+       LIMIT $3`,
+      [characterId, IDLE_FINISHED_SESSION_STATUSES, IDLE_HISTORY_KEEP_SESSION_COUNT]
     );
     return (res.rows as Record<string, unknown>[]).map(rowToIdleSessionRow);
   }
@@ -595,80 +585,6 @@ class IdleSessionService {
        WHERE id = $1 AND character_id = $2 AND viewed_at IS NULL`,
       [sessionId, characterId]
     );
-  }
-
-  /**
-   * 查询会话内所有 Battle_Batch 摘要（用于回放左侧列表，按 batch_index 升序）
-   *
-   * 权限检查：通过 session_id + character_id 联查，防止越权访问。
-   */
-  async getSessionBatchSummaries(
-    sessionId: string,
-    characterId: number,
-  ): Promise<IdleBattleSummaryRow[]> {
-    const res = await query(
-      `SELECT
-         b.id,
-         b.session_id,
-         b.batch_index,
-         b.result,
-         b.round_count,
-         b.exp_gained,
-         b.silver_gained,
-         jsonb_array_length(b.items_gained) AS item_count,
-         b.executed_at
-       FROM idle_battle_batches b
-       JOIN idle_sessions s ON s.id = b.session_id
-       WHERE b.session_id = $1 AND s.character_id = $2
-       ORDER BY b.batch_index ASC`,
-      [sessionId, characterId],
-    );
-
-    return (res.rows as Record<string, unknown>[]).map(rowToIdleBattleSummaryRow);
-  }
-
-  /**
-   * 查询单个 Battle_Batch 详情（用于回放右侧日志面板）
-   *
-   * 权限检查：通过 session_id + character_id 联查，防止越权访问。
-   */
-  async getSessionBatchDetail(
-    sessionId: string,
-    characterId: number,
-    batchId: string,
-  ): Promise<IdleBattleDetailRow | null> {
-    const res = await query(
-      `SELECT
-         b.id,
-         b.session_id,
-         b.batch_index,
-         b.result,
-         b.round_count,
-         b.random_seed,
-         b.exp_gained,
-         b.silver_gained,
-         jsonb_array_length(b.items_gained) AS item_count,
-         b.items_gained,
-         b.battle_log,
-         b.monster_ids,
-         b.executed_at
-       FROM idle_battle_batches b
-       JOIN idle_sessions s ON s.id = b.session_id
-       WHERE b.session_id = $1
-         AND s.character_id = $2
-         AND b.id = $3
-       LIMIT 1`,
-      [sessionId, characterId, batchId],
-    );
-
-    if (res.rows.length === 0) return null;
-    const storedRow = rowToIdleBattleStoredDetailRow(
-      res.rows[0] as Record<string, unknown>,
-    );
-    return {
-      ...storedRow,
-      battleLog: replayIdleBattleLogs(storedRow.battleReplaySnapshot),
-    };
   }
 
   /**
@@ -699,12 +615,11 @@ class IdleSessionService {
    * 累加更新会话汇总字段（由 IdleBattleExecutor 在每场战斗完成后调用）
    *
    * 使用 SQL 原子加法，避免并发覆盖。
-   * rewardItems 合并逻辑：将新物品追加到现有 JSONB 数组（按 itemDefId 合并数量）。
    */
   async updateSessionSummary(
     sessionId: string,
     delta: IdleSessionSummaryDelta,
-    snapshot?: IdleSessionSummarySnapshot,
+    _snapshot?: IdleSessionSummarySnapshot,
   ): Promise<void> {
     const {
       totalBattlesDelta,
@@ -712,67 +627,10 @@ class IdleSessionService {
       loseDelta,
       expDelta,
       silverDelta,
-      newItems,
       bagFullFlag,
     } = delta;
 
     await withTransactionAuto(async () => {
-      if (snapshot) {
-        await query(
-          `UPDATE idle_sessions
-           SET total_battles = total_battles + $2,
-               win_count     = win_count + $3,
-               lose_count    = lose_count + $4,
-               total_exp     = total_exp + $5,
-               total_silver  = total_silver + $6,
-               reward_items  = $7,
-               bag_full_flag = $8,
-               updated_at    = NOW()
-           WHERE id = $1`,
-          [
-            sessionId,
-            totalBattlesDelta,
-            winDelta,
-            loseDelta,
-            expDelta,
-            silverDelta,
-            JSON.stringify(snapshot.rewardItems),
-            snapshot.bagFullFlag,
-          ],
-        );
-        return;
-      }
-
-      if (newItems.length === 0) {
-        await query(
-          `UPDATE idle_sessions
-           SET total_battles = total_battles + $2,
-               win_count     = win_count + $3,
-               lose_count    = lose_count + $4,
-               total_exp     = total_exp + $5,
-               total_silver  = total_silver + $6,
-               bag_full_flag = CASE WHEN $7 THEN true ELSE bag_full_flag END,
-               updated_at    = NOW()
-           WHERE id = $1`,
-          [sessionId, totalBattlesDelta, winDelta, loseDelta, expDelta, silverDelta, bagFullFlag],
-        );
-        return;
-      }
-
-      const res = await query(
-        `SELECT reward_items
-         FROM idle_sessions
-         WHERE id = $1
-         FOR UPDATE`,
-        [sessionId],
-      );
-      if (res.rows.length === 0) {
-        return;
-      }
-
-      const existing = (res.rows[0].reward_items as RewardItemEntry[]) ?? [];
-      const merged = mergeIdleRewardItems(existing, newItems);
-
       await query(
         `UPDATE idle_sessions
          SET total_battles = total_battles + $2,
@@ -780,8 +638,7 @@ class IdleSessionService {
              lose_count    = lose_count + $4,
              total_exp     = total_exp + $5,
              total_silver  = total_silver + $6,
-             reward_items  = $7,
-             bag_full_flag = CASE WHEN $8 THEN true ELSE bag_full_flag END,
+             bag_full_flag = CASE WHEN $7 THEN true ELSE bag_full_flag END,
              updated_at    = NOW()
          WHERE id = $1`,
         [
@@ -791,23 +648,11 @@ class IdleSessionService {
           loseDelta,
           expDelta,
           silverDelta,
-          JSON.stringify(merged),
           bagFullFlag,
         ],
       );
     });
   }
-}
-
-/**
- * 合并奖励物品列表（按 itemDefId 累加数量）
- * 纯函数，无副作用，便于测试。
- */
-export function mergeRewardItems(
-  existing: RewardItemEntry[],
-  newItems: RewardItemEntry[]
-): RewardItemEntry[] {
-  return mergeIdleRewardItems(existing, newItems);
 }
 
 // ============================================

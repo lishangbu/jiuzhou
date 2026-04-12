@@ -15,7 +15,6 @@ import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
 import { equipmentService, generateEquipment, type GenerateOptions, type GeneratedEquipment } from './equipmentService.js';
 import {
-  addItemToInventory,
   expandInventory,
   SlottedInventoryLocation,
 } from './inventory/index.js';
@@ -43,6 +42,10 @@ import { partnerReboneService } from './partnerReboneService.js';
 import { recoverStaminaByCharacterId } from './staminaService.js';
 import type { CharacterBagSlotAllocator } from './shared/characterBagSlotAllocator.js';
 import type { CharacterInventoryMutationContext } from './shared/characterInventoryMutationContext.js';
+import { applyCharacterRewardDeltas, createCharacterRewardDelta } from './shared/characterRewardSettlement.js';
+import { bufferSimpleCharacterItemGrants } from './shared/characterItemGrantDeltaService.js';
+import { loadProjectedCharacterItemInstanceById } from './shared/characterItemInstanceMutationService.js';
+import { consumeSpecificItemInstance } from './inventory/shared/consume.js';
 
 // 物品定义接口
 export interface ItemDef {
@@ -64,6 +67,9 @@ export interface CreateItemOptions {
   locationSlot?: number;
   bindType?: string;
   obtainedFrom?: string;
+  metadata?: JsonObject | null;
+  quality?: string | null;
+  qualityRank?: number | null;
   /** 奖励链路共享的新槽位分配器，只负责 bag 位置的新格子消费。 */
   bagSlotAllocator?: CharacterBagSlotAllocator;
   /** 奖励事务内共享的库存视图缓存，用于复用容量与普通堆叠承载实例。 */
@@ -361,6 +367,9 @@ const createNormalItem = async (
     location: options.location || 'bag',
     bindType: options.bindType,
     obtainedFrom: options.obtainedFrom,
+    ...(options.metadata ? { metadata: options.metadata } : {}),
+    ...(options.quality ? { quality: options.quality } : {}),
+    ...(options.qualityRank !== undefined && options.qualityRank !== null ? { qualityRank: options.qualityRank } : {}),
     ...(options.bagSlotAllocator ? { bagSlotAllocator: options.bagSlotAllocator } : {}),
     ...(options.inventoryMutationContext ? { inventoryMutationContext: options.inventoryMutationContext } : {}),
     ...(options.skipInventoryMutexLock ? { skipInventoryMutexLock: true } : {}),
@@ -470,21 +479,10 @@ class ItemService {
     await lockCharacterInventoryMutex(characterId);
 
     // 获取物品实例
-    const instanceResult = await query<ItemInstanceRow>(
-      `
-      SELECT *
-      FROM item_instance
-      WHERE id = $1 AND owner_character_id = $2
-      FOR UPDATE
-    `,
-      [instanceId, characterId],
-    );
-
-    if (instanceResult.rows.length === 0) {
+    const item = await loadProjectedCharacterItemInstanceById(characterId, instanceId);
+    if (!item) {
       return { success: false, message: '物品不存在' };
     }
-
-    const item = instanceResult.rows[0];
     const itemDefId = item.item_def_id.trim();
     if (!itemDefId) {
       return { success: false, message: '物品数据异常' };
@@ -933,39 +931,27 @@ class ItemService {
       }
     }
 
-    const setClauses = ['updated_at = NOW()'];
-    const setValues: number[] = [characterId];
-    let paramIdx = 2;
-
-    if (deltaExp !== 0) {
-      setClauses.push(`exp = exp + $${paramIdx}`);
-      setValues.push(deltaExp);
-      paramIdx++;
-    }
-    if (deltaSilver > 0) {
-      setClauses.push(`silver = silver + $${paramIdx}`);
-      setValues.push(deltaSilver);
-      paramIdx++;
-    }
-    if (deltaSpiritStones > 0) {
-      setClauses.push(`spirit_stones = spirit_stones + $${paramIdx}`);
-      setValues.push(deltaSpiritStones);
-      paramIdx++;
+    const rewardDelta = createCharacterRewardDelta();
+    rewardDelta.exp += deltaExp;
+    rewardDelta.silver += deltaSilver;
+    rewardDelta.spiritStones += deltaSpiritStones;
+    if (rewardDelta.exp !== 0 || rewardDelta.silver !== 0 || rewardDelta.spiritStones !== 0) {
+      await applyCharacterRewardDeltas(new Map([[characterId, rewardDelta]]));
     }
 
-    const updatedCharResult = await query(
-      `UPDATE characters SET ${setClauses.join(', ')} WHERE id = $1 RETURNING id`,
-      setValues
-    );
+    if (lootItemsToAdd.length > 0) {
+      await bufferSimpleCharacterItemGrants(
+        characterId,
+        userId,
+        lootItemsToAdd.map((lootItem) => ({
+          itemDefId: lootItem.itemDefId,
+          qty: lootItem.qty,
+          obtainedFrom: `use_item:${itemDef.id}`,
+        })),
+      );
+    }
 
     for (const lootItem of lootItemsToAdd) {
-      const addRes = await addItemToInventory(characterId, userId, lootItem.itemDefId, lootItem.qty, {
-        location: 'bag',
-        obtainedFrom: `use_item:${itemDef.id}`
-      });
-      if (!addRes.success) {
-        return { success: false, message: addRes.message || '道具掉落发放失败' };
-      }
       const itemName = getItemDefinitionById(lootItem.itemDefId)?.name || lootItem.itemDefId;
       lootResults.push({ type: 'item', name: itemName, amount: lootItem.qty });
     }
@@ -1002,13 +988,9 @@ class ItemService {
     }
 
     // 扣除物品
-    if ((Number(item.qty) || 0) === qty) {
-      await query('DELETE FROM item_instance WHERE id = $1', [instanceId]);
-    } else {
-      await query(
-        'UPDATE item_instance SET qty = qty - $1, updated_at = NOW() WHERE id = $2',
-        [qty, instanceId]
-      );
+    const consumeItemResult = await consumeSpecificItemInstance(characterId, instanceId, qty);
+    if (!consumeItemResult.success) {
+      return { success: false, message: consumeItemResult.message };
     }
     if (partnerTechniqueResult) {
       partnerTechniqueResult = {
@@ -1029,8 +1011,14 @@ class ItemService {
       }
     }
 
-    const updatedChar = updatedCharResult.rows.length > 0
-      ? await getCharacterComputedByCharacterId(characterId, { bypassStaticCache: true })
+    const updatedCharBase = await getCharacterComputedByCharacterId(characterId, { bypassStaticCache: true });
+    const updatedChar = updatedCharBase
+      ? {
+          ...updatedCharBase,
+          exp: updatedCharBase.exp + rewardDelta.exp,
+          silver: updatedCharBase.silver + rewardDelta.silver,
+          spirit_stones: updatedCharBase.spirit_stones + rewardDelta.spiritStones,
+        }
       : undefined;
     return {
       success: true,

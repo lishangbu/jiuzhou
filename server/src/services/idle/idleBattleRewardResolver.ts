@@ -41,13 +41,14 @@ const EMPTY_PLAN: IdleBattleRewardSettlementPlan = {
 };
 
 const buildIdleRewardParticipant = (
-  session: Pick<IdleSessionRow, 'characterId' | 'sessionSnapshot'>,
+  session: Pick<IdleSessionRow, 'id' | 'characterId' | 'sessionSnapshot'>,
   userId: number,
 ): BattleParticipant => ({
   userId,
   characterId: session.characterId,
   nickname: String(session.characterId),
   realm: session.sessionSnapshot.realm,
+  idleSessionId: session.id,
 });
 
 export async function buildIdleBattleRewardSettlementPlan(

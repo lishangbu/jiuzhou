@@ -44,6 +44,12 @@ import { normalizeItemInstanceObtainedFrom } from './shared/itemInstanceSource.j
 import { tryInsertItemInstanceWithSlot } from './shared/itemInstanceSlotInsert.js';
 import { resolveAffixPoolBySlot } from './shared/affixPoolSlotResolver.js';
 import { roundAffixResultValue } from './shared/affixPrecision.js';
+import {
+  bufferCharacterItemInstanceMutations,
+  type JsonValue,
+  loadProjectedCharacterItemInstances,
+  reserveItemInstanceIds,
+} from './shared/characterItemInstanceMutationService.js';
 
 // ============================================
 // 类型定义
@@ -803,61 +809,72 @@ class EquipmentService {
       await lockCharacterInventoryMutex(characterId);
     }
 
-    let attempt = 0;
-    while (attempt < 6) {
-      attempt += 1;
-
-      if ((location === 'bag' || location === 'warehouse') && (locationSlot === null || locationSlot === undefined)) {
-        const slots = await findEmptySlots(characterId, location, 6);
-        if (slots.length === 0) {
-          return { success: false, message: '背包已满' };
-        }
-        locationSlot = slots[0];
+    if ((location === 'bag' || location === 'warehouse') && (locationSlot === null || locationSlot === undefined)) {
+      const slots = await findEmptySlots(characterId, location, 6);
+      if (slots.length === 0) {
+        return { success: false, message: '背包已满' };
       }
-
-      const insertedId = await tryInsertItemInstanceWithSlot(
-        `
-            INSERT INTO item_instance (
-              owner_user_id, owner_character_id, item_def_id, qty,
-              quality, quality_rank,
-              location, location_slot, bind_type,
-              random_seed, affixes, identified,
-              affix_gen_version,
-              obtained_from
-            ) VALUES ($1, $2, $3, 1, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-        `,
-        [
-          userId,
-          characterId,
-          generated.itemDefId,
-          generated.quality,
-          generated.qualityRank,
-          location,
-          locationSlot,
-          options.bindType || 'none',
-          generated.seed,
-          JSON.stringify(generated.affixes),
-          options.identified !== false,
-          generated.affixGenVersion || AFFIX_GEN_VERSION,
-          obtainedFrom,
-        ]
-      );
-
-      if (insertedId !== null) {
-        return {
-          success: true,
-          instanceId: insertedId,
-          message: '装备创建成功',
-        };
-      }
-
-      if (hasExplicitSlot) return { success: false, message: '目标格子已被占用' };
-      locationSlot = null;
+      locationSlot = slots[0];
     }
 
+    if (hasExplicitSlot && (location === 'bag' || location === 'warehouse')) {
+      const occupied = (await loadProjectedCharacterItemInstances(characterId)).some((item) => (
+        item.location === location && item.location_slot === locationSlot
+      ));
+      if (occupied) {
+        return { success: false, message: '目标格子已被占用' };
+      }
+    }
+
+    const [instanceId] = await reserveItemInstanceIds(1);
+    if (!Number.isInteger(instanceId) || instanceId <= 0) {
+      return { success: false, message: '装备创建失败' };
+    }
+
+    await bufferCharacterItemInstanceMutations([
+      {
+        opId: `equipment-create:${instanceId}:${Date.now()}`,
+        characterId,
+        itemId: instanceId,
+        createdAt: Date.now(),
+        kind: 'upsert',
+        snapshot: {
+          id: instanceId,
+          owner_user_id: userId,
+          owner_character_id: characterId,
+          item_def_id: generated.itemDefId,
+          qty: 1,
+          quality: generated.quality,
+          quality_rank: generated.qualityRank,
+          metadata: null,
+          location,
+          location_slot: locationSlot,
+          equipped_slot: null,
+          strengthen_level: 0,
+          refine_level: 0,
+          socketed_gems: [],
+          affixes: JSON.parse(JSON.stringify(generated.affixes)) as JsonValue,
+          identified: options.identified !== false,
+          locked: false,
+          bind_type: options.bindType || 'none',
+          bind_owner_user_id: null,
+          bind_owner_character_id: null,
+          random_seed: String(generated.seed),
+          affix_gen_version: generated.affixGenVersion || AFFIX_GEN_VERSION,
+          affix_roll_meta: null,
+          custom_name: null,
+          expire_at: null,
+          obtained_from: obtainedFrom,
+          obtained_ref_id: null,
+          created_at: new Date(),
+        },
+      },
+    ]);
+
     return {
-      success: false,
-      message: '背包已满'
+      success: true,
+      instanceId,
+      message: '装备创建成功',
     };
   }
 

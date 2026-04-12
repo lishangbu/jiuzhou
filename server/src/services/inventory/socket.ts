@@ -47,6 +47,11 @@ import {
 } from "./shared/attrDelta.js";
 import { clampInt, getStaticItemDef, getEnabledStaticItemDef } from "./shared/helpers.js";
 import { refreshCharacterBattleStateAfterEquipmentChange } from "./shared/battleStateRefresh.js";
+import {
+  bufferCharacterItemInstanceMutations,
+  type JsonValue,
+  loadProjectedCharacterItemInstanceById,
+} from "../shared/characterItemInstanceMutationService.js";
 
 // ============================================
 // 宝石孔位纯函数工具
@@ -176,34 +181,9 @@ export const readEquipmentSocketState = async (
     socketedEntries: SocketedGemEntry[];
   };
 }> => {
-  const result = await query(
-    `
-      SELECT
-        ii.id,
-        ii.qty,
-        ii.location,
-        ii.locked,
-        ii.socketed_gems,
-        ii.item_def_id,
-        ii.quality_rank
-      FROM item_instance ii
-      WHERE ii.id = $1 AND ii.owner_character_id = $2
-      FOR UPDATE
-      LIMIT 1
-    `,
-    [itemInstanceId, characterId],
-  );
-  if (result.rows.length === 0)
+  const row = await loadProjectedCharacterItemInstanceById(characterId, itemInstanceId);
+  if (!row)
     return { success: false, message: "物品不存在" };
-  const row = result.rows[0] as {
-    id: number;
-    qty: number;
-    location: string;
-    locked: boolean;
-    socketed_gems: unknown;
-    item_def_id: string;
-    quality_rank: unknown;
-  };
 
   const itemDef = getStaticItemDef(row.item_def_id);
   if (!itemDef || itemDef.category !== "equipment")
@@ -260,27 +240,9 @@ export const loadGemItemForSocket = async (
     effects: SocketEffect[];
   };
 }> => {
-  const itemResult = await query(
-    `
-      SELECT id, item_def_id, qty, locked, location
-      FROM item_instance
-      WHERE id = $1 AND owner_character_id = $2
-      FOR UPDATE
-      LIMIT 1
-    `,
-    [gemItemInstanceId, characterId],
-  );
-
-  if (itemResult.rows.length === 0)
+  const item = await loadProjectedCharacterItemInstanceById(characterId, gemItemInstanceId);
+  if (!item)
     return { success: false, message: "宝石不存在" };
-
-  const item = itemResult.rows[0] as {
-    id: number;
-    item_def_id: string;
-    qty: number;
-    locked: boolean;
-    location: string;
-  };
 
   if (item.locked) return { success: false, message: "宝石已锁定" };
   if (!["bag", "warehouse"].includes(String(item.location))) {
@@ -444,10 +406,23 @@ export const socketEquipment = async (
     }
   }
 
-  await query(
-    `UPDATE item_instance SET socketed_gems = $1::jsonb, updated_at = NOW() WHERE id = $2 AND owner_character_id = $3`,
-    [toSocketedGemsJson(nextEntries), itemInstanceId, characterId],
-  );
+  const latestEquip = await loadProjectedCharacterItemInstanceById(characterId, itemInstanceId);
+  if (!latestEquip) {
+    return { success: false, message: "装备不存在" };
+  }
+  await bufferCharacterItemInstanceMutations([
+    {
+        opId: `socket-equipment:${itemInstanceId}:${Date.now()}`,
+        characterId,
+        itemId: itemInstanceId,
+        createdAt: Date.now(),
+        kind: "upsert",
+        snapshot: {
+          ...latestEquip,
+          socketed_gems: JSON.parse(toSocketedGemsJson(nextEntries)) as JsonValue,
+        },
+      },
+    ]);
 
   const applyDiffRes = await applyEquipmentDiffIfEquipped(
     characterId,

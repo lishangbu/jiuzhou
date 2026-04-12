@@ -18,7 +18,6 @@
  * 1. 所有查询均使用 FOR UPDATE 行锁，必须在事务上下文中调用
  * 2. auction 位置的装备不可操作（交易中）
  */
-import { query } from "../../../config/database.js";
 import {
   REFINE_MAX_LEVEL,
   normalizeEnhanceLevel,
@@ -30,6 +29,7 @@ import { resolveQualityRankFromName } from "../../shared/itemQuality.js";
 import type { GeneratedAffix } from "../../equipmentService.js";
 import type { InventoryLocation } from "./types.js";
 import { clampInt, getStaticItemDef } from "./helpers.js";
+import { loadProjectedCharacterItemInstanceById } from "../../shared/characterItemInstanceMutationService.js";
 
 /**
  * 强化前装备状态校验
@@ -50,34 +50,9 @@ export const getEnhanceItemState = async (
     equipReqRealm: string | null;
   };
 }> => {
-  const itemResult = await query(
-    `
-      SELECT
-        ii.id,
-        ii.qty,
-        ii.location,
-        ii.locked,
-        ii.strengthen_level,
-        ii.item_def_id
-      FROM item_instance ii
-      WHERE ii.id = $1 AND ii.owner_character_id = $2
-      FOR UPDATE
-      LIMIT 1
-    `,
-    [itemInstanceId, characterId],
-  );
-
-  if (itemResult.rows.length === 0)
+  const row = await loadProjectedCharacterItemInstanceById(characterId, itemInstanceId);
+  if (!row)
     return { success: false, message: "物品不存在" };
-
-  const row = itemResult.rows[0] as {
-    id: number;
-    qty: number;
-    location: InventoryLocation | string;
-    locked: boolean;
-    strengthen_level: number;
-    item_def_id: string;
-  };
 
   const itemDef = getStaticItemDef(row.item_def_id);
   if (!itemDef || itemDef.category !== "equipment")
@@ -127,34 +102,9 @@ export const getRefineItemState = async (
     equipReqRealm: string | null;
   };
 }> => {
-  const itemResult = await query(
-    `
-      SELECT
-        ii.id,
-        ii.qty,
-        ii.location,
-        ii.locked,
-        ii.refine_level,
-        ii.item_def_id
-      FROM item_instance ii
-      WHERE ii.id = $1 AND ii.owner_character_id = $2
-      FOR UPDATE
-      LIMIT 1
-    `,
-    [itemInstanceId, characterId],
-  );
-
-  if (itemResult.rows.length === 0)
+  const row = await loadProjectedCharacterItemInstanceById(characterId, itemInstanceId);
+  if (!row)
     return { success: false, message: "物品不存在" };
-
-  const row = itemResult.rows[0] as {
-    id: number;
-    qty: number;
-    location: InventoryLocation | string;
-    locked: boolean;
-    refine_level: number;
-    item_def_id: string;
-  };
 
   const itemDef = getStaticItemDef(row.item_def_id);
   if (!itemDef || itemDef.category !== "equipment")
@@ -210,38 +160,9 @@ export const getRerollItemState = async (
     equipReqRealm: string | null;
   };
 }> => {
-  const itemResult = await query(
-    `
-      SELECT
-        ii.id,
-        ii.qty,
-        ii.location,
-        ii.locked,
-        ii.affixes,
-        ii.item_def_id,
-        ii.quality,
-        ii.quality_rank
-      FROM item_instance ii
-      WHERE ii.id = $1 AND ii.owner_character_id = $2
-      FOR UPDATE
-      LIMIT 1
-    `,
-    [itemInstanceId, characterId],
-  );
-
-  if (itemResult.rows.length === 0)
+  const row = await loadProjectedCharacterItemInstanceById(characterId, itemInstanceId);
+  if (!row)
     return { success: false, message: "物品不存在" };
-
-  const row = itemResult.rows[0] as {
-    id: number;
-    qty: number;
-    location: InventoryLocation | string;
-    locked: boolean;
-    affixes: unknown;
-    item_def_id: string;
-    quality: string | null;
-    quality_rank: number | null;
-  };
 
   const itemDef = getStaticItemDef(row.item_def_id);
   if (!itemDef || itemDef.category !== "equipment")

@@ -18,14 +18,28 @@
  *
  * 数据流：
  * - 物品扣除：查询 item_instance 表并锁定目标行 → 校验数量 → 执行扣除
- * - 资源变更：对 characters 执行条件 UPDATE/RETURNING → 仅在失败时补查只读快照区分“不存在”和“余额不足”
+ * - 资源变更：锁定角色资源基线 → 叠加 Redis pending Delta → 校验余额 → 事务提交后写入 signed Delta
  *
  * 边界条件：
  * 1. consumeMaterialByDefId 优先消耗未锁定、数量最多的堆叠行，全部锁定时报"材料已锁定"
- * 2. consumeCharacterStoredResources / consumeCharacterCurrencies / addCharacterCurrencies 不再先 `FOR UPDATE characters`，避免在已持有背包锁的事务里额外拉长角色行锁等待
+ * 2. number 版资源增减必须走统一 Delta 口径；否则 flush 窗口内继续直写 `characters` 会和缓存账本出现裂缝
  */
 import { query } from "../../../config/database.js";
 import { clampInt } from "./helpers.js";
+import {
+  bufferCharacterSettlementCurrencyExactDeltas,
+  loadCharacterSettlementCurrencyExactSnapshot,
+  loadCharacterSettlementResourceSnapshot,
+} from "../../shared/characterSettlementResourceDeltaService.js";
+import { applyCharacterRewardDeltas } from "../../shared/characterRewardSettlement.js";
+import { afterTransactionCommit } from "../../../config/database.js";
+import {
+  bufferCharacterItemInstanceMutations,
+  loadProjectedCharacterItemInstanceById,
+  loadProjectedCharacterItemInstances,
+  type BufferedCharacterItemInstanceMutation,
+} from "../../shared/characterItemInstanceMutationService.js";
+import { getItemDefinitionById } from "../../staticConfigLoader.js";
 
 type CharacterStoredResourceSnapshot = {
   silver: number;
@@ -37,6 +51,23 @@ type CharacterCurrencyExactSnapshot = {
   silver: bigint;
   spiritStones: bigint;
 };
+
+export type MaterialConsumeRequirement = {
+  itemId: string;
+  qty: number;
+  itemName?: string | null;
+};
+
+type MaterialConsumePlanResult =
+  | {
+      success: true;
+      message: string;
+      mutations: BufferedCharacterItemInstanceMutation[];
+    }
+  | {
+      success: false;
+      message: string;
+    };
 
 export type ConsumeCharacterStoredResourcesResult =
   | {
@@ -76,6 +107,157 @@ const normalizeNonNegativeBigint = (value: bigint | null | undefined): bigint =>
   return value > 0n ? value : 0n;
 };
 
+const buildItemMutation = (
+  prefix: string,
+  characterId: number,
+  itemId: number,
+  index: number,
+  qty: number,
+  snapshot: Awaited<ReturnType<typeof loadProjectedCharacterItemInstanceById>>,
+): BufferedCharacterItemInstanceMutation => {
+  if (!snapshot) {
+    throw new Error(`库存实例不存在: ${itemId}`);
+  }
+  if (qty <= 0) {
+    return {
+      opId: `${prefix}:${itemId}:${Date.now()}:${index}`,
+      characterId,
+      itemId,
+      createdAt: Date.now() + index,
+      kind: "delete",
+      snapshot: null,
+    };
+  }
+  return {
+    opId: `${prefix}:${itemId}:${Date.now()}:${index}`,
+    characterId,
+    itemId,
+    createdAt: Date.now() + index,
+    kind: "upsert",
+    snapshot: {
+      ...snapshot,
+      qty,
+    },
+  };
+};
+
+const normalizeMaterialConsumeRequirements = (
+  requirements: readonly MaterialConsumeRequirement[],
+): MaterialConsumeRequirement[] => {
+  const requirementMap = new Map<string, MaterialConsumeRequirement>();
+  for (const requirement of requirements) {
+    const itemId = String(requirement.itemId || '').trim();
+    const normalizedQty = clampInt(requirement.qty, 0, 999999);
+    if (!itemId || normalizedQty <= 0) {
+      continue;
+    }
+
+    const existing = requirementMap.get(itemId);
+    if (existing) {
+      existing.qty += normalizedQty;
+      if (!existing.itemName && requirement.itemName) {
+        existing.itemName = requirement.itemName;
+      }
+      continue;
+    }
+
+    requirementMap.set(itemId, {
+      itemId,
+      qty: normalizedQty,
+      itemName: requirement.itemName,
+    });
+  }
+
+  return [...requirementMap.values()];
+};
+
+const buildMaterialConsumePlan = async (
+  characterId: number,
+  requirements: readonly MaterialConsumeRequirement[],
+): Promise<MaterialConsumePlanResult> => {
+  const normalizedRequirements = normalizeMaterialConsumeRequirements(requirements);
+  if (normalizedRequirements.length <= 0) {
+    return { success: true, message: '无需校验材料', mutations: [] };
+  }
+
+  const projectedItems = await loadProjectedCharacterItemInstances(characterId);
+  const materialRowsByItemId = new Map<string, Array<{ id: number; qty: number; locked: boolean }>>();
+  const materialSnapshotMap = new Map<string, { totalQty: number; unlockedQty: number }>();
+
+  for (const item of projectedItems) {
+    if (item.location !== 'bag' && item.location !== 'warehouse') {
+      continue;
+    }
+
+    const itemId = String(item.item_def_id);
+    const qty = Math.max(0, Number(item.qty) || 0);
+    if (qty <= 0) {
+      continue;
+    }
+
+    const rows = materialRowsByItemId.get(itemId) ?? [];
+    rows.push({ id: item.id, qty, locked: item.locked });
+    materialRowsByItemId.set(itemId, rows);
+
+    const snapshot = materialSnapshotMap.get(itemId) ?? { totalQty: 0, unlockedQty: 0 };
+    snapshot.totalQty += qty;
+    if (!item.locked) {
+      snapshot.unlockedQty += qty;
+    }
+    materialSnapshotMap.set(itemId, snapshot);
+  }
+
+  const mutations: BufferedCharacterItemInstanceMutation[] = [];
+  for (const requirement of normalizedRequirements) {
+    const snapshot = materialSnapshotMap.get(requirement.itemId) ?? { totalQty: 0, unlockedQty: 0 };
+    const itemName = requirement.itemName ?? getItemDefinitionById(requirement.itemId)?.name ?? requirement.itemId;
+    if (snapshot.totalQty < requirement.qty) {
+      return {
+        success: false,
+        message: `材料不足：${itemName}，需要${requirement.qty}，当前${snapshot.totalQty}`,
+      };
+    }
+    if (snapshot.unlockedQty < requirement.qty) {
+      return {
+        success: false,
+        message: `材料已锁定：${itemName}`,
+      };
+    }
+
+    const unlockedRows = [...(materialRowsByItemId.get(requirement.itemId) ?? [])]
+      .filter((row) => !row.locked && row.qty > 0)
+      .sort((left, right) => right.qty - left.qty || left.id - right.id);
+
+    let remaining = requirement.qty;
+    for (const row of unlockedRows) {
+      if (remaining <= 0) {
+        break;
+      }
+      const consumeQty = Math.min(row.qty, remaining);
+      const snapshotRow = await loadProjectedCharacterItemInstanceById(characterId, row.id);
+      mutations.push(buildItemMutation(
+        'consume-material',
+        characterId,
+        row.id,
+        mutations.length,
+        row.qty - consumeQty,
+        snapshotRow,
+      ));
+      remaining -= consumeQty;
+    }
+  }
+
+  return { success: true, message: '材料校验通过', mutations };
+};
+
+export const validateMaterialConsumeRequirements = async (
+  characterId: number,
+  requirements: readonly MaterialConsumeRequirement[],
+): Promise<{ success: boolean; message: string }> => {
+  const result = await buildMaterialConsumePlan(characterId, requirements);
+  return { success: result.success, message: result.message };
+};
+
 /**
  * 按物品定义 ID 消耗指定数量的材料
  * 从 bag/warehouse 位置的未锁定行中按数量降序扣除
@@ -85,63 +267,76 @@ export const consumeMaterialByDefId = async (
   materialItemDefId: string,
   qty: number,
 ): Promise<{ success: boolean; message: string }> => {
-  const need = clampInt(qty, 1, 999999);
-  const rowResult = await query(
-    `
-      SELECT id, qty, locked
-      FROM item_instance
-      WHERE owner_character_id = $1
-        AND item_def_id = $2
-        AND location IN ('bag', 'warehouse')
-      ORDER BY qty DESC, id ASC
-      FOR UPDATE
-    `,
-    [characterId, materialItemDefId],
-  );
-
-  if (rowResult.rows.length === 0) {
-    return { success: false, message: "材料不足" };
+  const result = await buildMaterialConsumePlan(characterId, [{
+    itemId: materialItemDefId,
+    qty,
+  }]);
+  if (!result.success) {
+    return result;
   }
 
-  const rows = rowResult.rows as Array<{
-    id: number;
-    qty: number;
-    locked: boolean;
-  }>;
-  const unlockedRows = rows.filter(
-    (row) => !row.locked && (Number(row.qty) || 0) > 0,
-  );
-  const unlockedTotal = unlockedRows.reduce(
-    (sum, row) => sum + Math.max(0, Number(row.qty) || 0),
-    0,
-  );
+  await bufferCharacterItemInstanceMutations(result.mutations);
+  return { success: true, message: '扣除成功' };
+};
 
-  if (unlockedTotal < need) {
-    if (unlockedTotal <= 0 && rows.some((row) => row.locked)) {
-      return { success: false, message: "材料已锁定" };
-    }
-    return { success: false, message: "材料不足" };
+export const consumeCharacterStoredResourcesAndMaterialsAtomically = async (
+  characterId: number,
+  costs: {
+    silver?: number;
+    spiritStones?: number;
+    exp?: number;
+    materials?: readonly MaterialConsumeRequirement[];
+  },
+): Promise<ConsumeCharacterStoredResourcesResult> => {
+  const silverCost = Math.max(0, Math.floor(Number(costs.silver) || 0));
+  const spiritCost = Math.max(0, Math.floor(Number(costs.spiritStones) || 0));
+  const expCost = Math.max(0, Math.floor(Number(costs.exp) || 0));
+  const materialRequirements = normalizeMaterialConsumeRequirements(costs.materials ?? []);
+
+  const materialPlanResult = await buildMaterialConsumePlan(characterId, materialRequirements);
+  if (!materialPlanResult.success) {
+    return materialPlanResult;
   }
 
-  let remaining = need;
-  for (const row of unlockedRows) {
-    if (remaining <= 0) break;
-    const rowQty = Math.max(0, Number(row.qty) || 0);
-    if (rowQty <= 0) continue;
-
-    const consume = Math.min(rowQty, remaining);
-    if (consume >= rowQty) {
-      await query("DELETE FROM item_instance WHERE id = $1", [row.id]);
-    } else {
-      await query(
-        "UPDATE item_instance SET qty = qty - $1, updated_at = NOW() WHERE id = $2",
-        [consume, row.id],
-      );
-    }
-    remaining -= consume;
+  const resourceSnapshot = await loadCharacterSettlementResourceSnapshot(characterId, {
+    forUpdate: true,
+  });
+  if (!resourceSnapshot) {
+    return { success: false, message: '角色不存在' };
+  }
+  if (resourceSnapshot.silver < silverCost) {
+    return { success: false, message: `银两不足，需要${silverCost}` };
+  }
+  if (resourceSnapshot.spiritStones < spiritCost) {
+    return { success: false, message: `灵石不足，需要${spiritCost}` };
+  }
+  if (resourceSnapshot.exp < expCost) {
+    return { success: false, message: `经验不足，需要${expCost}` };
   }
 
-  return { success: true, message: "扣除成功" };
+  if (materialPlanResult.mutations.length > 0) {
+    await bufferCharacterItemInstanceMutations(materialPlanResult.mutations);
+  }
+  if (silverCost > 0 || spiritCost > 0 || expCost > 0) {
+    await applyCharacterRewardDeltas(new Map([[
+      characterId,
+      {
+        silver: -silverCost,
+        spiritStones: -spiritCost,
+        exp: -expCost,
+      },
+    ]]));
+  }
+
+  return {
+    success: true,
+    message: '扣除成功',
+    remaining: {
+      silver: resourceSnapshot.silver - silverCost,
+      spiritStones: resourceSnapshot.spiritStones - spiritCost,
+      exp: resourceSnapshot.exp - expCost,
+    },
+  };
 };
 
 /**
@@ -154,27 +349,9 @@ export const consumeSpecificItemInstance = async (
   qty: number,
 ): Promise<{ success: boolean; message: string; itemDefId?: string }> => {
   const need = clampInt(qty, 1, 999999);
-  const result = await query(
-    `
-      SELECT id, item_def_id, qty, locked, location
-      FROM item_instance
-      WHERE id = $1 AND owner_character_id = $2
-      FOR UPDATE
-      LIMIT 1
-    `,
-    [itemInstanceId, characterId],
-  );
-
-  if (result.rows.length === 0)
+  const row = await loadProjectedCharacterItemInstanceById(characterId, itemInstanceId);
+  if (!row)
     return { success: false, message: "道具不存在" };
-
-  const row = result.rows[0] as {
-    id: number;
-    item_def_id: string;
-    qty: number;
-    locked: boolean;
-    location: string;
-  };
   if (row.locked) return { success: false, message: "道具已锁定" };
   if (!["bag", "warehouse"].includes(String(row.location))) {
     return { success: false, message: "道具当前位置不可消耗" };
@@ -182,14 +359,16 @@ export const consumeSpecificItemInstance = async (
   if ((Number(row.qty) || 0) < need)
     return { success: false, message: "道具数量不足" };
 
-  if ((Number(row.qty) || 0) === need) {
-    await query("DELETE FROM item_instance WHERE id = $1", [row.id]);
-  } else {
-    await query(
-      "UPDATE item_instance SET qty = qty - $1, updated_at = NOW() WHERE id = $2",
-      [need, row.id],
-    );
-  }
+  await bufferCharacterItemInstanceMutations([
+    buildItemMutation(
+      "consume-item-instance",
+      characterId,
+      row.id,
+      0,
+      row.qty - need,
+      row,
+    ),
+  ]);
   return {
     success: true,
     message: "扣除成功",
@@ -211,55 +390,41 @@ export const consumeCharacterStoredResources = async (
   if (silverCost <= 0 && spiritCost <= 0 && expCost <= 0)
     return { success: true, message: "无需扣除资源" };
 
-  const updatedResult = await query(
-    `
-      UPDATE characters
-      SET silver = silver - $2,
-          spirit_stones = spirit_stones - $3,
-          exp = exp - $4,
-          updated_at = NOW()
-      WHERE id = $1
-        AND silver >= $2
-        AND spirit_stones >= $3
-        AND exp >= $4
-      RETURNING silver, spirit_stones, exp
-    `,
-    [characterId, silverCost, spiritCost, expCost],
-  );
-  if (updatedResult.rows.length > 0) {
-    return {
-      success: true,
-      message: "扣除成功",
-      remaining: {
-        silver: Number(updatedResult.rows[0].silver ?? 0) || 0,
-        spiritStones: Number(updatedResult.rows[0].spirit_stones ?? 0) || 0,
-        exp: Number(updatedResult.rows[0].exp ?? 0) || 0,
-      },
-    };
-  }
-
-  const charResult = await query(
-    `SELECT silver, spirit_stones, exp FROM characters WHERE id = $1 LIMIT 1`,
-    [characterId],
-  );
-  if (charResult.rows.length === 0) {
+  const resourceSnapshot = await loadCharacterSettlementResourceSnapshot(characterId, {
+    forUpdate: true,
+  });
+  if (!resourceSnapshot) {
     return { success: false, message: "角色不存在" };
   }
 
-  const curSilver = Number(charResult.rows[0].silver ?? 0) || 0;
-  const curSpirit = Number(charResult.rows[0].spirit_stones ?? 0) || 0;
-  const curExp = Number(charResult.rows[0].exp ?? 0) || 0;
-  if (curSilver < silverCost) {
+  if (resourceSnapshot.silver < silverCost) {
     return { success: false, message: `银两不足，需要${silverCost}` };
   }
-  if (curSpirit < spiritCost) {
+  if (resourceSnapshot.spiritStones < spiritCost) {
     return { success: false, message: `灵石不足，需要${spiritCost}` };
   }
-  if (curExp < expCost) {
+  if (resourceSnapshot.exp < expCost) {
     return { success: false, message: `经验不足，需要${expCost}` };
   }
 
-  return { success: false, message: "角色资源已变化，请重试" };
+  await applyCharacterRewardDeltas(new Map([[
+    characterId,
+    {
+      silver: -silverCost,
+      spiritStones: -spiritCost,
+      exp: -expCost,
+    },
+  ]]));
+
+  return {
+    success: true,
+    message: "扣除成功",
+    remaining: {
+      silver: resourceSnapshot.silver - silverCost,
+      spiritStones: resourceSnapshot.spiritStones - spiritCost,
+      exp: resourceSnapshot.exp - expCost,
+    },
+  };
 };
 
 /**
@@ -287,48 +452,38 @@ export const consumeCharacterCurrenciesExact = async (
     return { success: true, message: "无需扣除货币" };
   }
 
-  const updatedResult = await query(
-    `
-      UPDATE characters
-      SET silver = silver - $2,
-          spirit_stones = spirit_stones - $3,
-          updated_at = NOW()
-      WHERE id = $1
-        AND silver >= $2
-        AND spirit_stones >= $3
-      RETURNING silver, spirit_stones
-    `,
-    [characterId, silverCost.toString(), spiritCost.toString()],
-  );
-  if (updatedResult.rows.length > 0) {
-    return {
-      success: true,
-      message: "扣除成功",
-      remaining: {
-        silver: BigInt(updatedResult.rows[0].silver ?? 0),
-        spiritStones: BigInt(updatedResult.rows[0].spirit_stones ?? 0),
-      },
-    };
-  }
-
-  const charResult = await query(
-    `SELECT silver, spirit_stones FROM characters WHERE id = $1 LIMIT 1`,
-    [characterId],
-  );
-  if (charResult.rows.length === 0) {
+  const currencySnapshot = await loadCharacterSettlementCurrencyExactSnapshot(characterId, {
+    forUpdate: true,
+  });
+  if (!currencySnapshot) {
     return { success: false, message: "角色不存在" };
   }
 
-  const curSilver = BigInt(charResult.rows[0].silver ?? 0);
-  const curSpirit = BigInt(charResult.rows[0].spirit_stones ?? 0);
-  if (curSilver < silverCost) {
+  if (currencySnapshot.silver < silverCost) {
     return { success: false, message: `银两不足，需要${silverCost.toString()}` };
   }
-  if (curSpirit < spiritCost) {
+  if (currencySnapshot.spiritStones < spiritCost) {
     return { success: false, message: `灵石不足，需要${spiritCost.toString()}` };
   }
 
-  return { success: false, message: "角色货币已变化，请重试" };
+  await afterTransactionCommit(async () => {
+    await bufferCharacterSettlementCurrencyExactDeltas(new Map([[
+      characterId,
+      {
+        silver: -silverCost,
+        spiritStones: -spiritCost,
+      },
+    ]]));
+  });
+
+  return {
+    success: true,
+    message: "扣除成功",
+    remaining: {
+      silver: currencySnapshot.silver - silverCost,
+      spiritStones: currencySnapshot.spiritStones - spiritCost,
+    },
+  };
 };
 
 /**
@@ -344,20 +499,18 @@ export const addCharacterCurrencies = async (
   if (silverGain <= 0 && spiritGain <= 0)
     return { success: true, message: "无需增加货币" };
 
-  const updatedResult = await query(
-    `
-      UPDATE characters
-      SET silver = silver + $2,
-          spirit_stones = spirit_stones + $3,
-          updated_at = NOW()
-      WHERE id = $1
-      RETURNING id
-    `,
-    [characterId, silverGain, spiritGain],
-  );
-  if (updatedResult.rows.length === 0) {
+  const resourceSnapshot = await loadCharacterSettlementResourceSnapshot(characterId);
+  if (!resourceSnapshot) {
     return { success: false, message: "角色不存在" };
   }
+  await applyCharacterRewardDeltas(new Map([[
+    characterId,
+    {
+      exp: 0,
+      silver: silverGain,
+      spiritStones: spiritGain,
+    },
+  ]]));
   return { success: true, message: "增加成功" };
 };
 
@@ -376,28 +529,27 @@ export const addCharacterCurrenciesExact = async (
     return { success: true, message: "无需增加货币" };
   }
 
-  const updatedResult = await query(
-    `
-      UPDATE characters
-      SET silver = silver + $2,
-          spirit_stones = spirit_stones + $3,
-          updated_at = NOW()
-      WHERE id = $1
-      RETURNING id, silver, spirit_stones
-    `,
-    [characterId, silverGain.toString(), spiritGain.toString()],
-  );
-  if (updatedResult.rows.length === 0) {
+  const currencySnapshot = await loadCharacterSettlementCurrencyExactSnapshot(characterId);
+  if (!currencySnapshot) {
     return { success: false, message: "角色不存在" };
   }
+  await afterTransactionCommit(async () => {
+    await bufferCharacterSettlementCurrencyExactDeltas(new Map([[
+      characterId,
+      {
+        silver: silverGain,
+        spiritStones: spiritGain,
+      },
+    ]]));
+  });
   return {
     success: true,
     message: "增加成功",
     ...(options.includeRemaining
       ? {
           remaining: {
-            silver: BigInt(updatedResult.rows[0].silver ?? 0),
-            spiritStones: BigInt(updatedResult.rows[0].spirit_stones ?? 0),
+            silver: currencySnapshot.silver + silverGain,
+            spiritStones: currencySnapshot.spiritStones + spiritGain,
           },
         }
       : {}),

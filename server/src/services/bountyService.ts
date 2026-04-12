@@ -4,6 +4,10 @@ import { getBountyDefinitions, getItemDefinitions, getItemDefinitionsByIds } fro
 import { getTaskDefinitionById } from './taskDefinitionService.js';
 import { resolveQualityRankFromName } from './shared/itemQuality.js';
 import { Transactional } from '../decorators/transactional.js';
+import { loadCharacterSettlementResourceSnapshot } from './shared/characterSettlementResourceDeltaService.js';
+import { applyCharacterRewardDeltas } from './shared/characterRewardSettlement.js';
+import { consumeSpecificItemInstance } from './inventory/shared/consume.js';
+import { loadProjectedCharacterItemInstances } from './shared/characterItemInstanceMutationService.js';
 
 export type BountySourceType = 'daily' | 'player';
 export type BountyClaimPolicy = 'unique' | 'limited' | 'unlimited';
@@ -78,7 +82,6 @@ type BountyInstanceRow = {
 
 type TaskStatusRow = { status: string | null };
 type InsertIdRow = { id: number | string | null };
-type CharacterCurrencyRow = { spirit_stones: number | string | null; silver: number | string | null };
 type ClaimLookupRow = {
   claim_id: number | string | null;
   claim_status: string | null;
@@ -466,7 +469,7 @@ class BountyService {
     const title = asNonEmptyString(payload.title) ?? '';
     if (!title) return { success: false, message: '标题不能为空' };
 
-    const claimPolicy = ((asNonEmptyString(payload.claimPolicy) ?? 'limited') as BountyClaimPolicy) ?? 'limited';
+    const claimPolicy = (asNonEmptyString(payload.claimPolicy) ?? 'limited') as BountyClaimPolicy;
     const maxClaimsRaw = asFiniteNonNegativeInt(payload.maxClaims, 0);
     const maxClaims = claimPolicy === 'limited' ? maxClaimsRaw : 0;
     if (claimPolicy === 'limited' && maxClaims <= 0) return { success: false, message: '限次接取必须设置最大次数' };
@@ -591,26 +594,28 @@ class BountyService {
       }
     }
 
-    const charRes = await query<CharacterCurrencyRow>(
-      `SELECT spirit_stones, silver FROM characters WHERE id = $1 LIMIT 1 FOR UPDATE`,
-      [cid],
-    );
-    if (charRes.rows.length === 0) {
+    const resourceSnapshot = await loadCharacterSettlementResourceSnapshot(cid, {
+      forUpdate: true,
+    });
+    if (!resourceSnapshot) {
       return { success: false, message: '角色不存在' };
     }
-    const curSpirit = asFiniteNonNegativeInt(charRes.rows[0]?.spirit_stones, 0);
-    const curSilver = asFiniteNonNegativeInt(charRes.rows[0]?.silver, 0);
+    const curSpirit = asFiniteNonNegativeInt(resourceSnapshot.spiritStones, 0);
+    const curSilver = asFiniteNonNegativeInt(resourceSnapshot.silver, 0);
     if (curSpirit < spiritCost) {
       return { success: false, message: '灵石不足' };
     }
     if (curSilver < silverCost) {
       return { success: false, message: '银两不足' };
     }
-
-    await query(
-      `UPDATE characters SET spirit_stones = spirit_stones - $1, silver = silver - $2, updated_at = NOW() WHERE id = $3`,
-      [spiritCost, silverCost, cid],
-    );
+    await applyCharacterRewardDeltas(new Map([[
+      cid,
+      {
+        exp: 0,
+        spiritStones: -spiritCost,
+        silver: -silverCost,
+      },
+    ]]));
 
     const res = await query<InsertIdRow>(
       `
@@ -762,19 +767,16 @@ class BountyService {
 
     for (const reqItem of requiredItems) {
       let remaining = Math.max(1, Math.floor(reqItem.qty));
-      const rowsRes = await query<InventoryOwnedItemRow>(
-        `
-          SELECT id, qty, locked, location
-          FROM item_instance
-          WHERE owner_character_id = $1
-            AND item_def_id = $2
-            AND location IN ('bag','warehouse')
-          ORDER BY CASE WHEN location = 'bag' THEN 0 ELSE 1 END ASC, created_at ASC
-          FOR UPDATE
-        `,
-        [cid, reqItem.itemDefId],
-      );
-      const rows = rowsRes.rows;
+      const rows = (await loadProjectedCharacterItemInstances(cid))
+        .filter((item) => item.item_def_id === reqItem.itemDefId)
+        .filter((item) => item.location === 'bag' || item.location === 'warehouse')
+        .sort((left, right) => {
+          const leftPriority = left.location === 'bag' ? 0 : 1;
+          const rightPriority = right.location === 'bag' ? 0 : 1;
+          if (leftPriority !== rightPriority) return leftPriority - rightPriority;
+          return left.created_at.getTime() - right.created_at.getTime();
+        })
+        .map((item) => ({ id: item.id, qty: item.qty, locked: item.locked, location: item.location })) as InventoryOwnedItemRow[];
       const available = rows.filter((r) => !r.locked).reduce((sum, r) => sum + Math.max(0, Number(r.qty) || 0), 0);
       if (available < remaining) {
         return { success: false, message: `${reqItem.name}数量不足` };
@@ -786,10 +788,9 @@ class BountyService {
         const rowQty = Math.max(0, Number(row.qty) || 0);
         if (rowQty <= 0) continue;
         const takeQty = Math.min(remaining, rowQty);
-        if (takeQty === rowQty) {
-          await query('DELETE FROM item_instance WHERE id = $1', [row.id]);
-        } else {
-          await query('UPDATE item_instance SET qty = qty - $1, updated_at = NOW() WHERE id = $2', [takeQty, row.id]);
+        const consumeResult = await consumeSpecificItemInstance(cid, Number(row.id), takeQty);
+        if (!consumeResult.success) {
+          return { success: false, message: consumeResult.message };
         }
         remaining -= takeQty;
       }

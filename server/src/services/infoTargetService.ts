@@ -41,6 +41,7 @@ import {
   CHARACTER_RATIO_ATTR_KEY_SET,
 } from './shared/characterAttrRegistry.js';
 import { listTitleDefinitionsByIds } from './titleDefinitionService.js';
+import { loadProjectedCharacterItemInstancesByLocation } from './shared/characterItemInstanceMutationService.js';
 
 type InfoTargetType = 'npc' | 'monster' | 'item' | 'player';
 
@@ -511,20 +512,9 @@ export const getInfoTargetDetail = async (type: InfoTargetType, id: string): Pro
     const characterId = Math.floor(Number(id));
     if (!Number.isFinite(characterId) || characterId <= 0) return null;
 
-    const [computed, equipRes, techRes, equippedTitlePresentation, monthCardActiveMap] = await Promise.all([
+    const [computed, equipRows, techRes, equippedTitlePresentation, monthCardActiveMap] = await Promise.all([
       getCharacterComputedByCharacterId(characterId),
-      query(
-        `
-          SELECT
-            ii.equipped_slot,
-            ii.item_def_id,
-            NULLIF(ii.quality, '') AS item_quality
-          FROM item_instance ii
-          WHERE ii.owner_character_id = $1 AND ii.location = 'equipped'
-          ORDER BY ii.equipped_slot ASC, ii.id ASC
-        `,
-        [characterId]
-      ),
+      loadProjectedCharacterItemInstancesByLocation(characterId, 'equipped'),
       query(
         `
           SELECT
@@ -542,7 +532,6 @@ export const getInfoTargetDetail = async (type: InfoTargetType, id: string): Pro
 
     if (!computed) return null;
 
-    const equipRows = equipRes.rows as EquippedRow[];
     const equipItemDefIds = Array.from(
       new Set(
         equipRows
@@ -558,7 +547,7 @@ export const getInfoTargetDetail = async (type: InfoTargetType, id: string): Pro
         const itemDefId = typeof r.item_def_id === 'string' ? r.item_def_id.trim() : '';
         const def = itemDefId ? equipDefs.get(itemDefId) : null;
         const name = typeof def?.name === 'string' ? def.name.trim() : '';
-        const qualityFromInstance = typeof r.item_quality === 'string' ? r.item_quality.trim() : '';
+        const qualityFromInstance = typeof r.quality === 'string' ? r.quality.trim() : '';
         const qualityFromDef = typeof def?.quality === 'string' ? def.quality.trim() : '';
         const quality = qualityFromInstance || qualityFromDef;
         if (!slot || !name) return null;

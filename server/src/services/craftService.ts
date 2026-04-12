@@ -1,12 +1,13 @@
 import { query } from '../config/database.js';
 import { Transactional } from '../decorators/transactional.js';
-import { addItemToInventory } from './inventory/index.js';
 import { lockCharacterInventoryMutex } from './inventoryMutex.js';
-import { consumeCharacterStoredResources } from './inventory/shared/consume.js';
+import { consumeCharacterStoredResources, consumeMaterialByDefId } from './inventory/shared/consume.js';
 import { recordCraftItemEvent } from './taskService.js';
+import { bufferSimpleCharacterItemGrants } from './shared/characterItemGrantDeltaService.js';
 import { REALM_ORDER } from './shared/realmRules.js';
 import { normalizeRecipeRateToPercent, normalizeRecipeRateToRatio } from './shared/recipeRate.js';
 import { getItemDefinitionById, getItemDefinitionsByIds, getItemRecipeById, getItemRecipeDefinitionsByType } from './staticConfigLoader.js';
+import { loadProjectedCharacterItemInstances } from './shared/characterItemInstanceMutationService.js';
 
 type CraftRecipeType = 'craft' | 'refine' | 'decompose' | 'upgrade' | string;
 
@@ -244,22 +245,13 @@ const getUnlockedItemCounts = async (
   const ids = Array.from(new Set(itemDefIds.map((x) => x.trim()).filter(Boolean)));
   const map = new Map<string, number>();
   if (ids.length === 0) return map;
-  const res = await query(
-    `
-      SELECT item_def_id, SUM(qty)::bigint AS qty
-      FROM item_instance
-      WHERE owner_character_id = $1
-        AND item_def_id = ANY($2::varchar[])
-        AND location IN ('bag', 'warehouse')
-        AND locked = false
-      GROUP BY item_def_id
-    `,
-    [characterId, ids],
-  );
-  for (const row of res.rows ?? []) {
-    const itemDefId = asString((row as Record<string, unknown>).item_def_id);
-    if (!itemDefId) continue;
-    map.set(itemDefId, clampInt((row as Record<string, unknown>).qty, 0, Number.MAX_SAFE_INTEGER));
+  const projectedItems = await loadProjectedCharacterItemInstances(characterId);
+  for (const item of projectedItems) {
+    const itemDefId = item.item_def_id.trim();
+    if (!ids.includes(itemDefId)) continue;
+    if (item.locked) continue;
+    if (item.location !== 'bag' && item.location !== 'warehouse') continue;
+    map.set(itemDefId, (map.get(itemDefId) ?? 0) + clampInt(item.qty, 0, Number.MAX_SAFE_INTEGER));
   }
   return map;
 };
@@ -315,43 +307,10 @@ const consumeMaterialByDefIdTx = async (
   itemDefId: string,
   qty: number,
 ): Promise<{ success: boolean; message: string }> => {
-  const need = clampInt(qty, 1, 999999);
-  const rowsRes = await query(
-    `
-      SELECT id, qty, locked
-      FROM item_instance
-      WHERE owner_character_id = $1
-        AND item_def_id = $2
-        AND location IN ('bag', 'warehouse')
-      ORDER BY qty DESC, id ASC
-      FOR UPDATE
-    `,
-    [characterId, itemDefId],
-  );
-
-  if (!rowsRes.rows?.length) {
+  const result = await consumeMaterialByDefId(characterId, itemDefId, clampInt(qty, 1, 999999));
+  if (!result.success) {
     return { success: false, message: `${itemDefId}数量不足` };
   }
-
-  const rows = rowsRes.rows as Array<{ id: number; qty: number; locked: boolean }>;
-  const available = rows.filter((row) => !row.locked).reduce((sum, row) => sum + clampInt(row.qty, 0, 999999), 0);
-  if (available < need) return { success: false, message: `${itemDefId}数量不足` };
-
-  let remaining = need;
-  for (const row of rows) {
-    if (remaining <= 0) break;
-    if (row.locked) continue;
-    const rowQty = clampInt(row.qty, 0, 999999);
-    if (rowQty <= 0) continue;
-    const consume = Math.min(rowQty, remaining);
-    if (consume >= rowQty) {
-      await query(`DELETE FROM item_instance WHERE id = $1`, [row.id]);
-    } else {
-      await query(`UPDATE item_instance SET qty = qty - $1, updated_at = NOW() WHERE id = $2`, [consume, row.id]);
-    }
-    remaining -= consume;
-  }
-
   return { success: true, message: 'ok' };
 };
 
@@ -576,26 +535,22 @@ class CraftService {
       qty: number;
       itemIds: number[];
     } | null = null;
+    const pendingItemGrants: Array<{ itemDefId: string; qty: number; obtainedFrom: string }> = [];
 
     if (successCount > 0) {
       const totalProductQty = productQty * successCount;
-      const addResult = await addItemToInventory(
-        characterSnapshot.id,
-        user,
-        asString(recipe.product_item_def_id),
-        totalProductQty,
-        { location: 'bag', obtainedFrom: `craft:${recipe.id}` },
-      );
-      if (!addResult.success) {
-        return { success: false, message: addResult.message || '背包空间不足' };
-      }
+      pendingItemGrants.push({
+        itemDefId: asString(recipe.product_item_def_id),
+        qty: totalProductQty,
+        obtainedFrom: `craft:${recipe.id}`,
+      });
 
       produced = {
         itemDefId: asString(recipe.product_item_def_id),
         itemName: asString(recipe.product_name) || asString(recipe.product_item_def_id),
         itemIcon: asString(recipe.product_icon) || null,
         qty: totalProductQty,
-        itemIds: addResult.itemIds ?? [],
+        itemIds: [],
       };
     }
 
@@ -604,19 +559,15 @@ class CraftService {
       for (const itemCost of costItems) {
         const rollbackQty = Math.floor(itemCost.qty * failCount * failReturnRateRatio);
         if (rollbackQty <= 0) continue;
-        const addResult = await addItemToInventory(
-          characterSnapshot.id,
-          user,
-          itemCost.itemDefId,
-          rollbackQty,
-          { location: 'bag', obtainedFrom: `craft-refund:${recipe.id}` },
-        );
-        if (!addResult.success) {
-          return { success: false, message: addResult.message || '返还材料失败' };
-        }
+        pendingItemGrants.push({
+          itemDefId: itemCost.itemDefId,
+          qty: rollbackQty,
+          obtainedFrom: `craft-refund:${recipe.id}`,
+        });
         returnedItems.push({ itemDefId: itemCost.itemDefId, qty: rollbackQty });
       }
     }
+    await bufferSimpleCharacterItemGrants(characterSnapshot.id, user, pendingItemGrants);
 
     const characterRes = await query(
       `SELECT exp, silver, spirit_stones FROM characters WHERE id = $1 LIMIT 1`,
