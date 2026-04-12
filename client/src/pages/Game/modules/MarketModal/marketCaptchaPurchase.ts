@@ -19,18 +19,43 @@
  */
 
 export const MARKET_CAPTCHA_REQUIRED_ERROR_CODE = 'MARKET_CAPTCHA_REQUIRED';
+export const MARKET_CAPTCHA_NOT_REQUIRED_ERROR_CODE = 'MARKET_CAPTCHA_NOT_REQUIRED';
+export const MARKET_BUY_TICKET_INVALID_ERROR_CODE = 'MARKET_BUY_TICKET_INVALID';
+export const PARTNER_MARKET_BUY_TICKET_INVALID_ERROR_CODE = 'PARTNER_MARKET_BUY_TICKET_INVALID';
+export const MARKET_BUY_RATE_LIMITED_ERROR_CODE = 'MARKET_BUY_RATE_LIMITED';
+export const MARKET_BUY_COOLDOWN_ACTIVE_ERROR_CODE = 'MARKET_BUY_COOLDOWN_ACTIVE';
 
 export type MarketCaptchaPurchaseIntent =
   | {
       kind: 'item';
       listingId: number;
       qty: number;
+      buyTicket: string;
     }
   | {
       kind: 'partner';
       listingId: number;
+      buyTicket: string;
     };
 
 export const isMarketCaptchaRequiredCode = (code: string | null): boolean => {
   return code === MARKET_CAPTCHA_REQUIRED_ERROR_CODE;
+};
+
+export const isMarketCaptchaNotRequiredCode = (code: string | null): boolean => {
+  return code === MARKET_CAPTCHA_NOT_REQUIRED_ERROR_CODE;
+};
+
+export const isPartnerMarketBuyTicketInvalidCode = (code: string | null): boolean => {
+  return code === PARTNER_MARKET_BUY_TICKET_INVALID_ERROR_CODE;
+};
+
+export const isMarketBuyTicketInvalidCode = (code: string | null): boolean => {
+  return code === MARKET_BUY_TICKET_INVALID_ERROR_CODE
+    || code === PARTNER_MARKET_BUY_TICKET_INVALID_ERROR_CODE;
+};
+
+export const isMarketBuyAttemptLimitedCode = (code: string | null): boolean => {
+  return code === MARKET_BUY_RATE_LIMITED_ERROR_CODE
+    || code === MARKET_BUY_COOLDOWN_ACTIVE_ERROR_CODE;
 };

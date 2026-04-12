@@ -23,9 +23,12 @@ import { useEffect, useRef, useState } from 'react';
 
 import {
   getMarketPurchaseCaptcha,
-  notifyUnifiedApiError,
+  toUnifiedApiError,
   verifyMarketPurchaseCaptcha,
 } from '../../../../services/api';
+import {
+  isMarketCaptchaNotRequiredCode,
+} from './marketCaptchaPurchase';
 import CaptchaChallengeInput from '../../../shared/CaptchaChallengeInput';
 import { useCaptchaChallenge } from '../../../shared/useCaptchaChallenge';
 import { useCaptchaConfig } from '../../../shared/useCaptchaConfig';
@@ -36,12 +39,16 @@ import {
 
 interface MarketCaptchaDialogProps {
   open: boolean;
+  scene?: 'item' | 'partner';
+  listingId?: number;
   onCancel: () => void;
   onVerified: () => Promise<void>;
 }
 
 export default function MarketCaptchaDialog({
   open,
+  scene,
+  listingId,
   onCancel,
   onVerified,
 }: MarketCaptchaDialogProps) {
@@ -69,6 +76,8 @@ export default function MarketCaptchaDialog({
     return (
       <MarketCaptchaDialogTencent
         open={open}
+        scene={scene}
+        listingId={listingId}
         appId={config.tencentAppId ?? 0}
         onCancel={onCancel}
         onVerified={onVerified}
@@ -79,6 +88,8 @@ export default function MarketCaptchaDialog({
   return (
     <MarketCaptchaDialogLocal
       open={open}
+      scene={scene}
+      listingId={listingId}
       onCancel={onCancel}
       onVerified={onVerified}
     />
@@ -88,19 +99,35 @@ export default function MarketCaptchaDialog({
 /** local 模式：图片验证码输入弹窗 */
 function MarketCaptchaDialogLocal({
   open,
+  scene,
+  listingId,
   onCancel,
   onVerified,
 }: MarketCaptchaDialogProps) {
   const { message } = App.useApp();
   const [captchaCode, setCaptchaCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const handleCaptchaNoLongerRequired = async (): Promise<void> => {
+    try {
+      await onVerified();
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const { captcha, loading, refreshCaptcha } = useCaptchaChallenge({
     enabled: open,
     refreshNonce: open ? 1 : 0,
     loadCaptcha: getMarketPurchaseCaptcha,
     fallbackMessage: '坊市验证码加载失败',
-    onLoadError: (errorMessage) => {
-      message.error(errorMessage);
+    onLoadError: (errorMessage, error) => {
+      const normalizedError = toUnifiedApiError(error, errorMessage);
+      if (isMarketCaptchaNotRequiredCode(normalizedError.code)) {
+        void handleCaptchaNoLongerRequired();
+        return;
+      }
+      message.error(normalizedError.message);
     },
   });
 
@@ -118,12 +145,20 @@ function MarketCaptchaDialogLocal({
     setSubmitting(true);
     try {
       await verifyMarketPurchaseCaptcha({
+        scene,
+        listingId,
         captchaId: captcha.captchaId,
         captchaCode,
       });
       setCaptchaCode('');
     } catch (error) {
-      notifyUnifiedApiError(message, error, '坊市验证码校验失败');
+      const normalizedError = toUnifiedApiError(error, '坊市验证码校验失败');
+      if (isMarketCaptchaNotRequiredCode(normalizedError.code)) {
+        setCaptchaCode('');
+        await handleCaptchaNoLongerRequired();
+        return;
+      }
+      message.error(normalizedError.message);
       setCaptchaCode('');
       await refreshCaptcha();
       setSubmitting(false);
@@ -176,6 +211,8 @@ function MarketCaptchaDialogLocal({
 /** tencent 模式：弹窗打开时自动触发天御验证码，无需额外按钮 */
 function MarketCaptchaDialogTencent({
   open,
+  scene,
+  listingId,
   appId,
   onCancel,
   onVerified,
@@ -199,12 +236,23 @@ function MarketCaptchaDialogTencent({
       try {
         const ticket = await triggerCaptcha();
         await verifyMarketPurchaseCaptcha({
+          scene,
+          listingId,
           ticket: ticket.ticket,
           randstr: ticket.randstr,
         });
       } catch (error) {
+        const normalizedError = toUnifiedApiError(error, '坊市验证码校验失败');
+        if (isMarketCaptchaNotRequiredCode(normalizedError.code)) {
+          try {
+            await onVerified();
+          } finally {
+            setSubmitting(false);
+          }
+          return;
+        }
         if (!isTencentCaptchaCancelledError(error)) {
-          notifyUnifiedApiError(message, error, '坊市验证码校验失败');
+          message.error(normalizedError.message);
         }
         setSubmitting(false);
         onCancel();

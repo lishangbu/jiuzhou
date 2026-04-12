@@ -68,7 +68,9 @@ import {
   shouldPromptMarketBuyQuantity,
 } from './marketBuyShared';
 import {
+  isMarketBuyTicketInvalidCode,
   isMarketCaptchaRequiredCode,
+  isPartnerMarketBuyTicketInvalidCode,
   type MarketCaptchaPurchaseIntent,
 } from './marketCaptchaPurchase';
 import {
@@ -413,6 +415,7 @@ type ListingItem = {
   seller: string;
   sellerCharacterId: number;
   listedAt: number;
+  buyTicket: string | null;
 };
 
 type PartnerListingItem = {
@@ -422,6 +425,7 @@ type PartnerListingItem = {
   seller: string;
   sellerCharacterId: number;
   listedAt: number;
+  buyTicket: string | null;
 };
 
 type TradeRecordType = '买入' | '卖出';
@@ -514,6 +518,7 @@ const buildListingItem = (dto: MarketListingDto): ListingItem => {
     seller: String(dto.sellerName ?? ''),
     sellerCharacterId: Number(dto.sellerCharacterId) || 0,
     listedAt: Number(dto.listedAt) || 0,
+    buyTicket: typeof dto.buyTicket === 'string' && dto.buyTicket.trim() ? dto.buyTicket : null,
   };
 };
 
@@ -539,6 +544,7 @@ const buildPartnerListingItem = (dto: MarketPartnerListingDto): PartnerListingIt
     seller: String(dto.sellerName ?? ''),
     sellerCharacterId: Number(dto.sellerCharacterId) || 0,
     listedAt: Number(dto.listedAt) || 0,
+    buyTicket: typeof dto.buyTicket === 'string' && dto.buyTicket.trim() ? dto.buyTicket : null,
   };
 };
 
@@ -1225,10 +1231,13 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
   );
 
   const executeItemPurchase = useCallback(
-    async (listingId: number, buyQty: number) => {
+    async (listingId: number, buyQty: number, buyTicket: string) => {
       const res = await buyMarketListing(
-        listingId,
-        buyQty,
+        {
+          listingId,
+          qty: buyQty,
+          buyTicket,
+        },
         SILENT_API_REQUEST_CONFIG,
       );
       if (!res.success) throw new Error(res.message || '购买失败');
@@ -1254,9 +1263,12 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
   );
 
   const executePartnerPurchase = useCallback(
-    async (listingId: number) => {
+    async (listingId: number, buyTicket: string) => {
       const res = await buyPartnerMarketListing(
-        listingId,
+        {
+          listingId,
+          buyTicket,
+        },
         SILENT_API_REQUEST_CONFIG,
       );
       if (!res.success) throw new Error(res.message || '购买失败');
@@ -1283,13 +1295,18 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
   const buyListing = useCallback(
     async (row: ListingItem, requestedQty: number = 1) => {
       if (characterId !== null && row.sellerCharacterId === characterId) return;
+      if (!row.buyTicket) {
+        messageRef.current.error('购买凭证已失效，请刷新列表后重试');
+        await refreshMarket(marketPage);
+        return;
+      }
       const summary = buildMarketBuySummary({
         listingQty: row.qty,
         draftQty: requestedQty,
         unitPrice: row.unitPrice,
       });
       try {
-        await executeItemPurchase(row.id, summary.buyQty);
+        await executeItemPurchase(row.id, summary.buyQty, row.buyTicket);
       } catch (error) {
         const normalizedError = toUnifiedApiError(error, '购买失败');
         if (isMarketCaptchaRequiredCode(normalizedError.code)) {
@@ -1297,14 +1314,20 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
             kind: 'item',
             listingId: row.id,
             qty: summary.buyQty,
+            buyTicket: row.buyTicket,
           });
           setMarketCaptchaDialogOpen(true);
           return;
         }
+        if (isMarketBuyTicketInvalidCode(normalizedError.code)) {
+          setBuyDialogListing(null);
+          setMobileListingPreview(null);
+          await refreshMarket(marketPage);
+        }
         messageRef.current.error(normalizedError.message);
       }
     },
-    [characterId, executeItemPurchase],
+    [characterId, executeItemPurchase, marketPage, refreshMarket],
   );
 
   const startBuyListing = useCallback(
@@ -1360,22 +1383,32 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
   const buyPartnerListing = useCallback(
     async (row: PartnerListingItem) => {
       if (characterId !== null && row.sellerCharacterId === characterId) return;
+      if (!row.buyTicket) {
+        messageRef.current.error('购买凭证已失效，请刷新列表后重试');
+        await refreshPartnerMarket(marketPage);
+        return;
+      }
       try {
-        await executePartnerPurchase(row.id);
+        await executePartnerPurchase(row.id, row.buyTicket);
       } catch (error) {
         const normalizedError = toUnifiedApiError(error, '购买失败');
         if (isMarketCaptchaRequiredCode(normalizedError.code)) {
           setMarketCaptchaPurchaseIntent({
             kind: 'partner',
             listingId: row.id,
+            buyTicket: row.buyTicket,
           });
           setMarketCaptchaDialogOpen(true);
           return;
         }
+        if (isPartnerMarketBuyTicketInvalidCode(normalizedError.code)) {
+          setPreviewPartnerListing(null);
+          await refreshPartnerMarket(marketPage);
+        }
         messageRef.current.error(normalizedError.message);
       }
     },
-    [characterId, executePartnerPurchase],
+    [characterId, executePartnerPurchase, marketPage, refreshPartnerMarket],
   );
 
   const retryMarketCaptchaPurchase = useCallback(async () => {
@@ -1387,20 +1420,40 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
 
     try {
       if (pendingPurchase.kind === 'item') {
-        await executeItemPurchase(pendingPurchase.listingId, pendingPurchase.qty);
+        await executeItemPurchase(
+          pendingPurchase.listingId,
+          pendingPurchase.qty,
+          pendingPurchase.buyTicket,
+        );
       } else {
-        await executePartnerPurchase(pendingPurchase.listingId);
+        await executePartnerPurchase(pendingPurchase.listingId, pendingPurchase.buyTicket);
       }
       setMarketCaptchaDialogOpen(false);
       setMarketCaptchaPurchaseIntent(null);
     } catch (error) {
       const normalizedError = toUnifiedApiError(error, '购买失败');
+      if (isMarketBuyTicketInvalidCode(normalizedError.code)) {
+        setMarketCaptchaDialogOpen(false);
+        setMarketCaptchaPurchaseIntent(null);
+        setBuyDialogListing(null);
+        setMobileListingPreview(null);
+        await refreshMarket(marketPage);
+      }
+      if (isPartnerMarketBuyTicketInvalidCode(normalizedError.code)) {
+        setMarketCaptchaDialogOpen(false);
+        setMarketCaptchaPurchaseIntent(null);
+        setPreviewPartnerListing(null);
+        await refreshPartnerMarket(marketPage);
+      }
       messageRef.current.error(normalizedError.message);
     }
   }, [
     executeItemPurchase,
     executePartnerPurchase,
+    marketPage,
     marketCaptchaPurchaseIntent,
+    refreshMarket,
+    refreshPartnerMarket,
   ]);
 
   const unlistPartner = useCallback(
@@ -2780,6 +2833,8 @@ const MarketModal: React.FC<MarketModalProps> = ({ open, onClose, playerName = '
         )}
         <MarketCaptchaDialog
           open={marketCaptchaDialogOpen}
+          scene={marketCaptchaPurchaseIntent?.kind === 'partner' ? 'partner' : marketCaptchaPurchaseIntent?.kind === 'item' ? 'item' : undefined}
+          listingId={marketCaptchaPurchaseIntent?.listingId}
           onCancel={() => {
             setMarketCaptchaDialogOpen(false);
             setMarketCaptchaPurchaseIntent(null);

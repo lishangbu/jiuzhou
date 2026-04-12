@@ -32,7 +32,7 @@ interface UseCaptchaChallengeOptions {
   fallbackMessage: string;
   onLoaded?: (captcha: CaptchaChallenge) => void;
   onCleared?: () => void;
-  onLoadError?: (message: string) => void;
+  onLoadError?: (message: string, error?: unknown) => void;
 }
 
 interface UseCaptchaChallengeResult {
@@ -97,7 +97,7 @@ export const useCaptchaChallenge = ({
 
       setCaptcha(null);
       onClearedRef.current?.();
-      onLoadErrorRef.current?.(getUnifiedApiErrorMessage(error, fallbackMessage));
+      onLoadErrorRef.current?.(getUnifiedApiErrorMessage(error, fallbackMessage), error);
     } finally {
       if (requestIdRef.current === requestId) {
         setLoading(false);

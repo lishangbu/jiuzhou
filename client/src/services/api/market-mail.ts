@@ -38,6 +38,7 @@ export interface MarketListingDto {
   sellerCharacterId: number;
   sellerName: string;
   listedAt: number;
+  buyTicket?: string | null;
 }
 
 export interface MarketListingsResponse {
@@ -79,6 +80,7 @@ export interface MarketPartnerListingDto {
   sellerCharacterId: number;
   sellerName: string;
   listedAt: number;
+  buyTicket?: string | null;
 }
 
 export interface MarketPartnerListingsResponse {
@@ -137,11 +139,14 @@ export const cancelMarketListing = (listingId: number): Promise<{ success: boole
 };
 
 export const buyMarketListing = (
-  listingId: number,
-  qty: number = 1,
+  body: {
+    listingId: number;
+    qty: number;
+    buyTicket: string;
+  },
   requestConfig?: AxiosRequestConfig,
 ): Promise<{ success: boolean; message: string }> => {
-  return api.post('/market/buy', { listingId, qty }, requestConfig);
+  return api.post('/market/buy', body, requestConfig);
 };
 
 export const getMarketTradeRecords = (params?: {
@@ -184,10 +189,13 @@ export const cancelPartnerMarketListing = (
 };
 
 export const buyPartnerMarketListing = (
-  listingId: number,
+  body: {
+    listingId: number;
+    buyTicket: string;
+  },
   requestConfig?: AxiosRequestConfig,
 ): Promise<{ success: boolean; message: string }> => {
-  return api.post('/market/partner/buy', { listingId }, requestConfig);
+  return api.post('/market/partner/buy', body, requestConfig);
 };
 
 export const getPartnerMarketTradeRecords = (params?: {
@@ -219,7 +227,10 @@ export const getMarketPurchaseCaptcha = (): Promise<CaptchaResponse> => {
 };
 
 export const verifyMarketPurchaseCaptcha = (
-  payload: UnifiedCaptchaPayload,
+  payload: UnifiedCaptchaPayload & {
+    scene?: 'item' | 'partner';
+    listingId?: number;
+  },
 ): Promise<MarketPurchaseCaptchaVerifyResponse> => {
   return api.post('/market/captcha/verify', payload, SILENT_API_REQUEST_CONFIG);
 };
