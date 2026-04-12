@@ -23,10 +23,16 @@ import {
   getMarketPurchaseRiskAssessment,
   hasValidMarketPurchaseCaptchaPass,
 } from '../services/marketRiskService.js';
+import { logMarketCaptchaRequired } from '../services/shared/marketRiskObservability.js';
+import { resolveRequestIp } from '../shared/requestIp.js';
+import { resolveMarketBuyRoute } from '../services/shared/marketRiskObservability.js';
 
 export const MARKET_CAPTCHA_REQUIRED_ERROR_CODE = 'MARKET_CAPTCHA_REQUIRED';
+export const MARKET_CAPTCHA_NOT_REQUIRED_ERROR_CODE = 'MARKET_CAPTCHA_NOT_REQUIRED';
 export const MARKET_CAPTCHA_REQUIRED_MESSAGE =
   '坊市访问行为异常，请先完成图片验证码验证后再购买';
+export const MARKET_CAPTCHA_NOT_REQUIRED_MESSAGE =
+  '当前购买无需验证码，请直接重试购买';
 
 export const requireMarketPurchaseCaptcha: RequestHandler = async (
   req,
@@ -35,9 +41,14 @@ export const requireMarketPurchaseCaptcha: RequestHandler = async (
 ) => {
   const userId = req.userId!;
   const characterId = req.characterId!;
-  const assessment = await getMarketPurchaseRiskAssessment({ userId });
+  const listingId = Number((req.body as { listingId?: unknown } | undefined)?.listingId);
+  const assessment = await getMarketPurchaseRiskAssessment({ userId, characterId });
 
   if (!assessment.requiresCaptcha) {
+    req.marketRiskContext = {
+      ...(req.marketRiskContext ?? {}),
+      allowedByCaptchaPass: false,
+    };
     next();
     return;
   }
@@ -47,9 +58,36 @@ export const requireMarketPurchaseCaptcha: RequestHandler = async (
     characterId,
   });
   if (hasPass) {
+    req.marketRiskContext = {
+      ...(req.marketRiskContext ?? {}),
+      allowedByCaptchaPass: true,
+    };
     next();
     return;
   }
+
+  req.marketRiskContext = {
+    ...(req.marketRiskContext ?? {}),
+    allowedByCaptchaPass: false,
+  };
+
+  logMarketCaptchaRequired({
+    event: 'captcha_required',
+    scene: req.marketRiskContext?.buyScene ?? 'unknown',
+    route: resolveMarketBuyRoute(req.marketRiskContext?.buyScene ?? 'unknown'),
+    userId,
+    characterId,
+    listingId: Number.isInteger(listingId) && listingId > 0 ? listingId : undefined,
+    ip: resolveRequestIp(req),
+    riskScore: assessment.score,
+    reasons: assessment.reasons,
+    queryCount60s: assessment.inputs.queryCount60s,
+    queryCount5m: assessment.inputs.queryCount5m,
+    latestSignatureCount60s: assessment.inputs.latestSignatureCount60s,
+    recentPurchaseSuccessCount60s: assessment.inputs.recentPurchaseSuccessCount60s,
+    averageIntervalMs: assessment.intervalStats ? Math.round(assessment.intervalStats.averageIntervalMs) : null,
+    coefficientOfVariation: assessment.intervalStats ? Number(assessment.intervalStats.coefficientOfVariation.toFixed(4)) : null,
+  });
 
   res.status(403).json({
     success: false,

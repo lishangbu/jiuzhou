@@ -2,12 +2,21 @@ import { Router } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { requireAuth, requireCharacter } from '../middleware/auth.js';
 import { requireMarketPurchaseCaptcha } from '../middleware/requireMarketPurchaseCaptcha.js';
+import { requirePartnerMarketBuyTicket } from '../middleware/requirePartnerMarketBuyTicket.js';
+import { requireItemMarketBuyTicket } from '../middleware/requireItemMarketBuyTicket.js';
+import { requireMarketPurchaseAttemptGuard } from '../middleware/requireMarketPurchaseAttemptGuard.js';
 import { createQpsLimitMiddleware } from '../middleware/qpsLimit.js';
 import { requireMarketPhoneBinding } from '../middleware/requireMarketPhoneBinding.js';
 import { marketService, type MarketSort } from '../services/marketService.js';
 import {
+  consumeMarketBuyTicket,
+  consumePartnerMarketBuyTicket,
   createMarketPurchaseCaptchaChallenge,
+  getMarketPurchaseRiskAssessment,
+  issueMarketBuyTickets,
+  issuePartnerMarketBuyTickets,
   recordMarketRiskQueryAccess,
+  recordMarketPurchaseSuccess,
   verifyMarketPurchaseCaptcha,
 } from '../services/marketRiskService.js';
 import { partnerMarketService, type PartnerMarketSort } from '../services/partnerMarketService.js';
@@ -20,7 +29,10 @@ import { sendResult, sendSuccess } from '../middleware/response.js';
 import { isTencentCaptchaProvider } from '../config/captchaConfig.js';
 import { BusinessError } from '../middleware/BusinessError.js';
 import { getSingleQueryValue, parseFiniteNumber, parseNonEmptyText } from '../services/shared/httpParam.js';
-import { verifyCaptchaByProvider } from '../shared/verifyCaptchaByProvider.js';
+import {
+  MARKET_CAPTCHA_NOT_REQUIRED_ERROR_CODE,
+  MARKET_CAPTCHA_NOT_REQUIRED_MESSAGE,
+} from '../middleware/requireMarketPurchaseCaptcha.js';
 
 const router = Router();
 
@@ -58,6 +70,24 @@ type MarketCaptchaPayload = {
   captchaCode?: string;
   ticket?: string;
   randstr?: string;
+  scene?: 'item' | 'partner';
+  listingId?: number;
+};
+
+const sendMarketCaptchaNotRequired = (
+  res: Parameters<typeof sendSuccess>[0],
+  riskScore: number,
+  reasons: string[],
+): void => {
+  res.status(409).json({
+    success: false,
+    code: MARKET_CAPTCHA_NOT_REQUIRED_ERROR_CODE,
+    message: MARKET_CAPTCHA_NOT_REQUIRED_MESSAGE,
+    data: {
+      riskScore,
+      reasons,
+    },
+  });
 };
 
 router.get('/listings', ...marketAuthGuards, marketListingsQpsLimit, asyncHandler(async (req, res) => {
@@ -95,11 +125,33 @@ router.get('/listings', ...marketAuthGuards, marketListingsQpsLimit, asyncHandle
     page,
     pageSize,
   });
+  if (result.success && result.data) {
+    const ticketByListingId = await issueMarketBuyTickets({
+      scene: 'item',
+      userId,
+      listingIds: result.data.listings.map((listing) => listing.id),
+    });
+    result.data = {
+      ...result.data,
+      listings: result.data.listings.map((listing) => ({
+        ...listing,
+        buyTicket: ticketByListingId.get(listing.id) ?? null,
+      })),
+    };
+  }
 
   return sendResult(res, result);
 }));
 
-router.get('/captcha', ...marketCharacterGuards, asyncHandler(async (_req, res) => {
+router.get('/captcha', ...marketCharacterGuards, asyncHandler(async (req, res) => {
+  const assessment = await getMarketPurchaseRiskAssessment({
+    userId: req.userId!,
+    characterId: req.characterId!,
+  });
+  if (!assessment.requiresCaptcha) {
+    sendMarketCaptchaNotRequired(res, assessment.score, assessment.reasons);
+    return;
+  }
   if (isTencentCaptchaProvider) {
     throw new BusinessError('当前验证码模式不支持此操作');
   }
@@ -110,10 +162,20 @@ router.get('/captcha', ...marketCharacterGuards, asyncHandler(async (_req, res) 
 router.post('/captcha/verify', ...marketCharacterGuards, asyncHandler(async (req, res) => {
   const userId = req.userId!;
   const characterId = req.characterId!;
-  const payload = (req.body ?? {}) as MarketCaptchaPayload;
-  const result = await verifyMarketPurchaseCaptcha({
+  const assessment = await getMarketPurchaseRiskAssessment({
     userId,
     characterId,
+  });
+  if (!assessment.requiresCaptcha) {
+    sendMarketCaptchaNotRequired(res, assessment.score, assessment.reasons);
+    return;
+  }
+  const payload = (req.body ?? {}) as MarketCaptchaPayload;
+  const result = await verifyMarketPurchaseCaptcha({
+    scene: payload.scene,
+    userId,
+    characterId,
+    listingId: Number.isInteger(Number(payload.listingId)) ? Number(payload.listingId) : undefined,
     payload,
     userIp: req.ip ?? '',
   });
@@ -174,7 +236,7 @@ router.post('/cancel', ...marketCharacterGuards, marketCancelMutationQpsLimit, a
   return sendResult(res, result);
 }));
 
-router.post('/buy', ...marketCharacterGuards, marketBuyMutationQpsLimit, requireMarketPurchaseCaptcha, asyncHandler(async (req, res) => {
+router.post('/buy', ...marketCharacterGuards, marketBuyMutationQpsLimit, requireItemMarketBuyTicket, requireMarketPurchaseAttemptGuard, requireMarketPurchaseCaptcha, asyncHandler(async (req, res) => {
   const userId = req.userId!;
   const characterId = req.characterId!;
 
@@ -187,6 +249,15 @@ router.post('/buy', ...marketCharacterGuards, marketBuyMutationQpsLimit, require
   });
   if (result.success) {
     const sellerUserId = result.data?.sellerUserId ?? null;
+    await recordMarketPurchaseSuccess({
+      scene: 'item',
+      userId,
+      characterId,
+      listingId: Number(listingId),
+      sellerUserId: sellerUserId ?? undefined,
+      consumedCaptchaPass: req.marketRiskContext?.allowedByCaptchaPass === true,
+    });
+    await consumeMarketBuyTicket('item', req.marketRiskContext?.buyTicket ?? '');
 
     await safePushCharacterUpdate(userId);
     if (sellerUserId !== null && sellerUserId !== userId) {
@@ -225,6 +296,19 @@ router.get('/partner-listings', ...marketAuthGuards, partnerMarketListingsQpsLim
     page,
     pageSize,
   });
+  if (result.success && result.data) {
+    const ticketByListingId = await issuePartnerMarketBuyTickets({
+      userId,
+      listingIds: result.data.listings.map((listing) => listing.id),
+    });
+    result.data = {
+      ...result.data,
+      listings: result.data.listings.map((listing) => ({
+        ...listing,
+        buyTicket: ticketByListingId.get(listing.id) ?? null,
+      })),
+    };
+  }
   return sendResult(res, result);
 }));
 
@@ -312,7 +396,7 @@ router.post('/partner/cancel', ...marketCharacterGuards, partnerMarketCancelMuta
   return sendResult(res, result);
 }));
 
-router.post('/partner/buy', ...marketCharacterGuards, partnerMarketBuyMutationQpsLimit, requireMarketPurchaseCaptcha, asyncHandler(async (req, res) => {
+router.post('/partner/buy', ...marketCharacterGuards, partnerMarketBuyMutationQpsLimit, requirePartnerMarketBuyTicket, requireMarketPurchaseAttemptGuard, requireMarketPurchaseCaptcha, asyncHandler(async (req, res) => {
   const userId = req.userId!;
   const characterId = req.characterId!;
   const { listingId } = req.body as { listingId?: unknown };
@@ -323,8 +407,17 @@ router.post('/partner/buy', ...marketCharacterGuards, partnerMarketBuyMutationQp
     listingId: Number(listingId),
   });
   if (result.success) {
-    await safePushCharacterUpdate(userId);
     const sellerUserId = result.data?.sellerUserId ?? null;
+    await recordMarketPurchaseSuccess({
+      scene: 'partner',
+      userId,
+      characterId,
+      listingId: Number(listingId),
+      sellerUserId: sellerUserId ?? undefined,
+      consumedCaptchaPass: req.marketRiskContext?.allowedByCaptchaPass === true,
+    });
+    await consumePartnerMarketBuyTicket(req.marketRiskContext?.buyTicket ?? req.marketRiskContext?.partnerBuyTicket ?? '');
+    await safePushCharacterUpdate(userId);
     if (sellerUserId !== null && sellerUserId !== userId) {
       await safePushCharacterUpdate(sellerUserId);
     }
