@@ -42,7 +42,11 @@ import { partnerReboneService } from './partnerReboneService.js';
 import { recoverStaminaByCharacterId } from './staminaService.js';
 import type { CharacterBagSlotAllocator } from './shared/characterBagSlotAllocator.js';
 import type { CharacterInventoryMutationContext } from './shared/characterInventoryMutationContext.js';
-import type { InventorySlotSession } from './shared/inventorySlotSession.js';
+import {
+  cloneInventorySlotSession,
+  createInventorySlotSession,
+  type InventorySlotSession,
+} from './shared/inventorySlotSession.js';
 import { applyCharacterRewardDeltas, createCharacterRewardDelta } from './shared/characterRewardSettlement.js';
 import { bufferSimpleCharacterItemGrants } from './shared/characterItemGrantDeltaService.js';
 import { bufferCharacterItemInstanceMutations, loadProjectedCharacterItemInstanceById } from './shared/characterItemInstanceMutationService.js';
@@ -317,6 +321,12 @@ const createEquipmentItem = async (
     location === 'bag' && !options.slotSession && options.bagSlotAllocator
       ? options.bagSlotAllocator.reserveSlots(characterId, qty)
       : [];
+  const shouldCreateLocalSlotSession =
+    (location === 'bag' || location === 'warehouse')
+    && qty > 1
+    && options.persistImmediately !== true
+    && options.locationSlot === undefined
+    && (options.slotSession !== undefined || options.bagSlotAllocator === undefined);
 
   if (location === 'bag' && !options.slotSession && options.bagSlotAllocator && reservedBagSlots.length < qty) {
     return { success: false, message: '背包已满' };
@@ -324,6 +334,14 @@ const createEquipmentItem = async (
 
   const executeBatch = async (): Promise<CreateItemResult> => {
     const pendingMutations = [] as NonNullable<Awaited<ReturnType<typeof equipmentService.createEquipmentInstanceTx>>['pendingMutation']>[];
+    const localSlotSession = shouldCreateLocalSlotSession
+      ? options.slotSession
+        ? cloneInventorySlotSession(options.slotSession, [characterId])
+        : await createInventorySlotSession([characterId])
+      : null;
+    const effectiveSlotSession = localSlotSession ?? options.slotSession;
+    const shouldSkipInnerInventoryMutexLock = options.skipInventoryMutexLock === true || localSlotSession !== null;
+
     for (let i = 0; i < qty; i++) {
       const generated =
         i === 0 && preGeneratedEquipment
@@ -335,7 +353,7 @@ const createEquipmentItem = async (
 
       const result = await equipmentService.createEquipmentInstanceTx(userId, characterId, generated, {
         location,
-        ...(options.slotSession ? { slotSession: options.slotSession } : {}),
+        ...(effectiveSlotSession ? { slotSession: effectiveSlotSession } : {}),
         ...(reservedBagSlots[i] !== undefined ? { locationSlot: reservedBagSlots[i] } : {}),
         ...(options.locationSlot !== undefined ? { locationSlot: options.locationSlot } : {}),
         ...(reservedBagSlots[i] !== undefined && options.locationSlot === undefined
@@ -343,7 +361,7 @@ const createEquipmentItem = async (
           : {}),
         bindType: options.bindType,
         obtainedFrom: options.obtainedFrom,
-        ...(options.skipInventoryMutexLock ? { skipInventoryMutexLock: true } : {}),
+        ...(shouldSkipInnerInventoryMutexLock ? { skipInventoryMutexLock: true } : {}),
         ...(options.persistImmediately ? { persistImmediately: true } : {}),
         ...(!options.persistImmediately ? { deferBufferedMutation: true } : {}),
       });
@@ -359,6 +377,9 @@ const createEquipmentItem = async (
           return { success: false, message: '装备创建失败' };
         }
         pendingMutations.push(result.pendingMutation);
+        if (effectiveSlotSession && result.pendingMutation.snapshot) {
+          effectiveSlotSession.registerSnapshot(result.pendingMutation.snapshot);
+        }
       }
     }
 
@@ -385,6 +406,9 @@ const createEquipmentItem = async (
     if (!hasUsableTransactionContext()) {
       try {
         return await withTransaction(async () => {
+          if (shouldCreateLocalSlotSession && !options.skipInventoryMutexLock) {
+            await lockCharacterInventoryMutex(characterId);
+          }
           const result = await executeBatch();
           if (!result.success) {
             throw new Error(`create-equipment-item-failed:${result.message}`);
@@ -405,6 +429,9 @@ const createEquipmentItem = async (
     const savepointName = buildCreateItemSavepointName();
     await query(`SAVEPOINT ${savepointName}`);
     try {
+      if (shouldCreateLocalSlotSession && !options.skipInventoryMutexLock) {
+        await lockCharacterInventoryMutex(characterId);
+      }
       const result = await executeBatch();
       if (!result.success) {
         await query(`ROLLBACK TO SAVEPOINT ${savepointName}`);
